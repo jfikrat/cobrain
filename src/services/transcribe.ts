@@ -1,12 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { config } from "../config.ts";
 
-const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({
-  model: config.TRANSCRIPTION_MODEL,
-  systemInstruction: TRANSCRIPTION_SYSTEM_PROMPT,
-});
-
 /**
  * Kapsamlı Transcription System Prompt
  *
@@ -173,6 +167,12 @@ SEN BİR TRANSKRİPSİYON ARACISINA. CEVAP ÜRETME. YORUM YAPMA. SADECE YAZILANI
 Ses kaydı boşsa veya anlaşılır konuşma yoksa, SADECE şunu yaz: [ses kaydı boş veya anlaşılmıyor]
 
 Şimdi verilen ses kaydını transkript et.`;
+
+const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({
+  model: config.TRANSCRIPTION_MODEL,
+  systemInstruction: TRANSCRIPTION_SYSTEM_PROMPT,
+});
 
 /**
  * Transcription için user prompt
