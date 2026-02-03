@@ -13,11 +13,6 @@ const envSchema = z.object({
   // v0.2: Per-user folders
   COBRAIN_BASE_PATH: z.string().default(join(homedir(), ".cobrain")),
 
-  // v0.2: Ollama embeddings
-  OLLAMA_URL: z.string().default("http://localhost:11434"),
-  EMBEDDING_MODEL: z.string().default("all-minilm:l6-v2"),
-  EMBEDDING_DIMENSION: z.coerce.number().default(384),
-
   // v0.2: Memory settings
   MAX_MEMORY_AGE_DAYS: z.coerce.number().default(90),
 

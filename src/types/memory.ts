@@ -1,13 +1,13 @@
 /**
- * Memory-related type definitions for Cobrain v0.2
- * Vector memory with sqlite-vec
+ * Memory-related type definitions for Cobrain v0.3
+ * FTS5 full-text search with Haiku semantic ranking
  */
 
 export type MemoryType = "episodic" | "semantic" | "procedural";
 
 export interface MemoryEntry {
   id: number;
-  vectorRowid: number;
+  vectorRowid?: number; // Legacy, not used in FTS5 mode
   type: MemoryType;
   content: string;
   summary?: string;

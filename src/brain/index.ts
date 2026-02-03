@@ -6,7 +6,7 @@
 import { ClaudeSessionManager, type ClaudeMessage } from "../services/claude-session.ts";
 import { UserMemory, type Message } from "../memory/sqlite.ts";
 import { SmartMemory } from "../memory/smart-memory.ts";
-import { initCerebras, isCerebrasAvailable } from "../services/cerebras.ts";
+import { initHaiku, isHaikuAvailable } from "../services/haiku.ts";
 import { userManager } from "../services/user-manager.ts";
 import { config } from "../config.ts";
 import type { MemorySearchResult, MemoryInput } from "../types/memory.ts";
@@ -14,9 +14,9 @@ import type { MemorySearchResult, MemoryInput } from "../types/memory.ts";
 // Agent SDK imports
 import { chat as agentChat, clearSession as agentClearSession, closeAllMemories, type MultimodalMessage } from "../agent/index.ts";
 
-// Initialize Cerebras on module load (for fallback CLI mode)
+// Initialize Haiku on module load (for fallback CLI mode)
 if (!config.USE_AGENT_SDK) {
-  initCerebras();
+  initHaiku();
 }
 
 // Initialize Claude Session Manager (tmux-based)
@@ -299,10 +299,10 @@ export async function pruneMemories(userId: number): Promise<number> {
 }
 
 /**
- * Check if smart memory (Cerebras) is available
+ * Check if smart memory (Haiku) is available
  */
 export async function isVectorMemoryAvailable(): Promise<boolean> {
-  return isCerebrasAvailable();
+  return isHaikuAvailable();
 }
 
 /**

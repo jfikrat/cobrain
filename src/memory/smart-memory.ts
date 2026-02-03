@@ -1,17 +1,17 @@
 /**
- * Smart Memory - Cerebras-powered semantic memory
- * No local AI required, uses Cerebras for tag extraction and semantic search
- * Cobrain v0.2
+ * Smart Memory - Haiku-powered semantic memory with FTS5 search
+ * Uses Claude Haiku for tag extraction and SQLite FTS5 for full-text search
+ * Cobrain v0.3
  */
 
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import {
-  isCerebrasAvailable,
+  isHaikuAvailable,
   extractTags,
   summarize,
   rankMemories,
-} from "../services/cerebras.ts";
+} from "../services/haiku.ts";
 import type {
   MemoryEntry,
   MemoryInput,
@@ -33,7 +33,7 @@ export class SmartMemory {
   }
 
   private init(): void {
-    // Simple memory table with tags for keyword search
+    // Main memory table
     this.db.run(`
       CREATE TABLE IF NOT EXISTS memories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,6 +55,86 @@ export class SmartMemory {
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_mem_type ON memories(type)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_mem_tags ON memories(tags)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_mem_expires ON memories(expires_at)`);
+
+    // FTS5 Virtual Table for full-text search
+    this.initFTS5();
+  }
+
+  /**
+   * Initialize FTS5 virtual table and triggers
+   */
+  private initFTS5(): void {
+    // Check if FTS5 table exists
+    const ftsExists = this.db
+      .query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='memories_fts'"
+      )
+      .get();
+
+    if (!ftsExists) {
+      console.log(`[SmartMemory] Creating FTS5 virtual table (user: ${this.userId})`);
+
+      // Create FTS5 virtual table
+      this.db.run(`
+        CREATE VIRTUAL TABLE memories_fts USING fts5(
+          content,
+          summary,
+          tags,
+          content=memories,
+          content_rowid=id
+        )
+      `);
+
+      // Sync triggers for INSERT
+      this.db.run(`
+        CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+          INSERT INTO memories_fts(rowid, content, summary, tags)
+          VALUES (NEW.id, NEW.content, NEW.summary, NEW.tags);
+        END
+      `);
+
+      // Sync triggers for DELETE
+      this.db.run(`
+        CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+          INSERT INTO memories_fts(memories_fts, rowid, content, summary, tags)
+          VALUES('delete', OLD.id, OLD.content, OLD.summary, OLD.tags);
+        END
+      `);
+
+      // Sync triggers for UPDATE
+      this.db.run(`
+        CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+          INSERT INTO memories_fts(memories_fts, rowid, content, summary, tags)
+          VALUES('delete', OLD.id, OLD.content, OLD.summary, OLD.tags);
+          INSERT INTO memories_fts(rowid, content, summary, tags)
+          VALUES (NEW.id, NEW.content, NEW.summary, NEW.tags);
+        END
+      `);
+
+      // Migrate existing data to FTS5
+      this.rebuildFTS5();
+    }
+  }
+
+  /**
+   * Rebuild FTS5 index from existing memories
+   */
+  private rebuildFTS5(): void {
+    const existingCount = this.db
+      .query<{ count: number }, []>("SELECT COUNT(*) as count FROM memories")
+      .get()?.count ?? 0;
+
+    if (existingCount > 0) {
+      console.log(`[SmartMemory] Migrating ${existingCount} existing memories to FTS5`);
+
+      // Rebuild FTS5 index
+      this.db.run(`
+        INSERT INTO memories_fts(rowid, content, summary, tags)
+        SELECT id, content, summary, tags FROM memories
+      `);
+
+      console.log(`[SmartMemory] FTS5 migration complete`);
+    }
   }
 
   /**
@@ -64,8 +144,8 @@ export class SmartMemory {
     let tags: string[] = [];
     let summary = input.summary;
 
-    // Use Cerebras to extract tags and generate summary
-    if (isCerebrasAvailable()) {
+    // Use Haiku to extract tags and generate summary
+    if (isHaikuAvailable()) {
       try {
         tags = await extractTags(input.content);
 
@@ -73,7 +153,7 @@ export class SmartMemory {
           summary = await summarize(input.content, 15);
         }
       } catch (error) {
-        console.warn("[SmartMemory] Cerebras extraction failed:", error);
+        console.warn("[SmartMemory] Haiku extraction failed:", error);
       }
     }
 
@@ -117,7 +197,7 @@ export class SmartMemory {
   }
 
   /**
-   * Search memories using Cerebras semantic ranking or keyword fallback
+   * Search memories using FTS5 + optional Haiku semantic ranking
    */
   async search(query: string, options?: {
     type?: MemoryType;
@@ -127,15 +207,15 @@ export class SmartMemory {
     const limit = options?.limit ?? 5;
     const minScore = options?.minScore ?? 0.3;
 
-    // First, get candidates using keyword search
-    const candidates = this.keywordSearch(query, options?.type, 20);
+    // First, get candidates using FTS5
+    const candidates = this.fts5Search(query, options?.type, 20);
 
     if (candidates.length === 0) {
       return [];
     }
 
-    // If Cerebras is available, rank semantically
-    if (isCerebrasAvailable()) {
+    // If Haiku is available, rank semantically
+    if (isHaikuAvailable()) {
       try {
         const ranked = await rankMemories(
           query,
@@ -162,11 +242,11 @@ export class SmartMemory {
 
         return results;
       } catch (error) {
-        console.warn("[SmartMemory] Cerebras ranking failed, using keyword results:", error);
+        console.warn("[SmartMemory] Haiku ranking failed, using FTS5 results:", error);
       }
     }
 
-    // Fallback: return keyword results with estimated scores
+    // Fallback: return FTS5 results with estimated scores
     return candidates.slice(0, limit).map((c) => ({
       ...c,
       similarity: 0.5,
@@ -174,11 +254,91 @@ export class SmartMemory {
   }
 
   /**
-   * Simple keyword-based search
+   * FTS5-based full-text search
+   */
+  private fts5Search(query: string, type?: MemoryType, limit: number = 10): MemoryEntry[] {
+    // Prepare FTS5 query - OR between keywords
+    const keywords = query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((k) => k.length > 2)
+      .map((k) => `"${k}"*`) // Prefix search with quotes for safety
+      .join(" OR ");
+
+    if (!keywords) {
+      console.log(`[SmartMemory] No valid keywords for FTS5 search`);
+      return [];
+    }
+
+    console.log(`[SmartMemory] FTS5 search: ${keywords}`);
+
+    let whereClause = "(expires_at IS NULL OR expires_at > datetime('now'))";
+    const params: (string | number)[] = [];
+
+    if (type) {
+      whereClause += " AND m.type = ?";
+      params.push(type);
+    }
+
+    params.push(limit);
+
+    try {
+      const rows = this.db
+        .query<{
+          id: number;
+          type: string;
+          content: string;
+          summary: string | null;
+          tags: string | null;
+          importance: number;
+          access_count: number;
+          last_accessed_at: string | null;
+          source: string | null;
+          source_ref: string | null;
+          metadata: string;
+          created_at: string;
+          expires_at: string | null;
+          rank: number;
+        }, (string | number)[]>(
+          `SELECT m.*, bm25(memories_fts) as rank
+           FROM memories m
+           JOIN memories_fts ON memories_fts.rowid = m.id
+           WHERE memories_fts MATCH '${keywords}' AND ${whereClause}
+           ORDER BY bm25(memories_fts)
+           LIMIT ?`
+        )
+        .all(...params);
+
+      console.log(`[SmartMemory] FTS5 candidates found: ${rows.length}`);
+
+      return rows.map((row) => ({
+        id: row.id,
+        vectorRowid: 0, // Not used in smart memory
+        type: row.type as MemoryType,
+        content: row.content,
+        summary: row.summary ?? undefined,
+        importance: row.importance,
+        accessCount: row.access_count,
+        lastAccessedAt: row.last_accessed_at ?? undefined,
+        source: row.source ?? undefined,
+        sourceRef: row.source_ref ?? undefined,
+        metadata: JSON.parse(row.metadata || "{}"),
+        createdAt: row.created_at,
+        expiresAt: row.expires_at ?? undefined,
+      }));
+    } catch (error) {
+      // FTS5 query failed, fallback to keyword search
+      console.warn(`[SmartMemory] FTS5 query failed, falling back to LIKE:`, error);
+      return this.keywordSearch(query, type, limit);
+    }
+  }
+
+  /**
+   * Fallback keyword-based search (LIKE)
    */
   private keywordSearch(query: string, type?: MemoryType, limit: number = 10): MemoryEntry[] {
     const keywords = query.toLowerCase().split(/\s+/).filter((k) => k.length > 2);
-    console.log(`[SmartMemory] Keyword search: [${keywords.join(", ")}]`);
+    console.log(`[SmartMemory] Keyword fallback: [${keywords.join(", ")}]`);
 
     let whereClause = "(expires_at IS NULL OR expires_at > datetime('now'))";
     const params: (string | number)[] = [];
@@ -220,11 +380,11 @@ export class SmartMemory {
       )
       .all(...params);
 
-    console.log(`[SmartMemory] Keyword candidates found: ${rows.length}`);
+    console.log(`[SmartMemory] Keyword fallback candidates: ${rows.length}`);
 
     return rows.map((row) => ({
       id: row.id,
-      vectorRowid: 0, // Not used in smart memory
+      vectorRowid: 0,
       type: row.type as MemoryType,
       content: row.content,
       summary: row.summary ?? undefined,

@@ -353,11 +353,10 @@ export async function chat(userId: number, message: string | MultimodalMessage):
                         statusMessage = `📋 Görev listesini güncelliyorum...`;
                         break;
                       default:
-                        if (toolName.startsWith("telegram_")) {
+                        if (!toolName.startsWith("telegram_")) {
                           // Skip telegram tools to avoid loops
-                          return;
+                          statusMessage = `🔧 ${toolName} kullanıyorum...`;
                         }
-                        statusMessage = `🔧 ${toolName} kullanıyorum...`;
                     }
 
                     // Send via telegram bot if available
