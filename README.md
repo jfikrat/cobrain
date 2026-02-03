@@ -1,15 +1,114 @@
-# cobrain
+# Cobrain
 
-To install dependencies:
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Bun](https://img.shields.io/badge/Bun-1.3.5+-black?logo=bun)](https://bun.sh)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
+
+A personal AI assistant with Telegram, WhatsApp monitoring, and Web UI support. Built with Claude Agent SDK and designed to evolve with your preferences.
+
+## Features
+
+- **Multi-Channel Support** - Chat via Telegram, monitor WhatsApp, or use the Web UI
+- **Intelligent Memory** - Remembers important information across conversations
+- **Evolving Persona** - Adapts communication style based on your preferences
+- **Goals & Reminders** - Track objectives and get timely notifications
+- **MCP Tools** - Extensible tool system for memory, files, and more
+- **Streaming Responses** - Real-time AI response streaming
+- **Per-User Isolation** - Complete data separation for multi-user setups
+
+## Quick Start
 
 ```bash
+# Clone and install
+git clone https://github.com/yourusername/cobrain.git
+cd cobrain
 bun install
+
+# Configure (edit with your credentials)
+cp .env.example .env
+
+# Run
+bun run dev
 ```
 
-To run:
+## Requirements
+
+- [Bun](https://bun.sh) v1.3.5+
+- Telegram Bot Token (from [@BotFather](https://t.me/BotFather))
+- Anthropic API Key
+
+## Configuration
+
+Create a `.env` file with:
+
+```env
+TELEGRAM_BOT_TOKEN=your_bot_token
+ALLOWED_USER_IDS=your_telegram_id
+ANTHROPIC_API_KEY=sk-ant-xxxxx
+```
+
+See [Configuration Guide](docs/configuration.md) for all options.
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Getting Started](docs/getting-started.md) | Installation and first run |
+| [Architecture](docs/architecture.md) | System design and data flow |
+| [Configuration](docs/configuration.md) | Environment variables and options |
+| **Channels** | |
+| [Telegram](docs/channels/telegram.md) | Bot commands and usage |
+| [WhatsApp](docs/channels/whatsapp.md) | WhatsApp monitoring setup |
+| [Web UI](docs/channels/web-ui.md) | Browser interface |
+| **Features** | |
+| [Persona](docs/features/persona.md) | AI personality system |
+| [Memory](docs/features/memory.md) | Memory layers and search |
+| [Goals](docs/features/goals.md) | Goals and reminders |
+| [Tools](docs/features/tools.md) | MCP tools reference |
+| **API** | |
+| [HTTP API](docs/api/http.md) | HTTP endpoints |
+| [WebSocket](docs/api/websocket.md) | Real-time protocol |
+| **Operations** | |
+| [Deployment](docs/deployment.md) | Production deployment |
+| [Contributing](docs/contributing.md) | Development guide |
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| Runtime | Bun |
+| Language | TypeScript |
+| AI | Claude (Agent SDK) |
+| Database | SQLite |
+| Frontend | React + Tailwind CSS |
+| Telegram | grammy |
+| WhatsApp | Baileys |
+
+## Project Structure
+
+```
+src/
+├── agent/          # Claude Agent SDK integration
+├── brain/          # AI orchestration
+├── channels/       # Telegram, WhatsApp
+├── memory/         # Memory subsystem
+├── services/       # Business logic
+├── types/          # TypeScript interfaces
+├── utils/          # Helpers
+└── web/            # Web UI (React)
+```
+
+## Scripts
 
 ```bash
-bun run index.ts
+bun run dev         # Development with hot reload
+bun run start       # Production
+bun run dev:css     # Tailwind CSS watch
+bun run build:css   # Build CSS
+bun test            # Run tests
+bun run typecheck   # Type check
 ```
 
-This project was created using `bun init` in bun v1.3.5. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+## License
+
+MIT

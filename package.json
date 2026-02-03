@@ -1,24 +1,43 @@
 {
   "name": "cobrain",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Kişisel AI Asistan",
   "module": "src/index.ts",
   "type": "module",
   "private": true,
   "scripts": {
     "start": "bun run src/index.ts",
-    "dev": "bun --watch run src/index.ts",
-    "typecheck": "bun x tsc --noEmit"
+    "dev": "bun --hot src/index.ts",
+    "dev:css": "bunx tailwindcss -i ./src/web/public/styles/input.css -o ./src/web/public/styles/output.css --watch",
+    "build:css": "bunx tailwindcss -i ./src/web/public/styles/input.css -o ./src/web/public/styles/output.css --minify",
+    "typecheck": "bun x tsc --noEmit",
+    "migrate": "bun run scripts/migrate-v02.ts",
+    "migrate:execute": "bun run scripts/migrate-v02.ts --execute",
+    "migrate:rollback": "bun run scripts/migrate-v02.ts --rollback --execute"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/react": "^19.2.10",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.4.23",
+    "postcss": "8",
+    "tailwindcss": "3"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.20",
+    "@google/generative-ai": "^0.24.1",
+    "@grammyjs/runner": "^2.0.3",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "clsx": "^2.1.1",
     "grammy": "^1.39.3",
-    "zod": "^4.3.5"
+    "node-pty": "^1.1.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "sqlite-vec": "^0.1.7-alpha.2",
+    "tailwind-merge": "^3.4.0",
+    "zod": "^4.3.6"
   }
 }

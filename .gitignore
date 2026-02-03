@@ -6,6 +6,9 @@ out
 dist
 *.tgz
 
+# Tailwind CSS build output
+src/web/public/styles/output.css
+
 # code coverage
 coverage
 *.lcov
@@ -36,3 +39,5 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Database
 data/*.db
 data/*.db-*
+data/*.backup*
+data/whatsapp-auth/

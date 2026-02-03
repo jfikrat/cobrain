@@ -1,0 +1,22 @@
+name: Deploy to fjds
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to fjds server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.FJDS_HOST }}
+          username: ${{ secrets.FJDS_USER }}
+          password: ${{ secrets.FJDS_PASSWORD }}
+          script: |
+            cd ~/projects/cobrain
+            git pull origin main
+            ~/.bun/bin/bun install
+            echo '${{ secrets.FJDS_PASSWORD }}' | sudo -S systemctl restart cobrain
+            echo "✅ Cobrain deployed successfully!"

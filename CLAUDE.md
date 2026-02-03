@@ -35,7 +35,43 @@ test("hello world", () => {
 
 Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
 
-Server:
+### Tailwind CSS
+
+This project uses Tailwind CSS 3 with PostCSS. CSS must be pre-compiled.
+
+```bash
+# Build CSS (production, minified)
+bun run build:css
+
+# Watch mode (development)
+bun run dev:css
+```
+
+**File structure:**
+- `src/web/public/styles/input.css` - Tailwind directives + CSS variables + @apply classes
+- `src/web/public/styles/output.css` - Compiled CSS (gitignored)
+- `tailwind.config.ts` - Custom colors, animations, fonts
+- `postcss.config.js` - PostCSS plugins
+
+**Custom colors (CSS variables for theming):**
+- `bg-primary`, `bg-secondary`, `bg-tertiary`, `bg-hover`
+- `text-primary`, `text-secondary`, `text-muted`
+- `accent-primary`, `accent-secondary`
+- `border`, `border-hover`
+- `success`, `warning`, `error`
+
+**cn() helper for conditional classes:**
+```tsx
+import { cn } from "../utils/helpers";
+
+<div className={cn(
+  "base-class",
+  isActive && "active-class",
+  variant === "primary" && "bg-accent-primary"
+)} />
+```
+
+### Server
 
 ```ts#index.ts
 import index from "./index.html"
@@ -49,58 +85,60 @@ Bun.serve({
       },
     },
   },
-  // optional websocket support
   websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
+    open: (ws) => ws.send("Hello, world!"),
+    message: (ws, message) => ws.send(message),
+    close: (ws) => {}
   },
-  development: {
-    hmr: true,
-    console: true,
-  }
+  development: { hmr: true, console: true }
 })
 ```
 
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
+### HTML imports
+
+HTML files can import .tsx, .jsx or .js files directly. Bun's bundler transpiles & bundles automatically.
 
 ```html#index.html
 <html>
   <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
+    <div id="root"></div>
+    <script type="module" src="./app.tsx"></script>
   </body>
 </html>
 ```
 
-With the following `frontend.tsx`:
-
-```tsx#frontend.tsx
+```tsx#app.tsx
 import React from "react";
 import { createRoot } from "react-dom/client";
+import "./styles/output.css";  // Import compiled Tailwind CSS
 
-// import .css files directly and it works
-import './index.css';
-
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
+const root = createRoot(document.getElementById("root")!);
+root.render(<App />);
 ```
 
-Then, run index.ts
+### Development
 
-```sh
-bun --hot ./index.ts
+```bash
+# Terminal 1: CSS watch
+bun run dev:css
+
+# Terminal 2: Server with HMR
+bun --hot src/index.ts
 ```
 
 For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+
+## Self-Management
+
+### Restart
+Kod değişikliği yaptıktan veya güncelleme deploy ettikten sonra kendini yeniden başlatmak için:
+```bash
+cobrain-restart
+```
+Bu komut 2 saniye sonra restart planlar, böylece cevabını göndermeye zaman kalır.
+
+### Deploy Flow
+1. Kodu düzenle (Edit/Write)
+2. `git add . && git commit -m "message" && git push fjds main`
+3. `cobrain-restart` çağır
+4. Kullanıcıya "Değişiklikler deploy edildi, restart ediyorum" de

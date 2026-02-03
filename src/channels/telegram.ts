@@ -1,8 +1,12 @@
 import { Bot } from "grammy";
+import { run } from "@grammyjs/runner";
 import { config } from "../config.ts";
-import { think, memory, clearSession } from "../brain/index.ts";
+import { think, clearSession, getStats, userManager, isVectorMemoryAvailable, type MultimodalMessage } from "../brain/index.ts";
+import { initPermissions, clearAllPending } from "../agent/permissions.ts";
 import { whatsappDB, type PendingChat } from "../services/whatsapp-db.ts";
 import { analyzeMessages, generateSummary, type MessageAnalysis } from "../services/analyzer.ts";
+import { getPersonaService } from "../services/persona.ts";
+import { applyApprovedPersonaChange, applyApprovedRollback } from "../agent/tools/persona.ts";
 import {
   formatSummaryMessage,
   formatDetailMessage,
@@ -16,8 +20,14 @@ import {
   getReplyKeyboard,
 } from "../services/notifier.ts";
 import type { PendingMessage } from "../services/whatsapp.ts";
+import { generateSessionToken } from "../web/auth.ts";
+import { transcribeAudio, downloadTelegramFile, downloadTelegramFileAsBuffer } from "../services/transcribe.ts";
+import { initTelegramMcp } from "../agent/tools/telegram.ts";
 
 const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
+
+// Initialize Telegram MCP with bot instance
+initTelegramMcp(bot);
 
 // Geçici state
 let cachedAnalysis: MessageAnalysis[] = [];
@@ -74,18 +84,26 @@ bot.command("help", async (ctx) => {
   if (!isAuthorized(ctx.from?.id ?? 0)) return;
 
   await ctx.reply(
-    `🧠 <b>Cobrain Yardım</b>
-
-<b>Mesaj Asistanı:</b>
-/scan - WhatsApp'ta cevap bekleyenleri göster
-Butonlarla detay gör, cevap önerileri al
+    `🧠 <b>Cobrain v0.3 Yardım</b>
 
 <b>AI Sohbet:</b>
-Herhangi bir mesaj yaz, AI cevaplar.
-Shell komutu, dosya okuma, web arama yapabilir.
+Direkt mesaj yaz, Cobrain cevaplar.
+Hafıza, hedef, hatırlatıcı işlemleri için doğal dil kullan:
+• "Bunu hatırla: ..."
+• "Yeni hedef: ..."
+• "10 dakika sonra hatırlat: ..."
 
-<b>WhatsApp Cevaplama:</b>
-/reply [kişi] [mesaj] - Mesaj gönder`,
+<b>WhatsApp:</b>
+/scan - Cevap bekleyenleri göster
+/reply [kişi] [mesaj] - Mesaj gönder
+
+<b>Ayarlar:</b>
+/persona - Persona ayarlarını görüntüle
+/mode - Permission modunu değiştir
+
+<b>Diğer:</b>
+/status - Bot durumu
+/clear - Oturumu sıfırla`,
     { parse_mode: "HTML" }
   );
 });
@@ -93,17 +111,21 @@ Shell komutu, dosya okuma, web arama yapabilir.
 bot.command("status", async (ctx) => {
   if (!isAuthorized(ctx.from?.id ?? 0)) return;
 
-  const stats = memory.getStats();
-  const history = memory.getHistory(ctx.from?.id ?? 0);
+  const userId = ctx.from?.id ?? 0;
+  const userStats = await getStats(userId);
   const waStats = whatsappDB.getStats();
   const waStatus = whatsappDB.getWorkerStatus();
+  const ollamaAvailable = await isVectorMemoryAvailable();
 
   await ctx.reply(
-    `🧠 <b>Cobrain Durum</b>
+    `🧠 <b>Cobrain v0.2 Durum</b>
 
 <b>Bot:</b> Aktif ✅
 <b>AI:</b> Claude CLI (session-based)
+<b>Base:</b> <code>${config.COBRAIN_BASE_PATH}</code>
 
+<b>Smart Memory:</b> ${ollamaAvailable ? "Aktif ✅ (Cerebras)" : "Devre dışı ❌"}
+${!ollamaAvailable ? "<i>CEREBRAS_API_KEY ayarlanmamış</i>\n" : ""}
 <b>WhatsApp Worker:</b> ${waStatus.connected ? "Bağlı ✅" : "Bağlı değil ❌"}
 ${waStatus.user ? `<b>Hesap:</b> ${waStatus.user}` : ""}
 
@@ -112,9 +134,11 @@ ${waStatus.user ? `<b>Hesap:</b> ${waStatus.user}` : ""}
 • Sohbetler: ${waStats.chats}
 • Mesajlar: ${waStats.messages}
 
-<b>AI Bellek:</b>
-• Toplam: ${stats.messageCount}
-• Senin geçmişin: ${history.length}
+<b>Senin İstatistiklerin:</b>
+• Mesajlar: ${userStats.messageCount}
+• Oturumlar: ${userStats.sessionCount}
+• Hatıralar: ${userStats.memoryCount}
+• Toplam maliyet: $${userStats.totalCost.toFixed(4)}
 
 <b>Runtime:</b> Bun ${Bun.version}`,
     { parse_mode: "HTML" }
@@ -209,10 +233,231 @@ bot.command("clear", async (ctx) => {
   if (!isAuthorized(ctx.from?.id ?? 0)) return;
 
   const userId = ctx.from?.id ?? 0;
-  clearSession(userId); // Session ve history birlikte temizlenir
+  await clearSession(userId); // Session ve history birlikte temizlenir
   cachedAnalysis = [];
 
   await ctx.reply(`🗑️ Temizlendi! Session ve sohbet geçmişi sıfırlandı.`);
+});
+
+bot.command("restart", async (ctx) => {
+  if (!isAuthorized(ctx.from?.id ?? 0)) return;
+
+  await ctx.reply("🔄 Bot yeniden başlatılıyor...");
+
+  // Kısa bir gecikme ile mesajın gitmesini bekle
+  setTimeout(() => {
+    process.exit(0); // systemd otomatik restart yapacak
+  }, 500);
+});
+
+// ===== Web UI Command =====
+
+bot.command("web", async (ctx) => {
+  const userId = ctx.from?.id;
+  if (!userId || !isAuthorized(userId)) return;
+
+  if (!config.ENABLE_WEB_UI) {
+    await ctx.reply("❌ Web arayüzü devre dışı.");
+    return;
+  }
+
+  try {
+    const token = generateSessionToken(userId);
+    const url = `${config.WEB_URL}?token=${token}`;
+
+    await ctx.reply(
+      `🌐 <b>Web Arayüzü</b>\n\n` +
+        `Link 24 saat geçerli.\n` +
+        `<code>${url}</code>`,
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [[{ text: "🌐 Web'de Aç", url }]],
+        },
+      }
+    );
+
+    console.log(`[Web] Token generated for user ${userId}`);
+  } catch (error) {
+    await ctx.reply(`❌ Hata: ${error instanceof Error ? error.message : "Bilinmeyen hata"}`);
+  }
+});
+
+// ===== Permission Mode Command =====
+
+const PERMISSION_MODE_LABELS: Record<string, string> = {
+  strict: "🔒 Strict - Her tool için onay iste",
+  smart: "🧠 Smart - Sadece tehlikeli işlemlerde sor",
+  yolo: "🚀 YOLO - Hiçbir şey sorma",
+};
+
+bot.command("mode", async (ctx) => {
+  const userId = ctx.from?.id;
+  if (!userId || !isAuthorized(userId)) return;
+
+  try {
+    const settings = await userManager.getUserSettings(userId);
+    const currentMode = settings.permissionMode || config.PERMISSION_MODE;
+    const modeLabel = PERMISSION_MODE_LABELS[currentMode] || currentMode;
+
+    await ctx.reply(
+      `⚙️ *Permission Mode*\n\n` +
+      `Mevcut: *${modeLabel}*\n\n` +
+      `Mod seç:`,
+      {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: currentMode === "strict" ? "✓ Strict" : "Strict", callback_data: "mode:strict" },
+              { text: currentMode === "smart" ? "✓ Smart" : "Smart", callback_data: "mode:smart" },
+              { text: currentMode === "yolo" ? "✓ YOLO" : "YOLO", callback_data: "mode:yolo" },
+            ],
+          ],
+        },
+      }
+    );
+  } catch (error) {
+    await ctx.reply(`❌ Hata: ${error instanceof Error ? error.message : "Bilinmeyen hata"}`);
+  }
+});
+
+// Handle mode change callbacks
+bot.callbackQuery(/^mode:(strict|smart|yolo)$/, async (ctx) => {
+  const userId = ctx.from?.id;
+  if (!userId || !isAuthorized(userId)) return;
+
+  const mode = ctx.match![1] as "strict" | "smart" | "yolo";
+
+  try {
+    await userManager.updateUserSettings(userId, { permissionMode: mode });
+    const modeLabel = PERMISSION_MODE_LABELS[mode];
+
+    await ctx.editMessageText(
+      `⚙️ *Permission Mode*\n\n` +
+      `✅ Mod değiştirildi: *${modeLabel}*`,
+      { parse_mode: "Markdown" }
+    );
+    await ctx.answerCallbackQuery("Mod güncellendi!");
+
+    console.log(`[Bot] User ${userId} changed permission mode to: ${mode}`);
+  } catch (error) {
+    await ctx.answerCallbackQuery("Hata oluştu!");
+  }
+});
+
+// ===== Persona Commands & Callbacks =====
+
+bot.command("persona", async (ctx) => {
+  const userId = ctx.from?.id;
+  if (!userId || !isAuthorized(userId)) return;
+
+  try {
+    const service = await getPersonaService(userId);
+    const persona = await service.getActivePersona();
+
+    const toneLabels: Record<string, string> = {
+      samimi: "Samimi",
+      resmi: "Resmi",
+      teknik: "Teknik",
+      espirili: "Espirili",
+      destekleyici: "Destekleyici",
+    };
+
+    const text = `👤 <b>Persona Ayarları</b> (v${persona.version})
+
+<b>Kimlik:</b>
+• İsim: ${persona.identity.name}
+• Rol: ${persona.identity.role}
+• Değerler: ${persona.identity.coreValues.join(", ")}
+
+<b>Ses Tonu:</b>
+• Ton: ${toneLabels[persona.voice.tone] || persona.voice.tone}
+• Formalite: ${Math.round(persona.voice.formality * 100)}%
+• Detay: ${Math.round(persona.voice.verbosity * 100)}%
+• Emoji: ${persona.voice.emojiUsage}
+• Hitap: ${persona.voice.addressForm}
+
+<b>Davranış:</b>
+• Proaktiflik: ${Math.round(persona.behavior.proactivity * 100)}%
+• Soru sorma eşiği: ${Math.round(persona.behavior.clarificationThreshold * 100)}%
+• Cevap stili: ${persona.behavior.responseStyle}
+
+<b>Kullanıcı Bağlamı:</b>
+• İsim: ${persona.userContext.name}${persona.userContext.role ? `\n• Rol: ${persona.userContext.role}` : ""}
+• İlgiler: ${persona.userContext.interests.length > 0 ? persona.userContext.interests.join(", ") : "(yok)"}
+
+<i>Ton ve hitap değişiklikleri için agent'a iste.</i>`;
+
+    await ctx.reply(text, { parse_mode: "HTML" });
+  } catch (error) {
+    await ctx.reply(`❌ Hata: ${error instanceof Error ? error.message : "Bilinmeyen hata"}`);
+  }
+});
+
+// Persona change approval callback
+// Format: persona_approve:<field>:<encodedValue>
+bot.callbackQuery(/^persona_approve:(.+)$/, async (ctx) => {
+  const userId = ctx.from?.id;
+  if (!userId || !isAuthorized(userId)) return;
+
+  try {
+    const data = ctx.callbackQuery.data.replace("persona_approve:", "");
+    const parsed = JSON.parse(Buffer.from(data, "base64").toString("utf-8"));
+
+    const { field, value, reason } = parsed;
+
+    const success = await applyApprovedPersonaChange(userId, field, value, reason);
+
+    if (success) {
+      await ctx.editMessageText(
+        `✅ <b>Persona güncellendi!</b>\n\n` +
+        `Alan: <code>${field}</code>\n` +
+        `Yeni değer: <code>${JSON.stringify(value)}</code>`,
+        { parse_mode: "HTML" }
+      );
+      await ctx.answerCallbackQuery("Değişiklik uygulandı!");
+      console.log(`[Persona] User ${userId} approved change: ${field} = ${JSON.stringify(value)}`);
+    } else {
+      await ctx.answerCallbackQuery("Değişiklik uygulanamadı!");
+    }
+  } catch (error) {
+    console.error("Persona approve error:", error);
+    await ctx.answerCallbackQuery("Hata oluştu!");
+  }
+});
+
+// Persona change reject callback
+bot.callbackQuery(/^persona_reject$/, async (ctx) => {
+  await ctx.editMessageText("❌ Persona değişikliği reddedildi.", { parse_mode: "HTML" });
+  await ctx.answerCallbackQuery("Reddedildi");
+});
+
+// Persona rollback approval callback
+bot.callbackQuery(/^persona_rollback:(\d+)$/, async (ctx) => {
+  const userId = ctx.from?.id;
+  if (!userId || !isAuthorized(userId)) return;
+
+  try {
+    const targetVersion = parseInt(ctx.match![1]!, 10);
+
+    const success = await applyApprovedRollback(userId, targetVersion, "Kullanıcı onayladı");
+
+    if (success) {
+      await ctx.editMessageText(
+        `✅ <b>Persona geri alındı!</b>\n\n` +
+        `Versiyon ${targetVersion}'e dönüldü.`,
+        { parse_mode: "HTML" }
+      );
+      await ctx.answerCallbackQuery("Rollback tamamlandı!");
+      console.log(`[Persona] User ${userId} rolled back to v${targetVersion}`);
+    } else {
+      await ctx.answerCallbackQuery("Rollback başarısız!");
+    }
+  } catch (error) {
+    console.error("Persona rollback error:", error);
+    await ctx.answerCallbackQuery("Hata oluştu!");
+  }
 });
 
 // ============ CALLBACK QUERIES (Butonlar) ============
@@ -374,6 +619,145 @@ bot.callbackQuery("reply_cancel", async (ctx) => {
   });
 });
 
+// ============ SES MESAJI HANDLER ============
+
+bot.on("message:voice", async (ctx) => {
+  const userId = ctx.from?.id ?? 0;
+
+  if (!isAuthorized(userId)) {
+    console.log(`Yetkisiz ses mesajı: ${userId}`);
+    return;
+  }
+
+  // Check if Gemini API key is configured
+  if (!config.GEMINI_API_KEY) {
+    await ctx.reply("❌ Ses tanıma yapılandırılmamış (GEMINI_API_KEY eksik)");
+    return;
+  }
+
+  await ctx.replyWithChatAction("typing");
+
+  try {
+    // Download voice file
+    const file = await ctx.getFile();
+    if (!file.file_path) {
+      await ctx.reply("❌ Ses dosyası indirilemedi");
+      return;
+    }
+
+    const audioBuffer = await downloadTelegramFileAsBuffer(file.file_path, config.TELEGRAM_BOT_TOKEN);
+
+    // Transcribe with Gemini
+    const transcript = await transcribeAudio(audioBuffer, "audio/ogg");
+
+    if (!transcript.trim()) {
+      await ctx.reply("🔇 Ses anlaşılamadı, tekrar dener misin?");
+      return;
+    }
+
+    console.log(`[Voice] ${userId}: "${transcript.slice(0, 50)}..."`);
+
+    // Process transcribed text as normal message
+    await ctx.replyWithChatAction("typing");
+    const response = await think(userId, transcript);
+
+    // Show transcript and response
+    const message = `🎤 <i>${transcript}</i>\n\n${response.content}`;
+
+    try {
+      await ctx.reply(message, { parse_mode: "HTML" });
+    } catch {
+      await ctx.reply(`🎤 ${transcript}\n\n${response.content}`);
+    }
+
+    console.log(
+      `[${userId}] 🎤 ${transcript.slice(0, 30)}... -> ${response.inputTokens}/${response.outputTokens} tokens`
+    );
+  } catch (error) {
+    console.error("Ses işleme hatası:", error);
+    await ctx.reply(`❌ Ses işlenemedi: ${error instanceof Error ? error.message : "Bilinmeyen hata"}`);
+  }
+});
+
+// ============ RESİM MESAJI HANDLER ============
+
+bot.on("message:photo", async (ctx) => {
+  const userId = ctx.from?.id ?? 0;
+
+  if (!isAuthorized(userId)) {
+    console.log(`Yetkisiz erişim denemesi: ${userId}`);
+    return;
+  }
+
+  try {
+    const processingMsg = await ctx.reply("🖼️ Resim işleniyor...");
+
+    // En yüksek kaliteli versiyonu al
+    const photo = ctx.message.photo[ctx.message.photo.length - 1];
+    if (!photo?.file_id) {
+      await ctx.reply("Resim alınamadı!");
+      return;
+    }
+
+    // Resmi buffer olarak indir
+    const file = await bot.api.getFile(photo.file_id);
+    const filePath = file.file_path;
+    if (!filePath) {
+      await ctx.reply("Resim dosya yolu alınamadı!");
+      return;
+    }
+
+    // Dosyayı buffer olarak indir
+    const imageBuffer = await downloadTelegramFileAsBuffer(filePath, config.TELEGRAM_BOT_TOKEN);
+
+    // Buffer'ı base64'e çevir
+    const base64Image = imageBuffer.toString("base64");
+
+    // Dosya uzantısına göre media type belirle
+    const extension = filePath.split(".").pop()?.toLowerCase() || "jpg";
+    const mediaTypeMap: Record<string, "image/jpeg" | "image/png" | "image/gif" | "image/webp"> = {
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      gif: "image/gif",
+      webp: "image/webp",
+    };
+    const mediaType = mediaTypeMap[extension] || "image/jpeg";
+
+    // Caption varsa ekle
+    const caption = ctx.message.caption || "";
+    const prompt = caption
+      ? `Kullanıcı bu resmi gönderdi ve şunu söyledi: "${caption}"\n\nResmi analiz et ve cevap ver.`
+      : "Kullanıcı bu resmi gönderdi. Resimde ne görüyorsun? Detaylı açıkla.";
+
+    // Multimodal mesaj oluştur
+    const multimodalMessage: MultimodalMessage = {
+      text: prompt,
+      images: [
+        {
+          data: base64Image,
+          mediaType: mediaType,
+        },
+      ],
+    };
+
+    // AI'a gönder (multimodal olarak)
+    await userManager.ensureUser(userId);
+    const response = await think(userId, multimodalMessage);
+
+    // Geçici mesajı sil
+    try {
+      await bot.api.deleteMessage(userId, processingMsg.message_id);
+    } catch {}
+
+    await ctx.reply(response.content, { parse_mode: "HTML" });
+
+  } catch (error) {
+    console.error("Photo handler error:", error);
+    await ctx.reply("❌ Resim işlenirken hata oluştu!");
+  }
+});
+
 // ============ MESAJ HANDLER (AI Sohbet) ============
 
 bot.on("message:text", async (ctx) => {
@@ -421,7 +805,14 @@ bot.on("message:text", async (ctx) => {
   try {
     const response = await think(userId, text);
 
-    await ctx.reply(response.content, { parse_mode: "Markdown" });
+    // Try Markdown first, fallback to plain text if parsing fails
+    try {
+      await ctx.reply(response.content, { parse_mode: "Markdown" });
+    } catch (markdownError) {
+      // Markdown parsing failed (tables, unclosed entities, etc.)
+      console.warn("[Telegram] Markdown parse failed, sending as plain text");
+      await ctx.reply(response.content);
+    }
 
     console.log(
       `[${userId}] ${text.slice(0, 30)}... -> ${response.inputTokens}/${response.outputTokens} tokens | $${response.costUsd.toFixed(4)}`
@@ -441,26 +832,78 @@ bot.catch((err) => {
 
 // ============ EXPORT ============
 
-export function startBot(): void {
+export async function startBot(): Promise<void> {
   console.log("Telegram botu başlatılıyor...");
 
-  bot.start({
-    onStart: (botInfo) => {
-      console.log(`Bot başlatıldı: @${botInfo.username}`);
+  // Initialize permission system for tool approvals via Telegram
+  initPermissions(bot);
+  console.log(`[Bot] Permission mode: ${config.PERMISSION_MODE}`);
 
-      // WhatsApp durumunu kontrol et
-      const waStatus = whatsappDB.getWorkerStatus();
-      if (waStatus.connected) {
-        console.log(`WhatsApp bağlı: ${waStatus.user}`);
-      } else {
-        console.log("WhatsApp worker bağlı değil!");
-      }
+  // Telegram'a komutları kaydet (slash menüsü için)
+  // Not: Hafıza, hedef, hatırlatıcı ve profil komutları kaldırıldı
+  // Agent SDK MCP tools ile doğal dil üzerinden yapılıyor
+  await bot.api.setMyCommands([
+    // Temel
+    { command: "start", description: "Botu başlat" },
+    { command: "help", description: "Yardım ve komut listesi" },
+    { command: "status", description: "Bot ve session durumu" },
+    { command: "clear", description: "Konuşma geçmişini temizle" },
+    { command: "restart", description: "Botu yeniden başlat" },
+    { command: "web", description: "Web arayüzü linki al" },
+
+    // Ayarlar
+    { command: "persona", description: "Persona ayarlarını görüntüle" },
+    { command: "mode", description: "Permission modunu değiştir" },
+
+    // WhatsApp
+    { command: "scan", description: "WhatsApp mesajlarını tara" },
+    { command: "reply", description: "WhatsApp'a cevap yaz" },
+  ]);
+
+  // Grammy Runner kullan - concurrent processing için
+  // Bu sayede permission callback'leri agent çalışırken de alınabilir
+  const runner = run(bot, {
+    runner: {
+      fetch: {
+        allowed_updates: ["message", "callback_query", "inline_query"],
+      },
     },
   });
+
+  // Bot info'yu al ve logla
+  const botInfo = await bot.api.getMe();
+  console.log(`Bot başlatıldı: @${botInfo.username}`);
+
+  // WhatsApp durumunu kontrol et
+  const waStatus = whatsappDB.getWorkerStatus();
+  if (waStatus.connected) {
+    console.log(`WhatsApp bağlı: ${waStatus.user}`);
+  } else {
+    console.log("WhatsApp worker bağlı değil!");
+  }
+
+  // Startup notification - agent'a sistem mesajı gönder
+  for (const userId of config.ALLOWED_USER_IDS) {
+    console.log(`[Startup] Sending restart notification to user ${userId}`);
+    think(userId, "[SYSTEM] Bot yeniden başlatıldı. Kullanıcıya kısaca geri döndüğünü bildir.")
+      .then((response) => {
+        console.log(`[Startup] Agent response for ${userId}: ${response.content.slice(0, 50)}...`);
+        bot.api.sendMessage(userId, response.content)
+          .then(() => console.log(`[Startup] Message sent to ${userId}`))
+          .catch((err) => console.error(`[Startup] Failed to send message to ${userId}:`, err));
+      })
+      .catch((err) => console.error(`[Startup] Agent error for ${userId}:`, err));
+  }
+
+  // Graceful shutdown
+  const stopRunner = () => runner.isRunning() && runner.stop();
+  process.once("SIGINT", stopRunner);
+  process.once("SIGTERM", stopRunner);
 }
 
 export function stopBot(): Promise<void> {
   console.log("Bot durduruluyor...");
+  clearAllPending(); // Deny all pending permission requests
   whatsappDB.close();
   return bot.stop();
 }
