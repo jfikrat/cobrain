@@ -259,6 +259,12 @@ export async function chat(userId: number, message: string | MultimodalMessage):
             command: "bun",
             args: ["run", "/home/fjds/projects/squad/src/index.ts"],
           },
+          // WhatsApp - Messaging via Baileys
+          whatsapp: {
+            type: "stdio" as const,
+            command: "bun",
+            args: ["run", "/home/fjds/projects/whatsapp/mcp-server.ts"],
+          },
         },
 
         // Subagents for specialized tasks
