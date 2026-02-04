@@ -1,6 +1,6 @@
 /**
  * Proactive Service - Handles scheduled task execution
- * Cobrain v0.2
+ * Cobrain v0.3 - Now with Living Assistant
  */
 
 import { Bot } from "grammy";
@@ -9,9 +9,13 @@ import { getTaskQueue, type TaskQueue } from "./task-queue.ts";
 import { getGoalsService } from "./goals.ts";
 import { userManager } from "./user-manager.ts";
 import { pruneMemories } from "../brain/index.ts";
+import { initLivingAssistant, stopLivingAssistant, recordInteraction } from "./living-assistant.ts";
 import type { ScheduledTask, QueuedTask, TaskResult, TaskType } from "../types/autonomous.ts";
 
 let bot: Bot | null = null;
+
+// Re-export for use in telegram channel
+export { recordInteraction };
 
 /**
  * Initialize proactive services with bot instance
@@ -41,7 +45,10 @@ export function initProactive(botInstance: Bot): void {
   // Start reminder check interval (every minute)
   startReminderChecker();
 
-  console.log("[Proactive] Services initialized");
+  // Start Living Assistant (AI-powered proactive awareness)
+  initLivingAssistant(bot);
+
+  console.log("[Proactive] Services initialized (with Living Assistant)");
 }
 
 /**
@@ -58,6 +65,9 @@ export function stopProactive(): void {
     clearInterval(reminderIntervalId);
     reminderIntervalId = null;
   }
+
+  // Stop Living Assistant
+  stopLivingAssistant();
 
   console.log("[Proactive] Services stopped");
 }

@@ -4,6 +4,12 @@ import { config } from "./config.ts";
 import { initProactive, stopProactive } from "./services/proactive.ts";
 import { initScheduler } from "./services/scheduler.ts";
 import { initTaskQueue } from "./services/task-queue.ts";
+import {
+  heartbeat,
+  registerHeartbeatComponent,
+  startHeartbeatMonitor,
+  stopHeartbeatMonitor,
+} from "./services/heartbeat.ts";
 import { startWebServer, stopWebServer } from "./web/server.ts";
 
 console.log(`
@@ -22,6 +28,21 @@ console.log(`
 `);
 
 // Initialize services
+registerHeartbeatComponent("app", { required: true });
+registerHeartbeatComponent("ai_agent", { required: true });
+registerHeartbeatComponent("telegram_bot", { required: true });
+registerHeartbeatComponent("web_server", { required: config.ENABLE_WEB_UI });
+registerHeartbeatComponent("scheduler", { required: config.ENABLE_AUTONOMOUS });
+registerHeartbeatComponent("task_queue", { required: config.ENABLE_AUTONOMOUS });
+registerHeartbeatComponent("proactive_service", { required: config.ENABLE_AUTONOMOUS });
+
+heartbeat("app", { event: "startup" });
+startHeartbeatMonitor();
+
+const appHeartbeatInterval = setInterval(() => {
+  heartbeat("app", { event: "tick", uptimeSec: Math.round(process.uptime()) });
+}, Math.max(10_000, Math.floor(config.HEARTBEAT_STALE_AFTER_MS / 3)));
+
 if (config.ENABLE_AUTONOMOUS) {
   initScheduler({ enabled: true });
   initTaskQueue({ enabled: true });
@@ -54,6 +75,9 @@ const shutdown = async () => {
   if (config.ENABLE_WEB_UI) {
     stopWebServer();
   }
+
+  clearInterval(appHeartbeatInterval);
+  stopHeartbeatMonitor();
 
   await stopBot();
   await closeAll();

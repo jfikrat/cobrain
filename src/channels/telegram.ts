@@ -7,6 +7,7 @@ import { whatsappDB, type PendingChat } from "../services/whatsapp-db.ts";
 import { analyzeMessages, generateSummary, type MessageAnalysis } from "../services/analyzer.ts";
 import { getPersonaService } from "../services/persona.ts";
 import { applyApprovedPersonaChange, applyApprovedRollback } from "../agent/tools/persona.ts";
+import { recordInteraction } from "../services/proactive.ts";
 import {
   formatSummaryMessage,
   formatDetailMessage,
@@ -629,6 +630,9 @@ bot.on("message:voice", async (ctx) => {
     return;
   }
 
+  // Record interaction for Living Assistant
+  recordInteraction(userId);
+
   // Check if Gemini API key is configured
   if (!config.GEMINI_API_KEY) {
     await ctx.reply("❌ Ses tanıma yapılandırılmamış (GEMINI_API_KEY eksik)");
@@ -688,6 +692,9 @@ bot.on("message:photo", async (ctx) => {
     console.log(`Yetkisiz erişim denemesi: ${userId}`);
     return;
   }
+
+  // Record interaction for Living Assistant
+  recordInteraction(userId);
 
   try {
     const processingMsg = await ctx.reply("🖼️ Resim işleniyor...");
@@ -767,6 +774,9 @@ bot.on("message:text", async (ctx) => {
     console.log(`Yetkisiz erişim denemesi: ${userId}`);
     return;
   }
+
+  // Record interaction for Living Assistant
+  recordInteraction(userId);
 
   const text = ctx.message.text;
   if (text.startsWith("/")) return;
