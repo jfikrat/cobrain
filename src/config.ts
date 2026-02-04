@@ -47,8 +47,16 @@ const envSchema = z.object({
   TRANSCRIPTION_MODEL: z.string().default("gemini-3-flash-preview"),
 
   // v0.6: Agent model
-  AGENT_MODEL: z.string().default("claude-opus-4-20250514"),
+  AGENT_MODEL: z.string().default("claude-opus-4-5-20251101"),
   MAX_AGENT_TURNS: z.coerce.number().default(20),
+
+  // v0.7: Always-on heartbeat monitoring
+  ENABLE_HEARTBEAT_MONITORING: z
+    .string()
+    .default("true")
+    .transform((val) => val === "true" || val === "1"),
+  HEARTBEAT_STALE_AFTER_MS: z.coerce.number().default(120_000),
+  HEARTBEAT_LOG_INTERVAL_MS: z.coerce.number().default(30_000),
 
   // Legacy (kept for migration)
   DB_PATH: z.string().default("./data/cobrain.db"),
