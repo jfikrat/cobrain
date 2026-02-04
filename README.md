@@ -9,12 +9,13 @@ A personal AI assistant with Telegram, WhatsApp monitoring, and Web UI support. 
 ## Features
 
 - **Multi-Channel Support** - Chat via Telegram, monitor WhatsApp, or use the Web UI
-- **Intelligent Memory** - Remembers important information across conversations
+- **Intelligent Memory** - FTS5 + Haiku powered memory with semantic search
+- **Living Assistant** - Proactive awareness with context-aware notifications
 - **Evolving Persona** - Adapts communication style based on your preferences
 - **Goals & Reminders** - Track objectives and get timely notifications
 - **MCP Tools** - Extensible tool system for memory, files, and more
 - **Streaming Responses** - Real-time AI response streaming
-- **Per-User Isolation** - Complete data separation for multi-user setups
+- **Single-User Design** - Self-hosted, your data stays local
 
 ## Quick Start
 
@@ -43,7 +44,7 @@ Create a `.env` file with:
 
 ```env
 TELEGRAM_BOT_TOKEN=your_bot_token
-ALLOWED_USER_IDS=your_telegram_id
+MY_TELEGRAM_ID=your_telegram_id
 ANTHROPIC_API_KEY=sk-ant-xxxxx
 ```
 

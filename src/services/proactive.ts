@@ -263,31 +263,30 @@ function startReminderChecker(): void {
 }
 
 async function checkDueReminders(): Promise<void> {
-  const users = userManager.getAllUsers();
+  const { config } = await import("../config.ts");
   const taskQueue = getTaskQueue();
+  const userId = config.MY_TELEGRAM_ID;
 
-  for (const user of users) {
-    try {
-      const db = await userManager.getUserDb(user.id);
-      const goalsService = await getGoalsService(db, user.id);
+  try {
+    const db = await userManager.getUserDb(userId);
+    const goalsService = await getGoalsService(db, userId);
 
-      const dueReminders = goalsService.getDueReminders();
+    const dueReminders = goalsService.getDueReminders();
 
-      for (const reminder of dueReminders) {
-        // Queue the reminder task
-        taskQueue.enqueue(
-          user.id,
-          "reminder",
-          {
-            reminderId: reminder.id,
-            title: reminder.title,
-            message: reminder.message,
-          },
-          5 // High priority
-        );
-      }
-    } catch (error) {
-      console.error(`[Proactive] Error checking reminders for user ${user.id}:`, error);
+    for (const reminder of dueReminders) {
+      // Queue the reminder task
+      taskQueue.enqueue(
+        userId,
+        "reminder",
+        {
+          reminderId: reminder.id,
+          title: reminder.title,
+          message: reminder.message,
+        },
+        5 // High priority
+      );
     }
+  } catch (error) {
+    console.error(`[Proactive] Error checking reminders:`, error);
   }
 }

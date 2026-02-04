@@ -9,7 +9,7 @@ Cobrain is configured through environment variables. All variables are validated
 | Variable | Type | Description |
 |----------|------|-------------|
 | `TELEGRAM_BOT_TOKEN` | string | Bot token from [@BotFather](https://t.me/BotFather) |
-| `ALLOWED_USER_IDS` | string | Comma-separated Telegram user IDs allowed to use the bot |
+| `MY_TELEGRAM_ID` | number | Your Telegram user ID (get from @userinfobot) |
 | `ANTHROPIC_API_KEY` | string | Anthropic API key for Claude access |
 
 ### Storage
@@ -22,11 +22,10 @@ Cobrain is configured through environment variables. All variables are validated
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `USE_AGENT_SDK` | boolean | `true` | Use Claude Agent SDK (vs CLI fallback) |
-| `OLLAMA_URL` | string | `http://localhost:11434` | Ollama server URL for embeddings |
-| `EMBEDDING_MODEL` | string | `all-minilm:l6-v2` | Embedding model name (384 dimensions) |
-| `CEREBRAS_API_KEY` | string | - | Cerebras API key for memory operations |
-| `CEREBRAS_MODEL` | string | `gpt-oss-120b` | Cerebras model for ranking/extraction |
+| `AGENT_MODEL` | string | `claude-opus-4-5-20251101` | Main chat model (Claude Opus 4.5) |
+| `USE_AGENT_SDK` | boolean | `true` | Use Claude Agent SDK |
+| `GEMINI_API_KEY` | string | - | Gemini API key for voice transcription |
+| `TRANSCRIPTION_MODEL` | string | `gemini-3-flash-preview` | Voice transcription model |
 
 ### Memory Settings
 
@@ -35,11 +34,13 @@ Cobrain is configured through environment variables. All variables are validated
 | `MAX_HISTORY` | number | `10` | Messages to keep in conversation context |
 | `MAX_MEMORY_AGE_DAYS` | number | `90` | Days to retain episodic memories |
 
-### Autonomous Features
+### Living Assistant
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `ENABLE_AUTONOMOUS` | boolean | `true` | Enable scheduler and task queue |
+| `ENABLE_HEARTBEAT_MONITORING` | boolean | `true` | Enable proactive awareness |
+| `HEARTBEAT_LOG_INTERVAL_MS` | number | `30000` | Awareness loop interval (ms) |
+| `HEARTBEAT_STALE_AFTER_MS` | number | `120000` | Stale heartbeat threshold (ms) |
 
 ### Web UI
 
@@ -106,7 +107,7 @@ PERMISSION_MODE=yolo
 
 ```env
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF
-ALLOWED_USER_IDS=123456789
+MY_TELEGRAM_ID=123456789
 ANTHROPIC_API_KEY=sk-ant-xxxxx
 ```
 
@@ -115,7 +116,7 @@ ANTHROPIC_API_KEY=sk-ant-xxxxx
 ```env
 # Required
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF
-ALLOWED_USER_IDS=123456789,987654321
+MY_TELEGRAM_ID=123456789
 ANTHROPIC_API_KEY=sk-ant-xxxxx
 
 # Storage
@@ -123,10 +124,9 @@ COBRAIN_BASE_PATH=/home/user/.cobrain
 
 # AI Models
 USE_AGENT_SDK=true
-OLLAMA_URL=http://localhost:11434
-EMBEDDING_MODEL=all-minilm:l6-v2
-CEREBRAS_API_KEY=csk-xxxxx
-CEREBRAS_MODEL=gpt-oss-120b
+AGENT_MODEL=claude-opus-4-5-20251101
+GEMINI_API_KEY=xxxxx
+TRANSCRIPTION_MODEL=gemini-3-flash-preview
 
 # Memory
 MAX_HISTORY=15
@@ -138,6 +138,10 @@ ENABLE_WEB_UI=true
 WEB_PORT=3000
 WEB_URL=https://cobrain.example.com
 
+# Living Assistant
+ENABLE_HEARTBEAT_MONITORING=true
+HEARTBEAT_LOG_INTERVAL_MS=30000
+
 # Security
 PERMISSION_MODE=smart
 ```
@@ -146,7 +150,7 @@ PERMISSION_MODE=smart
 
 ```env
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF
-ALLOWED_USER_IDS=123456789
+MY_TELEGRAM_ID=123456789
 ANTHROPIC_API_KEY=sk-ant-xxxxx
 
 # Development settings
@@ -156,7 +160,15 @@ WEB_URL=http://localhost:3000
 PERMISSION_MODE=yolo
 ```
 
-## LLM Providers
+## LLM Architecture
+
+Cobrain uses multiple LLMs for different tasks:
+
+| Model | Usage | Purpose |
+|-------|-------|---------|
+| Claude Opus 4.5 | Main Chat | Agent SDK, tool orchestration, reasoning |
+| Claude Haiku 4.5 | Memory | Tag extraction, summarization, semantic ranking |
+| Gemini 3 Flash | Transcription | Voice/audio to text conversion |
 
 ### Claude (Primary)
 
@@ -164,6 +176,7 @@ Claude is the primary LLM via the Agent SDK:
 
 ```env
 ANTHROPIC_API_KEY=sk-ant-xxxxx
+AGENT_MODEL=claude-opus-4-5-20251101
 USE_AGENT_SDK=true
 ```
 
@@ -173,36 +186,23 @@ The Agent SDK provides:
 - Conversation management
 - Token counting
 
-### Cerebras (Optional)
+### Claude Haiku (Memory)
 
-Cerebras enhances memory operations:
-
-```env
-CEREBRAS_API_KEY=csk-xxxxx
-CEREBRAS_MODEL=gpt-oss-120b
-```
-
-Used for:
+Haiku handles memory operations automatically using the same API key:
 - Memory ranking (semantic similarity)
 - Tag extraction from content
 - Summary generation
 
-If not configured, fallback to keyword-based memory search.
+### Gemini (Voice - Optional)
 
-### Ollama (Optional)
-
-Ollama provides local embeddings:
+Gemini handles voice transcription:
 
 ```env
-OLLAMA_URL=http://localhost:11434
-EMBEDDING_MODEL=all-minilm:l6-v2
+GEMINI_API_KEY=xxxxx
+TRANSCRIPTION_MODEL=gemini-3-flash-preview
 ```
 
-Used for:
-- Vector memory search
-- Semantic similarity matching
-
-If not configured, memory uses keyword matching only.
+If not configured, voice messages won't be transcribed.
 
 ## Data Directory Structure
 
@@ -211,9 +211,9 @@ Cobrain creates the following structure in `COBRAIN_BASE_PATH`:
 ```
 ~/.cobrain/
 ├── cobrain.db              # Global database (users, tasks)
-└── user_<telegram_id>/     # Per-user directories
+└── user_<telegram_id>/     # User directory
     ├── cobrain.db          # User database (messages, goals, etc.)
-    ├── memory.db           # Memory database
+    ├── memory.db           # Memory database with FTS5
     └── whatsapp/           # WhatsApp session (if enabled)
         └── auth/           # Multi-file auth state
 ```
@@ -225,7 +225,7 @@ All configuration is validated at startup:
 ```typescript
 const configSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1),
-  ALLOWED_USER_IDS: z.string().transform(parseUserIds),
+  MY_TELEGRAM_ID: z.coerce.number().min(1),
   COBRAIN_BASE_PATH: z.string().default('~/.cobrain'),
   // ... more fields
 });

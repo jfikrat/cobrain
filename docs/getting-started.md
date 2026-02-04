@@ -9,8 +9,7 @@ Before installing Cobrain, ensure you have:
 - **Bun** v1.3.5 or higher ([install guide](https://bun.sh))
 - **Telegram Bot Token** from [@BotFather](https://t.me/BotFather)
 - **Anthropic API Key** for Claude access
-- **Ollama** (optional, for local embeddings)
-- **Cerebras API Key** (optional, for enhanced memory features)
+- **Gemini API Key** (optional, for voice transcription)
 
 ## Installation
 
@@ -40,16 +39,11 @@ Edit `.env` with your configuration:
 ```env
 # Required
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-ALLOWED_USER_IDS=123456789,987654321
+MY_TELEGRAM_ID=123456789
 ANTHROPIC_API_KEY=sk-ant-xxxxx
 
-# Optional - Ollama (for local embeddings)
-OLLAMA_URL=http://localhost:11434
-EMBEDDING_MODEL=all-minilm:l6-v2
-
-# Optional - Cerebras (for enhanced memory)
-CEREBRAS_API_KEY=your_cerebras_key
-CEREBRAS_MODEL=gpt-oss-120b
+# Optional - Voice transcription
+GEMINI_API_KEY=your_gemini_key
 
 # Optional - Web UI
 ENABLE_WEB_UI=true
@@ -82,19 +76,7 @@ stats - View statistics
 
 1. Message [@userinfobot](https://t.me/userinfobot) on Telegram
 2. It will reply with your user ID
-3. Add this ID to `ALLOWED_USER_IDS` in your `.env` file
-
-### 6. Set Up Ollama (Optional)
-
-For local embeddings support:
-
-```bash
-# Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Pull the embedding model
-ollama pull all-minilm:l6-v2
-```
+3. Add this ID to `MY_TELEGRAM_ID` in your `.env` file
 
 ## Running Cobrain
 
@@ -180,7 +162,7 @@ Cobrain: Tamam, yarın saat 09:00'da "check emails"
 
 ### Bot Not Responding
 
-1. Check if your user ID is in `ALLOWED_USER_IDS`
+1. Check if your user ID matches `MY_TELEGRAM_ID`
 2. Verify the bot token is correct
 3. Ensure the bot is running (`bun run dev`)
 
@@ -189,12 +171,6 @@ Cobrain: Tamam, yarın saat 09:00'da "check emails"
 1. Check if `ENABLE_WEB_UI=true` in `.env`
 2. Verify the port is not in use
 3. Check console for errors
-
-### Memory/Embeddings Not Working
-
-1. Ensure Ollama is running: `ollama serve`
-2. Pull the model: `ollama pull all-minilm:l6-v2`
-3. Verify `OLLAMA_URL` is correct
 
 ### Database Errors
 

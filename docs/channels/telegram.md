@@ -16,7 +16,7 @@ Telegram is the primary communication channel for Cobrain. It uses the [grammy](
 
 ```env
 TELEGRAM_BOT_TOKEN=123456789:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
-ALLOWED_USER_IDS=123456789,987654321
+MY_TELEGRAM_ID=123456789
 ```
 
 ### 3. Set Bot Commands
