@@ -90,14 +90,12 @@ export function recordInteraction(userId: number): void {
 async function runAwarenessLoop(): Promise<void> {
   heartbeat("proactive_service", { event: "awareness_tick" });
 
-  const users = userManager.getAllUsers();
-
-  for (const user of users) {
-    try {
-      await checkUserContext(user.id);
-    } catch (error) {
-      console.error(`[LivingAssistant] Error for user ${user.id}:`, error);
-    }
+  // Single-user mode: only check the owner
+  const userId = config.MY_TELEGRAM_ID;
+  try {
+    await checkUserContext(userId);
+  } catch (error) {
+    console.error(`[LivingAssistant] Error:`, error);
   }
 }
 

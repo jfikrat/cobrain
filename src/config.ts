@@ -5,9 +5,7 @@ import { join } from "node:path";
 const envSchema = z.object({
   // Core
   TELEGRAM_BOT_TOKEN: z.string().min(1, "Telegram bot token gerekli"),
-  ALLOWED_USER_IDS: z.string().transform((val) =>
-    val.split(",").map((id) => parseInt(id.trim(), 10))
-  ),
+  MY_TELEGRAM_ID: z.coerce.number().min(1, "Telegram user ID gerekli"),
   MAX_HISTORY: z.coerce.number().default(10),
 
   // v0.2: Per-user folders

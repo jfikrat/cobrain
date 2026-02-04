@@ -42,7 +42,7 @@ interface ReplyState {
 const replyStates = new Map<number, ReplyState>(); // userId -> ReplyState
 
 function isAuthorized(userId: number): boolean {
-  return config.ALLOWED_USER_IDS.includes(userId);
+  return userId === config.MY_TELEGRAM_ID;
 }
 
 // PendingChat -> PendingMessage dönüşümü
@@ -893,17 +893,16 @@ export async function startBot(): Promise<void> {
   }
 
   // Startup notification - agent'a sistem mesajı gönder
-  for (const userId of config.ALLOWED_USER_IDS) {
-    console.log(`[Startup] Sending restart notification to user ${userId}`);
-    think(userId, "[SYSTEM] Bot yeniden başlatıldı. Kullanıcıya kısaca geri döndüğünü bildir.")
-      .then((response) => {
-        console.log(`[Startup] Agent response for ${userId}: ${response.content.slice(0, 50)}...`);
-        bot.api.sendMessage(userId, response.content)
-          .then(() => console.log(`[Startup] Message sent to ${userId}`))
-          .catch((err) => console.error(`[Startup] Failed to send message to ${userId}:`, err));
-      })
-      .catch((err) => console.error(`[Startup] Agent error for ${userId}:`, err));
-  }
+  const userId = config.MY_TELEGRAM_ID;
+  console.log(`[Startup] Sending restart notification to user ${userId}`);
+  think(userId, "[SYSTEM] Bot yeniden başlatıldı. Kullanıcıya kısaca geri döndüğünü bildir.")
+    .then((response) => {
+      console.log(`[Startup] Agent response: ${response.content.slice(0, 50)}...`);
+      bot.api.sendMessage(userId, response.content)
+        .then(() => console.log(`[Startup] Message sent`))
+        .catch((err) => console.error(`[Startup] Failed to send message:`, err));
+    })
+    .catch((err) => console.error(`[Startup] Agent error:`, err));
 
   // Graceful shutdown
   const stopRunner = () => runner.isRunning() && runner.stop();
