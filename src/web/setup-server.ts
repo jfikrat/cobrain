@@ -89,7 +89,8 @@ export function startSetupServer(): void {
     return;
   }
 
-  const PORT = 3000;
+  // Port from env or default 3000
+  const PORT = parseInt(process.env.WEB_PORT || "3000", 10);
 
   server = Bun.serve({
     port: PORT,
