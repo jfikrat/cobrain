@@ -739,3 +739,285 @@
     @apply w-[95%] max-h-[90vh];
   }
 }
+
+/* ============ Setup Wizard Styles ============ */
+@layer components {
+  /* Wizard Container */
+  .setup-wizard {
+    @apply min-h-screen flex items-center justify-center p-4 bg-bg-primary;
+  }
+
+  .setup-wizard-container {
+    @apply w-full max-w-[600px] bg-bg-secondary border border-border rounded-xl overflow-hidden;
+  }
+
+  /* Header */
+  .setup-header {
+    @apply px-6 py-4 border-b border-border bg-bg-tertiary;
+  }
+
+  .setup-logo {
+    @apply flex items-center gap-3 text-xl font-semibold text-text-primary;
+  }
+
+  .setup-logo svg {
+    @apply text-accent-primary;
+  }
+
+  /* Step Indicator */
+  .wizard-steps {
+    @apply flex items-center justify-center gap-0 px-6 py-4 bg-bg-secondary border-b border-border;
+  }
+
+  .wizard-step {
+    @apply flex flex-col items-center gap-1 px-2 py-1 rounded-md transition-all duration-150;
+    @apply text-text-muted cursor-pointer;
+  }
+
+  .wizard-step:hover:not(:disabled) {
+    @apply text-text-secondary;
+  }
+
+  .wizard-step:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+
+  .wizard-step--active {
+    @apply text-accent-primary;
+  }
+
+  .wizard-step--completed {
+    @apply text-success;
+  }
+
+  .wizard-step-number {
+    @apply w-7 h-7 flex items-center justify-center rounded-full text-sm font-medium border-2;
+    @apply border-current bg-transparent;
+  }
+
+  .wizard-step--active .wizard-step-number {
+    @apply bg-accent-primary text-white border-accent-primary;
+  }
+
+  .wizard-step--completed .wizard-step-number {
+    @apply bg-success text-white border-success;
+  }
+
+  .wizard-step-label {
+    @apply text-xs font-medium whitespace-nowrap;
+  }
+
+  .wizard-step-connector {
+    @apply w-8 h-0.5 bg-border mx-1;
+  }
+
+  .wizard-step-connector--completed {
+    @apply bg-success;
+  }
+
+  /* Content */
+  .setup-content {
+    @apply p-6;
+  }
+
+  .setup-step {
+    @apply animate-fade-in;
+  }
+
+  .setup-step-header {
+    @apply mb-6;
+  }
+
+  .setup-step-title {
+    @apply text-xl font-semibold text-text-primary mb-2;
+  }
+
+  .setup-step-description {
+    @apply text-text-secondary;
+  }
+
+  .setup-step-content {
+    @apply flex flex-col gap-4;
+  }
+
+  /* Footer */
+  .setup-footer {
+    @apply flex items-center justify-between px-6 py-4 border-t border-border bg-bg-tertiary;
+  }
+
+  .setup-footer-left,
+  .setup-footer-right {
+    @apply flex gap-2;
+  }
+
+  /* Info Box */
+  .setup-info-box {
+    @apply p-4 bg-bg-tertiary border border-border rounded-lg text-sm;
+  }
+
+  .setup-info-box h4 {
+    @apply font-medium text-text-primary mb-2;
+  }
+
+  .setup-info-box ol {
+    @apply list-decimal pl-5 text-text-secondary space-y-1;
+  }
+
+  .setup-info-box code {
+    @apply px-1.5 py-0.5 bg-code-bg rounded text-accent-secondary font-mono text-xs;
+  }
+
+  .setup-info-box a {
+    @apply text-accent-primary hover:underline;
+  }
+
+  /* Note */
+  .setup-note {
+    @apply flex items-start gap-2 p-3 bg-accent-muted rounded-lg text-sm text-text-secondary;
+  }
+
+  .setup-note-icon {
+    @apply shrink-0;
+  }
+
+  .setup-note code {
+    @apply px-1 py-0.5 bg-bg-tertiary rounded text-accent-secondary font-mono text-xs;
+  }
+
+  /* Error */
+  .setup-error {
+    @apply flex items-start gap-2 p-3 rounded-lg text-sm;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: var(--error);
+  }
+
+  .setup-error-icon {
+    @apply shrink-0;
+  }
+
+  /* Review */
+  .setup-review {
+    @apply space-y-4;
+  }
+
+  .setup-review-section {
+    @apply p-4 bg-bg-tertiary border border-border rounded-lg;
+  }
+
+  .setup-review-section h4 {
+    @apply font-medium text-text-primary mb-3 pb-2 border-b border-border;
+  }
+
+  .setup-review-item {
+    @apply flex items-center justify-between py-1;
+  }
+
+  .setup-review-label {
+    @apply text-text-secondary text-sm;
+  }
+
+  .setup-review-value {
+    @apply px-2 py-1 bg-code-bg rounded font-mono text-sm text-text-primary;
+  }
+
+  /* Loading */
+  .setup-loading {
+    @apply flex flex-col items-center justify-center gap-3 text-text-secondary;
+  }
+
+  .setup-loading-spinner {
+    @apply w-8 h-8 border-2 border-border border-t-accent-primary rounded-full animate-spin;
+  }
+
+  /* Restarting */
+  .setup-restarting {
+    @apply flex flex-col items-center justify-center gap-4 text-center p-8;
+  }
+
+  .setup-restarting h2 {
+    @apply text-xl font-semibold text-text-primary;
+  }
+
+  .setup-restarting p {
+    @apply text-text-secondary max-w-[400px];
+  }
+}
+
+/* ============ Text Input Styles ============ */
+@layer components {
+  .text-input-group {
+    @apply flex flex-col gap-1.5;
+  }
+
+  .text-input-label {
+    @apply text-sm font-medium text-text-primary;
+  }
+
+  .text-input-required {
+    @apply text-error ml-0.5;
+  }
+
+  .text-input-wrapper {
+    @apply relative flex items-center;
+  }
+
+  .text-input {
+    @apply w-full py-2.5 px-4 bg-bg-tertiary border border-border rounded-lg text-text-primary text-base;
+    @apply transition-all duration-150;
+    @apply placeholder:text-text-muted;
+  }
+
+  .text-input:focus {
+    @apply border-accent-primary outline-none;
+    box-shadow: 0 0 0 3px var(--accent-muted);
+  }
+
+  .text-input--error {
+    @apply border-error;
+  }
+
+  .text-input--error:focus {
+    @apply border-error;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+  }
+
+  .text-input-toggle {
+    @apply absolute right-3 p-1 text-text-muted hover:text-text-secondary transition-colors;
+  }
+
+  .text-input-hint {
+    @apply text-xs text-text-muted;
+  }
+
+  .text-input-error {
+    @apply text-xs text-error;
+  }
+}
+
+/* ============ Responsive Setup ============ */
+@media (max-width: 640px) {
+  .setup-wizard-container {
+    @apply rounded-none border-x-0;
+  }
+
+  .wizard-steps {
+    @apply px-2 gap-0 overflow-x-auto;
+  }
+
+  .wizard-step-label {
+    @apply hidden;
+  }
+
+  .wizard-step-connector {
+    @apply w-4;
+  }
+
+  .setup-content {
+    @apply p-4;
+  }
+
+  .setup-footer {
+    @apply px-4;
+  }
+}

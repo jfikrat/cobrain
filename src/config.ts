@@ -60,20 +60,101 @@ const envSchema = z.object({
   DB_PATH: z.string().default("./data/cobrain.db"),
 });
 
-function loadConfig() {
+// Type for safe config loading result
+export type ConfigResult =
+  | { success: true; data: Config }
+  | { success: false; errors: string[] };
+
+/**
+ * Load config without crashing on error
+ * Returns success/error state for setup wizard
+ */
+export function loadConfigSafe(): ConfigResult {
   const result = envSchema.safeParse(process.env);
 
   if (!result.success) {
-    console.error("Konfigürasyon hatası:");
-    for (const issue of result.error.issues) {
-      console.error(`  - ${issue.path.join(".")}: ${issue.message}`);
-    }
-    process.exit(1);
+    return {
+      success: false,
+      errors: result.error.issues.map(
+        (i) => `${i.path.join(".")}: ${i.message}`
+      ),
+    };
   }
 
-  return result.data;
+  return { success: true, data: result.data };
 }
 
-export const config = loadConfig();
+/**
+ * Check if current config is valid
+ */
+export function isConfigValid(): boolean {
+  return loadConfigSafe().success;
+}
 
-export type Config = typeof config;
+/**
+ * Get config schema for setup wizard
+ * Returns required and optional fields with descriptions
+ */
+export function getConfigSchema() {
+  return {
+    required: [
+      {
+        key: "TELEGRAM_BOT_TOKEN",
+        label: "Telegram Bot Token",
+        hint: "@BotFather'dan bot oluşturup token'ı buraya yapıştırın",
+        type: "password" as const,
+      },
+      {
+        key: "MY_TELEGRAM_ID",
+        label: "Telegram User ID",
+        hint: "@userinfobot'a mesaj atarak ID'nizi öğrenebilirsiniz",
+        type: "text" as const,
+      },
+    ],
+    optional: [
+      {
+        key: "GEMINI_API_KEY",
+        label: "Gemini API Key",
+        hint: "Ses mesajları için gerekli (opsiyonel)",
+        type: "password" as const,
+        default: "",
+      },
+      {
+        key: "WEB_PORT",
+        label: "Web Port",
+        hint: "Web arayüzü portu",
+        type: "text" as const,
+        default: "3000",
+      },
+      {
+        key: "AGENT_MODEL",
+        label: "AI Model",
+        hint: "Kullanılacak Claude modeli",
+        type: "text" as const,
+        default: "claude-opus-4-5-20251101",
+      },
+    ],
+  };
+}
+
+// Config type derived from schema
+export type Config = z.infer<typeof envSchema>;
+
+// Export config - will throw if called before setup is complete
+let _config: Config | null = null;
+
+export const config = new Proxy({} as Config, {
+  get(_, prop: string) {
+    if (!_config) {
+      const result = loadConfigSafe();
+      if (result.success) {
+        _config = result.data;
+      } else {
+        throw new Error(
+          `Config not initialized. Errors: ${result.errors.join(", ")}`
+        );
+      }
+    }
+    return _config[prop as keyof Config];
+  },
+});

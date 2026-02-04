@@ -1,15 +1,35 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/output.css";
 
 import { ChatLayout } from "./components/chat/ChatLayout";
 import { SearchModal } from "./components/features/SearchModal";
 import { ExportDialog } from "./components/features/ExportDialog";
+import { SetupWizard } from "./components/setup/SetupWizard";
 import { useConversations } from "./hooks/useConversations";
 import { useKeyboardShortcut, SHORTCUTS } from "./hooks/useKeyboardShortcuts";
 
 function App() {
-  // Get token from URL
+  // Setup mode state
+  const [setupMode, setSetupMode] = useState<boolean | null>(null);
+
+  // Check setup status on mount
+  useEffect(() => {
+    async function checkSetupStatus() {
+      try {
+        const response = await fetch("/api/setup/status");
+        const data = await response.json();
+        setSetupMode(data.setupRequired);
+      } catch {
+        // If status endpoint doesn't exist, assume normal mode
+        setSetupMode(false);
+      }
+    }
+
+    checkSetupStatus();
+  }, []);
+
+  // Get token from URL (only needed in normal mode)
   const token = new URLSearchParams(window.location.search).get("token");
 
   // Modal states
@@ -35,7 +55,37 @@ function App() {
     [switchConversation]
   );
 
-  // No token - show error
+  // Handle setup completion
+  const handleSetupComplete = useCallback(() => {
+    setSetupMode(false);
+  }, []);
+
+  // Loading state - checking setup status
+  if (setupMode === null) {
+    return (
+      <div
+        className="app"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100vh",
+        }}
+      >
+        <div className="setup-loading">
+          <div className="setup-loading-spinner" />
+          <span>Yükleniyor...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Setup mode - show wizard
+  if (setupMode) {
+    return <SetupWizard onComplete={handleSetupComplete} />;
+  }
+
+  // Normal mode - no token
   if (!token) {
     return (
       <div
@@ -55,6 +105,7 @@ function App() {
     );
   }
 
+  // Normal mode - with token
   return (
     <>
       <ChatLayout
