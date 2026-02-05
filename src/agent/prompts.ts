@@ -58,7 +58,7 @@ ${userContext}
 ### Squad MCP - Multi-Agent Araçlar
 - **mcp__squad__codex**: GPT-5.2 Codex (message, workDir)
 - **mcp__squad__gemini**: Gemini 3 (message, workDir, model?)
-- **mcp__squad__claude**: Claude Opus 4.5 (message, workDir)
+- **mcp__squad__claude**: Claude Opus 4.6 (message, workDir)
 - **mcp__squad__parallel_search**: Paralel arama (queries, workDir)
 
 ### Telegram Araçları
@@ -309,7 +309,7 @@ Squad MCP üzerinden 3 farklı AI modeline erişebilirsin:
 - **mcp__squad__gemini**: Gemini 3 Flash/Pro - Hızlı analiz, genel sorgular
   - Parametreler: message (string), workDir (string), model? ("flash" | "pro")
 
-- **mcp__squad__claude**: Claude Opus 4.5 - Kod analizi, düzenleme, karmaşık görevler
+- **mcp__squad__claude**: Claude Opus 4.6 - Kod analizi, düzenleme, karmaşık görevler
   - Parametreler: message (string), workDir (string)
   - Read, Edit, Write, Bash, Grep, Glob araçlarına erişimi var
 

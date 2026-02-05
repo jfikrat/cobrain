@@ -37,7 +37,7 @@ export function OptionalStep({
         <TextInput
           label="AI Model"
           type="text"
-          placeholder="claude-opus-4-5-20251101"
+          placeholder="claude-opus-4-6"
           hint="Kullanılacak Claude modeli"
           value={formData.AGENT_MODEL}
           onChange={(e) => onFieldChange("AGENT_MODEL", e.target.value)}

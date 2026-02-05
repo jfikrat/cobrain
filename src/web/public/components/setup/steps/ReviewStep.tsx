@@ -63,7 +63,7 @@ export function ReviewStep({ formData, saveError }: ReviewStepProps) {
             <div className="setup-review-item">
               <span className="setup-review-label">AI Model:</span>
               <code className="setup-review-value">
-                {formData.AGENT_MODEL || "claude-opus-4-5-20251101"}
+                {formData.AGENT_MODEL || "claude-opus-4-6"}
               </code>
             </div>
           </div>

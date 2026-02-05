@@ -33,7 +33,7 @@ function generateEnvFile(formData: Record<string, string>): string {
   const optionalFields = [
     { key: "GEMINI_API_KEY", default: "" },
     { key: "WEB_PORT", default: "3000" },
-    { key: "AGENT_MODEL", default: "claude-opus-4-5-20251101" },
+    { key: "AGENT_MODEL", default: "claude-opus-4-6" },
     { key: "MAX_HISTORY", default: "10" },
     { key: "ENABLE_AUTONOMOUS", default: "true" },
     { key: "USE_AGENT_SDK", default: "true" },

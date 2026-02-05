@@ -44,7 +44,7 @@ const initialFormData: SetupFormData = {
   MY_TELEGRAM_ID: "",
   GEMINI_API_KEY: "",
   WEB_PORT: "3000",
-  AGENT_MODEL: "claude-opus-4-5-20251101",
+  AGENT_MODEL: "claude-opus-4-6",
 };
 
 export function useSetupWizard() {

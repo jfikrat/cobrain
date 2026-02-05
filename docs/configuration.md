@@ -22,7 +22,7 @@ Cobrain is configured through environment variables. All variables are validated
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `AGENT_MODEL` | string | `claude-opus-4-5-20251101` | Main chat model (Claude Opus 4.5) |
+| `AGENT_MODEL` | string | `claude-opus-4-6` | Main chat model (Claude Opus 4.6) |
 | `USE_AGENT_SDK` | boolean | `true` | Use Claude Agent SDK |
 | `GEMINI_API_KEY` | string | - | Gemini API key for voice transcription |
 | `TRANSCRIPTION_MODEL` | string | `gemini-3-flash-preview` | Voice transcription model |
@@ -124,7 +124,7 @@ COBRAIN_BASE_PATH=/home/user/.cobrain
 
 # AI Models
 USE_AGENT_SDK=true
-AGENT_MODEL=claude-opus-4-5-20251101
+AGENT_MODEL=claude-opus-4-6
 GEMINI_API_KEY=xxxxx
 TRANSCRIPTION_MODEL=gemini-3-flash-preview
 
@@ -166,7 +166,7 @@ Cobrain uses multiple LLMs for different tasks:
 
 | Model | Usage | Purpose |
 |-------|-------|---------|
-| Claude Opus 4.5 | Main Chat | Agent SDK, tool orchestration, reasoning |
+| Claude Opus 4.6 | Main Chat | Agent SDK, tool orchestration, reasoning |
 | Claude Haiku 4.5 | Memory | Tag extraction, summarization, semantic ranking |
 | Gemini 3 Flash | Transcription | Voice/audio to text conversion |
 
@@ -176,7 +176,7 @@ Claude is the primary LLM via the Agent SDK:
 
 ```env
 ANTHROPIC_API_KEY=sk-ant-xxxxx
-AGENT_MODEL=claude-opus-4-5-20251101
+AGENT_MODEL=claude-opus-4-6
 USE_AGENT_SDK=true
 ```
 

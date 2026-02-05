@@ -45,7 +45,7 @@ const envSchema = z.object({
   TRANSCRIPTION_MODEL: z.string().default("gemini-3-flash-preview"),
 
   // v0.6: Agent model
-  AGENT_MODEL: z.string().default("claude-opus-4-5-20251101"),
+  AGENT_MODEL: z.string().default("claude-opus-4-6"),
   MAX_AGENT_TURNS: z.coerce.number().default(20),
 
   // v0.7: Always-on heartbeat monitoring
@@ -131,7 +131,7 @@ export function getConfigSchema() {
         label: "AI Model",
         hint: "Kullanılacak Claude modeli",
         type: "text" as const,
-        default: "claude-opus-4-5-20251101",
+        default: "claude-opus-4-6",
       },
     ],
   };
