@@ -122,9 +122,39 @@ export async function think(userId: number, message: string | MultimodalMessage)
  */
 async function thinkWithAgentSDK(userId: number, message: string | MultimodalMessage): Promise<ThinkResponse> {
   const hasImages = typeof message !== "string" && message.images && message.images.length > 0;
+  const textMessage = typeof message === "string" ? message : message.text;
   console.log(`[Brain] Using Agent SDK for user ${userId}${hasImages ? " (with images)" : ""}`);
 
   const response = await agentChat(userId, message);
+
+  // Save messages to database (like CLI mode does)
+  try {
+    const memory = await getUserMemory(userId);
+
+    // Ensure we have a session
+    let sessionId = memory.getSessionId();
+    if (!sessionId) {
+      sessionId = response.sessionId || crypto.randomUUID();
+      memory.setSession(sessionId);
+    }
+
+    // Save user message
+    memory.addMessage("user", textMessage, {
+      tokensIn: response.inputTokens,
+      metadata: { hasImages, agentSdk: true },
+    });
+
+    // Save assistant response
+    memory.addMessage("assistant", response.content, {
+      tokensOut: response.outputTokens,
+      costUsd: response.totalCost,
+      metadata: { toolsUsed: response.toolsUsed },
+    });
+
+    memory.incrementSessionMessageCount();
+  } catch (error) {
+    console.warn(`[Brain] Failed to save messages to DB: ${error}`);
+  }
 
   return {
     content: response.content,
