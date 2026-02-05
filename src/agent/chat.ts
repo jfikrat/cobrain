@@ -18,6 +18,7 @@ import { createGDriveServer } from "./tools/gdrive.ts";
 import { createGoalsServer } from "./tools/goals.ts";
 import { createPersonaServer } from "./tools/persona.ts";
 import { createTelegramServer, getTelegramBot } from "./tools/telegram.ts";
+import { getTimeServer } from "./tools/time.ts";
 import { getPersonaService } from "../services/persona.ts";
 import { needsPermission, askToolPermission, type PermissionMode } from "./permissions.ts";
 import { config } from "../config.ts";
@@ -248,6 +249,7 @@ export async function chat(userId: number, message: string | MultimodalMessage):
           goals: getGoalsServer(userId),
           persona: getPersonaServer(userId),
           telegram: getTelegramServer(),
+          time: getTimeServer(),
           // Helm - Browser control via Chrome extension
           helm: {
             type: "stdio" as const,
