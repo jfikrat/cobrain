@@ -25,6 +25,7 @@ import type { PendingMessage } from "../services/whatsapp.ts";
 import { generateSessionToken } from "../web/auth.ts";
 import { transcribeAudio, downloadTelegramFile, downloadTelegramFileAsBuffer } from "../services/transcribe.ts";
 import { initTelegramMcp } from "../agent/tools/telegram.ts";
+import { UserMemory } from "../memory/sqlite.ts";
 
 const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
@@ -912,10 +913,16 @@ export async function startBot(): Promise<void> {
     console.log("WhatsApp worker bağlı değil!");
   }
 
-  // Startup notification - agent'a sistem mesajı gönder
+  // Startup notification - agent'a sistem mesajı gönder (son konuşma özeti ile)
   const userId = config.MY_TELEGRAM_ID;
   console.log(`[Startup] Sending restart notification to user ${userId}`);
-  think(userId, "[SYSTEM] Bot yeniden başlatıldı. Kullanıcıya kısaca geri döndüğünü bildir.")
+  getStartupContext(userId)
+    .then((contextSummary) => {
+      const startupMsg = contextSummary
+        ? `[SYSTEM] Bot yeniden başlatıldı.\n\nSon konuşma özeti:\n${contextSummary}\n\nKullanıcıya geri döndüğünü ve kaldığınız yerden devam edebileceğinizi bildir.`
+        : "[SYSTEM] Bot yeniden başlatıldı. Kullanıcıya kısaca geri döndüğünü bildir.";
+      return think(userId, startupMsg);
+    })
     .then((response) => {
       console.log(`[Startup] Agent response: ${response.content.slice(0, 50)}...`);
       bot.api.sendMessage(userId, response.content)
@@ -928,6 +935,21 @@ export async function startBot(): Promise<void> {
   const stopRunner = () => runner.isRunning() && runner.stop();
   process.once("SIGINT", stopRunner);
   process.once("SIGTERM", stopRunner);
+}
+
+async function getStartupContext(userId: number): Promise<string | null> {
+  try {
+    const userDb = await userManager.getUserDb(userId);
+    const memory = new UserMemory(userDb);
+    const history = memory.getHistory(6); // Son 6 mesaj
+    if (history.length === 0) return null;
+
+    return history
+      .map((m) => `${m.role === "user" ? "Kullanıcı" : "Cobrain"}: ${m.content.slice(0, 150)}`)
+      .join("\n");
+  } catch {
+    return null;
+  }
 }
 
 export function stopBot(): Promise<void> {

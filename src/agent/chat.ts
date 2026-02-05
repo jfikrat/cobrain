@@ -23,6 +23,7 @@ import { createMoodServer } from "./tools/mood.ts";
 import { createPhoneServer } from "./tools/phone.ts";
 import { getPersonaService } from "../services/persona.ts";
 import { needsPermission, askToolPermission, type PermissionMode } from "./permissions.ts";
+import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
 
 export interface ChatResponse {
@@ -62,6 +63,36 @@ export interface MultimodalMessage {
 
 // Session ID cache per user
 const userSessions = new Map<number, string>();
+
+// Session TTL: 2 hours - after this, start a fresh session
+const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
+
+async function getOrResumeSession(userId: number): Promise<string | undefined> {
+  // 1. In-memory cache (process lifetime)
+  const cached = userSessions.get(userId);
+  if (cached) return cached;
+
+  // 2. DB'den son aktif session
+  try {
+    const userDb = await userManager.getUserDb(userId);
+    const memory = new UserMemory(userDb);
+    const session = memory.getSession();
+    if (!session?.lastUsedAt) return undefined;
+
+    // 3. TTL kontrolü
+    const age = Date.now() - new Date(session.lastUsedAt).getTime();
+    if (age > SESSION_TTL_MS) {
+      console.log(`[Agent] Session expired (${Math.round(age / 60000)}min), starting fresh`);
+      return undefined;
+    }
+
+    console.log(`[Agent] Resuming session from DB (${Math.round(age / 60000)}min old)`);
+    userSessions.set(userId, session.id);
+    return session.id;
+  } catch {
+    return undefined;
+  }
+}
 
 // MCP Server cache per user
 const userMemoryServers = new Map<number, ReturnType<typeof createMemoryServer>>();
@@ -215,8 +246,8 @@ export async function chat(userId: number, message: string | MultimodalMessage):
   const persona = await personaService.getActivePersona();
   const systemPrompt = generatePersonaSystemPrompt(persona);
 
-  // Get or resume session
-  const existingSessionId = userSessions.get(userId);
+  // Get or resume session (checks in-memory cache, then DB with TTL)
+  const existingSessionId = await getOrResumeSession(userId);
 
   // Track tools used
   const toolsUsed: string[] = [];
@@ -479,6 +510,14 @@ export async function chat(userId: number, message: string | MultimodalMessage):
           if (msg.subtype === "init") {
             sessionId = msg.session_id;
             userSessions.set(userId, sessionId);
+            // Persist to DB for cross-restart recovery
+            try {
+              const userDb = await userManager.getUserDb(userId);
+              const mem = new UserMemory(userDb);
+              mem.setSession(sessionId);
+            } catch (e) {
+              console.warn(`[Agent] Session persist failed:`, e);
+            }
             console.log(`[Agent] Session: ${sessionId.slice(0, 8)}...`);
           }
           break;
