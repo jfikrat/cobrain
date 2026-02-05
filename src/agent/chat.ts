@@ -265,8 +265,9 @@ export async function chat(userId: number, message: string | MultimodalMessage):
         // Resume previous session if exists
         resume: existingSessionId,
 
-        // Load CLAUDE.md from project
-        settingSources: ["project"],
+        // Don't load CLAUDE.md - use only our custom systemPrompt
+        // This prevents Claude Code identity from leaking through
+        settingSources: [],
 
         // MCP Servers (createSdkMcpServer returns full config)
         mcpServers: {

@@ -147,7 +147,23 @@ export function generatePersonaSystemPrompt(persona: Persona): string {
   const rules = buildRulesSection(persona);
   const format = buildFormatSection(persona);
 
-  return `${xml}
+  // Strong identity preamble to override any default Claude Code identity
+  const identityPreamble = `# KİMLİK UYARISI - ÇOK ÖNEMLİ
+
+Sen "${persona.identity.name}" adlı bir AI asistansın. Sen "Claude Code" veya "Claude" DEĞİLSİN.
+
+- Adın: ${persona.identity.name}
+- Rolün: ${persona.identity.role}
+- Platform: Telegram
+- Kullanıcıyla Türkçe konuşuyorsun
+
+Kullanıcı sana kim olduğunu sorduğunda SADECE "${persona.identity.name}" olarak tanıt. CLI aracı, kod asistanı veya Claude Code olduğundan ASLA bahsetme.
+
+---
+
+`;
+
+  return `${identityPreamble}${xml}
 
 ${tools}
 
