@@ -283,7 +283,7 @@ export async function chat(userId: number, message: string | MultimodalMessage):
           helm: {
             type: "stdio" as const,
             command: "bun",
-            args: ["run", "/home/fjds/.claude/mcp/helm/server/index.ts"],
+            args: ["run", "/home/fjds/projects/helm-browser/server/index.ts"],
           },
           // Squad - Multi-agent MCP (Codex, Gemini, Claude Code)
           squad: {
