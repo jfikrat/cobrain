@@ -566,12 +566,26 @@ export async function chat(userId: number, message: string | MultimodalMessage):
       toolsUsed: [...new Set(toolsUsed)], // Unique tools
     };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Stale session from DB — SDK can't find it after restart
+    // Clear and retry once with a fresh session
+    if (errorMessage.includes("No conversation found") && existingSessionId) {
+      console.warn(`[Agent] Stale session detected, retrying with fresh session...`);
+      userSessions.delete(userId);
+      try {
+        const userDb = await userManager.getUserDb(userId);
+        const mem = new UserMemory(userDb);
+        mem.clearSession();
+      } catch {}
+      return chat(userId, message);
+    }
+
     console.error("[Agent] Chat error:", error);
 
     // Clear session on error to start fresh next time
     userSessions.delete(userId);
 
-    const errorMessage = error instanceof Error ? error.message : "Bilinmeyen hata";
     return {
       content: `Hata: ${errorMessage}`,
       sessionId: "",
