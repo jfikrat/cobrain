@@ -564,7 +564,94 @@ export class SmartMemory {
     return result.changes > 0;
   }
 
+  /**
+   * Find follow-up opportunities based on recent memories
+   * Looks for topics that might warrant a check-in
+   */
+  findFollowupOpportunities(daysBack: number = 7): FollowupCandidate[] {
+    const rows = this.db
+      .query<{
+        id: number;
+        content: string;
+        summary: string | null;
+        tags: string | null;
+        importance: number;
+        created_at: string;
+        type: string;
+      }, [string]>(
+        `SELECT id, content, summary, tags, importance, created_at, type
+         FROM memories
+         WHERE created_at >= datetime('now', ?)
+         AND importance >= 0.5
+         AND type IN ('semantic', 'episodic')
+         ORDER BY importance DESC, created_at DESC
+         LIMIT 20`
+      )
+      .all(`-${daysBack} days`);
+
+    const candidates: FollowupCandidate[] = [];
+
+    // Keywords that suggest follow-up opportunities
+    const followupKeywords = [
+      // Goals/plans
+      "hedef", "plan", "yapacak", "öğren", "başla", "bitir",
+      "goal", "learn", "start", "finish", "project",
+      // Health/wellness
+      "egzersiz", "spor", "diyet", "uyku", "sağlık",
+      "exercise", "sleep", "health", "diet",
+      // Work/study
+      "çalış", "okuyorum", "kurs", "eğitim",
+      "study", "course", "training", "work",
+      // Relationships
+      "arkadaş", "aile", "görüş",
+      "friend", "family", "meet",
+    ];
+
+    for (const row of rows) {
+      const content = (row.content + " " + (row.summary || "") + " " + (row.tags || "")).toLowerCase();
+
+      // Check if content matches follow-up keywords
+      const matchedKeywords = followupKeywords.filter((kw) => content.includes(kw.toLowerCase()));
+
+      if (matchedKeywords.length > 0) {
+        // Calculate days since this memory
+        const daysSince = Math.floor(
+          (Date.now() - new Date(row.created_at).getTime()) / (1000 * 60 * 60 * 24)
+        );
+
+        // Extract topic from content or summary
+        const topic = row.summary || row.content.slice(0, 100);
+
+        candidates.push({
+          memoryId: row.id,
+          topic,
+          keywords: matchedKeywords,
+          importance: row.importance,
+          daysSince,
+          createdAt: row.created_at,
+        });
+      }
+    }
+
+    // Sort by importance * days (older important topics need more follow-up)
+    return candidates
+      .sort((a, b) => (b.importance * b.daysSince) - (a.importance * a.daysSince))
+      .slice(0, 5);
+  }
+
   close(): void {
     this.db.close();
   }
+}
+
+/**
+ * Candidate for memory-based follow-up
+ */
+export interface FollowupCandidate {
+  memoryId: number;
+  topic: string;
+  keywords: string[];
+  importance: number;
+  daysSince: number;
+  createdAt: string;
 }

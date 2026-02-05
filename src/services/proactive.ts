@@ -10,13 +10,13 @@ import { getTaskQueue, type TaskQueue } from "./task-queue.ts";
 import { getGoalsService } from "./goals.ts";
 import { userManager } from "./user-manager.ts";
 import { pruneMemories } from "../brain/index.ts";
-import { initLivingAssistant, stopLivingAssistant, recordInteraction } from "./living-assistant.ts";
+import { initLivingAssistant, stopLivingAssistant, recordInteraction, recordUserActivity } from "./living-assistant.ts";
 import type { ScheduledTask, QueuedTask, TaskResult, TaskType } from "../types/autonomous.ts";
 
 let bot: Bot | null = null;
 
-// Re-export for use in telegram channel
-export { recordInteraction };
+// Re-export for use in telegram channel (now from living-assistant)
+export { recordInteraction, recordUserActivity };
 
 /**
  * Initialize proactive services with bot instance

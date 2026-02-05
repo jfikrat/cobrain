@@ -1,12 +1,15 @@
 /**
  * Living Assistant - AI-powered proactive awareness
  * Uses Haiku for cheap, fast context analysis
- * Cobrain v0.7
+ * Cobrain v0.7 - Level 3 Proactive System
  */
 
 import { Bot } from "grammy";
 import { userManager } from "./user-manager.ts";
 import { getGoalsService } from "./goals.ts";
+import { getMoodTrackingService, type MoodType } from "./mood-tracking.ts";
+import { getActivityPatternService } from "./activity-patterns.ts";
+import { SmartMemory, type FollowupCandidate } from "../memory/smart-memory.ts";
 import { config } from "../config.ts";
 import { heartbeat } from "./heartbeat.ts";
 
@@ -24,6 +27,7 @@ interface ContextData {
   goals: {
     active: number;
     approaching: Array<{ title: string; dueDate: string; daysLeft: number }>;
+    needingFollowup: Array<{ id: number; title: string; daysSinceFollowup: number }>;
   };
   reminders: {
     pending: number;
@@ -34,22 +38,51 @@ interface ContextData {
     minutesAgo: number;
     wasRecent: boolean;
   };
+  mood: {
+    current: MoodType | null;
+    trend: "improving" | "stable" | "declining";
+    averageEnergy: number;
+  };
+  patterns: {
+    isOptimalTime: boolean;
+    currentSlotScore: number;
+  };
+  memoryFollowups: FollowupCandidate[];
 }
 
 interface ProactiveDecision {
   shouldNotify: boolean;
   priority: "low" | "medium" | "high" | "urgent";
+  type: "summary" | "goal_followup" | "memory_followup" | "nudge" | "mood_check" | "none";
   message: string | null;
   reason: string;
+}
+
+// Cooldown tracking
+interface CooldownEntry {
+  lastSent: number;
+  type: string;
+  targetId?: number; // For goal-specific cooldowns
 }
 
 let bot: Bot | null = null;
 let intervalId: ReturnType<typeof setInterval> | null = null;
 let lastNotificationTime = new Map<number, number>();
 let lastInteractionTime = new Map<number, number>();
+const cooldowns = new Map<string, CooldownEntry>();
 
 // Minimum time between proactive notifications (5 minutes)
 const MIN_NOTIFICATION_INTERVAL = 5 * 60 * 1000;
+
+// Cooldown rules (in milliseconds)
+const COOLDOWN_RULES = {
+  goal_followup: 24 * 60 * 60 * 1000, // 24 hours per goal
+  memory_followup: 72 * 60 * 60 * 1000, // 72 hours
+  morning_summary: 24 * 60 * 60 * 1000, // 24 hours
+  evening_reflection: 24 * 60 * 60 * 1000, // 24 hours
+  mood_check: 4 * 60 * 60 * 1000, // 4 hours
+  nudge: 2 * 60 * 60 * 1000, // 2 hours
+};
 
 /**
  * Initialize the living assistant
@@ -63,7 +96,7 @@ export function initLivingAssistant(botInstance: Bot): void {
     runAwarenessLoop();
   }, interval);
 
-  console.log(`[LivingAssistant] Started (interval: ${interval}ms)`);
+  console.log(`[LivingAssistant] Started (interval: ${interval}ms) - Level 3 Proactive`);
 }
 
 /**
@@ -82,6 +115,26 @@ export function stopLivingAssistant(): void {
  */
 export function recordInteraction(userId: number): void {
   lastInteractionTime.set(userId, Date.now());
+}
+
+/**
+ * Check if a cooldown has expired
+ */
+function isCooldownExpired(key: string, cooldownMs: number): boolean {
+  const entry = cooldowns.get(key);
+  if (!entry) return true;
+  return Date.now() - entry.lastSent >= cooldownMs;
+}
+
+/**
+ * Set a cooldown
+ */
+function setCooldown(key: string, type: string, targetId?: number): void {
+  cooldowns.set(key, {
+    lastSent: Date.now(),
+    type,
+    targetId,
+  });
 }
 
 /**
@@ -117,7 +170,7 @@ async function checkUserContext(userId: number): Promise<void> {
   // Quick checks before using AI
   const quickDecision = makeQuickDecision(context);
   if (quickDecision.shouldNotify && quickDecision.message) {
-    await sendNotification(userId, quickDecision.message, quickDecision.priority);
+    await sendNotification(userId, quickDecision.message, quickDecision.priority, quickDecision.type);
     return;
   }
 
@@ -132,7 +185,7 @@ async function checkUserContext(userId: number): Promise<void> {
   // Use Haiku for intelligent analysis
   const aiDecision = await analyzeWithHaiku(context, userId);
   if (aiDecision.shouldNotify && aiDecision.message) {
-    await sendNotification(userId, aiDecision.message, aiDecision.priority);
+    await sendNotification(userId, aiDecision.message, aiDecision.priority, aiDecision.type);
   }
 }
 
@@ -170,6 +223,15 @@ async function gatherContext(userId: number): Promise<ContextData> {
     .filter((g) => g.daysLeft >= 0 && g.daysLeft <= 3)
     .sort((a, b) => a.daysLeft - b.daysLeft);
 
+  // Find goals needing follow-up (with cooldown check)
+  const goalsNeedingFollowup = goalsService.getGoalsNeedingFollowup()
+    .filter((g) => isCooldownExpired(`goal_${g.id}`, COOLDOWN_RULES.goal_followup))
+    .map((g) => ({
+      id: g.id,
+      title: g.title,
+      daysSinceFollowup: goalsService.getDaysSinceFollowup(g.id) ?? 0,
+    }));
+
   // Find upcoming reminders (within 30 minutes)
   const upcoming = pendingReminders
     .map((r) => {
@@ -189,6 +251,25 @@ async function gatherContext(userId: number): Promise<ContextData> {
   const lastInteraction = lastInteractionTime.get(userId) || 0;
   const minutesAgo = Math.floor((Date.now() - lastInteraction) / (1000 * 60));
 
+  // Get mood data
+  const moodService = await getMoodTrackingService(userId);
+  const currentMood = moodService.getCurrentMood();
+  const moodTrend = moodService.getMoodTrend(7);
+
+  // Get activity patterns
+  const patternService = await getActivityPatternService(userId);
+  const isOptimalTime = patternService.shouldNotifyNow();
+  const currentSlotScore = patternService.getCurrentSlotScore();
+
+  // Get memory follow-up opportunities (with cooldown check)
+  let memoryFollowups: FollowupCandidate[] = [];
+  if (isCooldownExpired("memory_followup", COOLDOWN_RULES.memory_followup)) {
+    const userFolder = userManager.getUserFolder(userId);
+    const memory = new SmartMemory(userFolder, userId);
+    memoryFollowups = memory.findFollowupOpportunities(14); // Last 2 weeks
+    memory.close();
+  }
+
   return {
     time: {
       hour,
@@ -199,6 +280,7 @@ async function gatherContext(userId: number): Promise<ContextData> {
     goals: {
       active: activeGoals.length,
       approaching,
+      needingFollowup: goalsNeedingFollowup,
     },
     reminders: {
       pending: pendingReminders.length,
@@ -209,6 +291,16 @@ async function gatherContext(userId: number): Promise<ContextData> {
       minutesAgo,
       wasRecent: minutesAgo < 30,
     },
+    mood: {
+      current: currentMood?.mood ?? null,
+      trend: moodTrend.direction,
+      averageEnergy: moodTrend.averageEnergy,
+    },
+    patterns: {
+      isOptimalTime,
+      currentSlotScore,
+    },
+    memoryFollowups,
   };
 }
 
@@ -222,6 +314,7 @@ function makeQuickDecision(context: ContextData): ProactiveDecision {
     return {
       shouldNotify: true,
       priority: "urgent",
+      type: "nudge",
       message: `⏰ Kaçırdığın hatırlatıcı: "${overdue.title}"`,
       reason: "overdue_reminder",
     };
@@ -233,6 +326,7 @@ function makeQuickDecision(context: ContextData): ProactiveDecision {
     return {
       shouldNotify: true,
       priority: "high",
+      type: "nudge",
       message: `⏰ ${imminentReminder.minutesLeft} dakika içinde: "${imminentReminder.title}"`,
       reason: "imminent_reminder",
     };
@@ -244,6 +338,7 @@ function makeQuickDecision(context: ContextData): ProactiveDecision {
     return {
       shouldNotify: true,
       priority: "high",
+      type: "goal_followup",
       message: `🎯 Bugün deadline: "${todayDeadline.title}"`,
       reason: "today_deadline",
     };
@@ -253,6 +348,7 @@ function makeQuickDecision(context: ContextData): ProactiveDecision {
   return {
     shouldNotify: false,
     priority: "low",
+    type: "none",
     message: null,
     reason: "no_urgent_action",
   };
@@ -264,15 +360,38 @@ function makeQuickDecision(context: ContextData): ProactiveDecision {
 async function analyzeWithHaiku(context: ContextData, userId: number): Promise<ProactiveDecision> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return { shouldNotify: false, priority: "low", message: null, reason: "no_api_key" };
+    return { shouldNotify: false, priority: "low", type: "none", message: null, reason: "no_api_key" };
   }
 
   // Don't disturb at night unless urgent
   if (context.time.timeOfDay === "night" && context.time.hour >= 23) {
-    return { shouldNotify: false, priority: "low", message: null, reason: "night_time" };
+    return { shouldNotify: false, priority: "low", type: "none", message: null, reason: "night_time" };
+  }
+
+  // Don't disturb if user was recently active (last 30 min) unless critical
+  if (context.lastInteraction.wasRecent) {
+    return { shouldNotify: false, priority: "low", type: "none", message: null, reason: "recently_active" };
   }
 
   // Build context summary for Haiku
+  const goalFollowups = context.goals.needingFollowup
+    .slice(0, 3)
+    .map((g) => `"${g.title}" (${g.daysSinceFollowup} gündür takip yok)`)
+    .join(", ");
+
+  const memoryFollowups = context.memoryFollowups
+    .slice(0, 2)
+    .map((m) => `"${m.topic.slice(0, 50)}..." (${m.daysSince} gün önce)`)
+    .join(", ");
+
+  const moodLabels: Record<string, string> = {
+    great: "harika",
+    good: "iyi",
+    neutral: "normal",
+    low: "düşük",
+    bad: "kötü",
+  };
+
   const contextSummary = `
 Şu an: ${context.time.dayName}, saat ${context.time.hour}:00 (${context.time.timeOfDay})
 Aktif hedef sayısı: ${context.goals.active}
@@ -280,22 +399,42 @@ Yaklaşan deadline'lar: ${context.goals.approaching.map((g) => `"${g.title}" (${
 Bekleyen hatırlatıcı: ${context.reminders.pending}
 Yaklaşan hatırlatıcılar (30dk): ${context.reminders.upcoming.map((r) => `"${r.title}" (${r.minutesLeft}dk)`).join(", ") || "yok"}
 Son etkileşim: ${context.lastInteraction.minutesAgo} dakika önce
+
+Ruh hali: ${context.mood.current ? moodLabels[context.mood.current] : "bilinmiyor"}
+Mood trend: ${context.mood.trend === "improving" ? "iyileşiyor" : context.mood.trend === "declining" ? "düşüyor" : "stabil"}
+Ortalama enerji: ${context.mood.averageEnergy.toFixed(1)}/5
+Optimal bildirim zamanı mı: ${context.patterns.isOptimalTime ? "evet" : "hayır"} (skor: ${(context.patterns.currentSlotScore * 100).toFixed(0)}%)
+
+Takip bekleyen hedefler: ${goalFollowups || "yok"}
+Takip fırsatları (hafıza): ${memoryFollowups || "yok"}
 `.trim();
 
   const systemPrompt = `Sen kişisel bir asistansın. Kullanıcının bağlamını analiz et ve proaktif bir bildirim gerekip gerekmediğine karar ver.
 
+Bildirim tipleri:
+- summary: Günlük özet (sabah 9-10 veya akşam 20-21)
+- goal_followup: Hedef takibi ("Go öğrenme nasıl gidiyor?" gibi)
+- memory_followup: Geçmiş konulara geri dönüş
+- mood_check: Ruh hali kontrolü (mood düşükse nazik soru)
+- nudge: Genel hatırlatma/motivasyon
+- none: Bildirim gönderme
+
 Kurallar:
 - Gereksiz bildirim GÖNDERME. Kullanıcıyı rahatsız etme.
-- Sadece gerçekten faydalı, zamanında ve önemli bildirimler gönder.
 - Sabah (9-10 arası) kısa bir "günaydın" özeti uygun olabilir.
 - Akşam (20-21 arası) günü değerlendirme uygun olabilir.
-- Kullanıcı son 30 dakikada etkileşim kurmuşsa, muhtemelen zaten meşgul - rahatsız etme.
+- Hedef takibi için samimi ama kısa ol: "Go'da ne kadar ilerleme var?"
+- Mood düşükse nazik ol, zorlama.
+- Optimal zaman değilse priority düşür.
 
-SADECE şu formatta yanıt ver:
-NOTIFY: yes/no
-PRIORITY: low/medium/high
-MESSAGE: [Türkçe kısa mesaj veya "none"]
-REASON: [kısa açıklama]`;
+SADECE şu formatta JSON yanıt ver:
+{
+  "action": "notify" | "skip",
+  "type": "summary" | "goal_followup" | "memory_followup" | "mood_check" | "nudge" | "none",
+  "priority": "low" | "medium" | "high",
+  "message": "Türkçe kısa mesaj veya null",
+  "reason": "kısa açıklama"
+}`;
 
   const prompt = `Bağlam:
 ${contextSummary}
@@ -312,7 +451,7 @@ Bu durumda proaktif bildirim göndermeli miyim?`;
       },
       body: JSON.stringify({
         model: HAIKU_MODEL,
-        max_tokens: 200,
+        max_tokens: 300,
         system: systemPrompt,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -320,7 +459,7 @@ Bu durumda proaktif bildirim göndermeli miyim?`;
 
     if (!response.ok) {
       console.error("[LivingAssistant] Haiku API error:", response.status);
-      return { shouldNotify: false, priority: "low", message: null, reason: "api_error" };
+      return { shouldNotify: false, priority: "low", type: "none", message: null, reason: "api_error" };
     }
 
     const data = (await response.json()) as {
@@ -329,25 +468,47 @@ Bu durumda proaktif bildirim göndermeli miyim?`;
 
     const text = data.content.find((c) => c.type === "text")?.text || "";
 
-    // Parse response
-    const notifyMatch = text.match(/NOTIFY:\s*(yes|no)/i);
-    const priorityMatch = text.match(/PRIORITY:\s*(low|medium|high)/i);
-    const messageMatch = text.match(/MESSAGE:\s*(.+?)(?:\n|$)/i);
-    const reasonMatch = text.match(/REASON:\s*(.+?)(?:\n|$)/i);
+    // Try to parse JSON response
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]) as {
+          action: string;
+          type: string;
+          priority: string;
+          message: string | null;
+          reason: string;
+        };
 
-    const shouldNotify = notifyMatch?.[1]?.toLowerCase() === "yes";
-    const priority = (priorityMatch?.[1]?.toLowerCase() || "low") as "low" | "medium" | "high";
-    const message = messageMatch?.[1]?.trim();
-    const reason = reasonMatch?.[1]?.trim() || "haiku_decision";
+        if (parsed.action === "notify" && parsed.message) {
+          return {
+            shouldNotify: true,
+            priority: (parsed.priority || "low") as "low" | "medium" | "high",
+            type: (parsed.type || "nudge") as ProactiveDecision["type"],
+            message: parsed.message,
+            reason: parsed.reason || "haiku_decision",
+          };
+        }
+      }
+    } catch {
+      // Fall back to regex parsing
+      const notifyMatch = text.match(/NOTIFY:\s*(yes|no)/i);
+      const priorityMatch = text.match(/PRIORITY:\s*(low|medium|high)/i);
+      const messageMatch = text.match(/MESSAGE:\s*(.+?)(?:\n|$)/i);
 
-    if (shouldNotify && message && message.toLowerCase() !== "none") {
-      return { shouldNotify: true, priority, message, reason };
+      const shouldNotify = notifyMatch?.[1]?.toLowerCase() === "yes";
+      const priority = (priorityMatch?.[1]?.toLowerCase() || "low") as "low" | "medium" | "high";
+      const message = messageMatch?.[1]?.trim();
+
+      if (shouldNotify && message && message.toLowerCase() !== "none") {
+        return { shouldNotify: true, priority, type: "nudge", message, reason: "haiku_decision" };
+      }
     }
 
-    return { shouldNotify: false, priority: "low", message: null, reason };
+    return { shouldNotify: false, priority: "low", type: "none", message: null, reason: "haiku_skip" };
   } catch (error) {
     console.error("[LivingAssistant] Haiku analysis error:", error);
-    return { shouldNotify: false, priority: "low", message: null, reason: "analysis_error" };
+    return { shouldNotify: false, priority: "low", type: "none", message: null, reason: "analysis_error" };
   }
 }
 
@@ -357,7 +518,8 @@ Bu durumda proaktif bildirim göndermeli miyim?`;
 async function sendNotification(
   userId: number,
   message: string,
-  priority: "low" | "medium" | "high" | "urgent"
+  priority: "low" | "medium" | "high" | "urgent",
+  type: ProactiveDecision["type"]
 ): Promise<void> {
   if (!bot) return;
 
@@ -381,8 +543,123 @@ async function sendNotification(
     await bot.api.sendMessage(userId, `${prefix}${message}`);
     lastNotificationTime.set(userId, Date.now());
 
-    console.log(`[LivingAssistant] Sent ${priority} notification to user ${userId}`);
+    // Set appropriate cooldown based on type
+    switch (type) {
+      case "goal_followup":
+        // Extract goal ID from context if available and set cooldown
+        setCooldown(`goal_generic`, type);
+        break;
+      case "memory_followup":
+        setCooldown("memory_followup", type);
+        break;
+      case "summary":
+        if (new Date().getHours() < 12) {
+          setCooldown("morning_summary", type);
+        } else {
+          setCooldown("evening_reflection", type);
+        }
+        break;
+      case "mood_check":
+        setCooldown("mood_check", type);
+        break;
+      case "nudge":
+        setCooldown("nudge", type);
+        break;
+    }
+
+    console.log(`[LivingAssistant] Sent ${priority}/${type} notification to user ${userId}`);
   } catch (error) {
     console.error(`[LivingAssistant] Failed to send notification:`, error);
+  }
+}
+
+/**
+ * Extract mood from user message (called after message processing)
+ * Returns extracted mood or null if not detectable
+ */
+export async function extractMoodFromMessage(
+  userId: number,
+  message: string,
+  response: string
+): Promise<void> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return;
+
+  // Only analyze longer messages that might contain mood signals
+  if (message.length < 10) return;
+
+  try {
+    const result = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: HAIKU_MODEL,
+        max_tokens: 100,
+        system: `Mesajdan ruh hali çıkar. SADECE şu formatta JSON döndür:
+{"mood": "great|good|neutral|low|bad", "energy": 1-5, "confidence": 0.0-1.0, "triggers": ["neden1"]}
+Eğer mood belirlenemiyorsa: {"mood": null}`,
+        messages: [
+          {
+            role: "user",
+            content: `Kullanıcı mesajı: "${message.slice(0, 500)}"`,
+          },
+        ],
+      }),
+    });
+
+    if (!result.ok) return;
+
+    const data = (await result.json()) as {
+      content: Array<{ type: string; text?: string }>;
+    };
+
+    const text = data.content.find((c) => c.type === "text")?.text || "";
+
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]) as {
+          mood: MoodType | null;
+          energy?: number;
+          confidence?: number;
+          triggers?: string[];
+        };
+
+        if (parsed.mood && parsed.confidence && parsed.confidence >= 0.5) {
+          const moodService = await getMoodTrackingService(userId);
+          moodService.recordMood({
+            mood: parsed.mood,
+            energy: parsed.energy ?? 3,
+            context: message.slice(0, 100),
+            triggers: parsed.triggers ?? [],
+            source: "inferred",
+            confidence: parsed.confidence,
+          });
+
+          console.log(`[LivingAssistant] Inferred mood: ${parsed.mood} (confidence: ${parsed.confidence})`);
+        }
+      }
+    } catch {
+      // Parsing failed, ignore
+    }
+  } catch (error) {
+    // Silently fail - mood extraction is optional
+    console.warn("[LivingAssistant] Mood extraction failed:", error);
+  }
+}
+
+/**
+ * Record activity for pattern learning
+ */
+export async function recordUserActivity(userId: number): Promise<void> {
+  try {
+    const patternService = await getActivityPatternService(userId);
+    patternService.recordInteraction();
+  } catch (error) {
+    console.warn("[LivingAssistant] Activity recording failed:", error);
   }
 }

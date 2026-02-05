@@ -16,6 +16,8 @@ export interface Goal {
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt?: string;
+  lastFollowupAt?: string; // Last time a follow-up was sent
+  followupIntervalDays?: number; // Days between follow-ups (default: 7)
 }
 
 export interface GoalInput {

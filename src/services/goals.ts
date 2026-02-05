@@ -34,9 +34,20 @@ export class GoalsService {
         progress REAL DEFAULT 0,
         metadata TEXT DEFAULT '{}',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME
+        updated_at DATETIME,
+        last_followup_at DATETIME,
+        followup_interval_days INTEGER DEFAULT 7
       )
     `);
+
+    // Add columns if they don't exist (for existing databases)
+    try {
+      this.db.run(`ALTER TABLE goals ADD COLUMN last_followup_at DATETIME`);
+    } catch { /* column already exists */ }
+
+    try {
+      this.db.run(`ALTER TABLE goals ADD COLUMN followup_interval_days INTEGER DEFAULT 7`);
+    } catch { /* column already exists */ }
 
     // Reminders table
     this.db.run(`
@@ -402,6 +413,97 @@ export class GoalsService {
     }
 
     return next.toISOString();
+  }
+
+  // ========== FOLLOWUP METHODS ==========
+
+  /**
+   * Get goals that need follow-up (active goals not followed up within their interval)
+   */
+  getGoalsNeedingFollowup(): Goal[] {
+    const rows = this.db
+      .query<
+        {
+          id: number;
+          title: string;
+          description: string | null;
+          status: string;
+          priority: number;
+          due_date: string | null;
+          progress: number;
+          metadata: string;
+          created_at: string;
+          updated_at: string | null;
+          last_followup_at: string | null;
+          followup_interval_days: number;
+        },
+        []
+      >(
+        `SELECT * FROM goals
+         WHERE status = 'active'
+         AND (
+           last_followup_at IS NULL
+           OR datetime(last_followup_at, '+' || followup_interval_days || ' days') <= datetime('now')
+         )
+         ORDER BY priority DESC, created_at ASC`
+      )
+      .all();
+
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      description: row.description ?? undefined,
+      status: row.status as GoalStatus,
+      priority: row.priority,
+      dueDate: row.due_date ?? undefined,
+      progress: row.progress,
+      metadata: JSON.parse(row.metadata || "{}"),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at ?? undefined,
+      lastFollowupAt: row.last_followup_at ?? undefined,
+      followupIntervalDays: row.followup_interval_days,
+    }));
+  }
+
+  /**
+   * Mark a goal as followed up
+   */
+  markFollowupSent(goalId: number): void {
+    this.db.run(
+      "UPDATE goals SET last_followup_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [goalId]
+    );
+    console.log(`[Goals] Marked goal #${goalId} as followed up`);
+  }
+
+  /**
+   * Update follow-up interval for a goal
+   */
+  setFollowupInterval(goalId: number, days: number): void {
+    this.db.run(
+      "UPDATE goals SET followup_interval_days = ? WHERE id = ?",
+      [days, goalId]
+    );
+  }
+
+  /**
+   * Get days since last follow-up for a goal
+   */
+  getDaysSinceFollowup(goalId: number): number | null {
+    const row = this.db
+      .query<{ last_followup_at: string | null; created_at: string }, [number]>(
+        "SELECT last_followup_at, created_at FROM goals WHERE id = ?"
+      )
+      .get(goalId);
+
+    if (!row) return null;
+
+    const referenceDate = row.last_followup_at || row.created_at;
+    const daysDiff = Math.floor(
+      (Date.now() - new Date(referenceDate).getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    return daysDiff;
   }
 
   // ========== STATS ==========

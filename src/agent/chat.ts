@@ -19,6 +19,7 @@ import { createGoalsServer } from "./tools/goals.ts";
 import { createPersonaServer } from "./tools/persona.ts";
 import { createTelegramServer, getTelegramBot } from "./tools/telegram.ts";
 import { getTimeServer } from "./tools/time.ts";
+import { createMoodServer } from "./tools/mood.ts";
 import { getPersonaService } from "../services/persona.ts";
 import { needsPermission, askToolPermission, type PermissionMode } from "./permissions.ts";
 import { config } from "../config.ts";
@@ -65,6 +66,7 @@ const userSessions = new Map<number, string>();
 const userMemoryServers = new Map<number, ReturnType<typeof createMemoryServer>>();
 const userGoalsServers = new Map<number, ReturnType<typeof createGoalsServer>>();
 const userPersonaServers = new Map<number, ReturnType<typeof createPersonaServer>>();
+const userMoodServers = new Map<number, ReturnType<typeof createMoodServer>>();
 
 // Shared servers (same for all users)
 let gdriveServer: ReturnType<typeof createGDriveServer> | null = null;
@@ -122,6 +124,18 @@ function getPersonaServer(userId: number) {
   if (!server) {
     server = createPersonaServer(userId);
     userPersonaServers.set(userId, server);
+  }
+  return server;
+}
+
+/**
+ * Get or create mood server for user
+ */
+function getMoodServer(userId: number) {
+  let server = userMoodServers.get(userId);
+  if (!server) {
+    server = createMoodServer(userId);
+    userMoodServers.set(userId, server);
   }
   return server;
 }
@@ -250,6 +264,7 @@ export async function chat(userId: number, message: string | MultimodalMessage):
           persona: getPersonaServer(userId),
           telegram: getTelegramServer(),
           time: getTimeServer(),
+          mood: getMoodServer(userId),
           // Helm - Browser control via Chrome extension
           helm: {
             type: "stdio" as const,

@@ -8,7 +8,7 @@ import { whatsappDB, type PendingChat } from "../services/whatsapp-db.ts";
 import { analyzeMessages, generateSummary, type MessageAnalysis } from "../services/analyzer.ts";
 import { getPersonaService } from "../services/persona.ts";
 import { applyApprovedPersonaChange, applyApprovedRollback } from "../agent/tools/persona.ts";
-import { recordInteraction } from "../services/proactive.ts";
+import { recordInteraction, extractMoodFromMessage, recordUserActivity } from "../services/living-assistant.ts";
 import {
   formatSummaryMessage,
   formatDetailMessage,
@@ -831,6 +831,14 @@ bot.on("message:text", async (ctx) => {
     console.log(
       `[${userId}] ${text.slice(0, 30)}... -> ${response.inputTokens}/${response.outputTokens} tokens | $${response.costUsd.toFixed(4)}`
     );
+
+    // Record activity for pattern learning
+    recordUserActivity(userId);
+
+    // Extract mood from message (async, non-blocking)
+    extractMoodFromMessage(userId, text, response.content).catch((err) => {
+      console.warn("[Telegram] Mood extraction failed:", err);
+    });
   } catch (error) {
     console.error("Chat hatası:", error);
     const errorMessage = error instanceof Error ? error.message : "Bilinmeyen hata";
