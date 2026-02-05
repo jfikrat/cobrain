@@ -9,7 +9,7 @@ import { getScheduler, type Scheduler } from "./scheduler.ts";
 import { getTaskQueue, type TaskQueue } from "./task-queue.ts";
 import { getGoalsService } from "./goals.ts";
 import { userManager } from "./user-manager.ts";
-import { pruneMemories } from "../brain/index.ts";
+import { pruneMemories, think } from "../brain/index.ts";
 import { initLivingAssistant, stopLivingAssistant, recordInteraction, recordUserActivity } from "./living-assistant.ts";
 import type { ScheduledTask, QueuedTask, TaskResult, TaskType } from "../types/autonomous.ts";
 
@@ -217,9 +217,19 @@ async function handleReminderTask(task: QueuedTask): Promise<TaskResult> {
       message?: string;
     };
 
-    const msgText = `⏰ <b>Hatırlatıcı!</b>\n\n${reminderMessage || title}`;
+    const actionText = reminderMessage || title;
 
-    await bot.api.sendMessage(task.userId, msgText, { parse_mode: "HTML" });
+    // Trigger agent to execute the reminder action (WhatsApp, Telegram, etc.)
+    console.log(`[Reminder] Triggering agent for reminder #${reminderId}: ${actionText}`);
+    const response = await think(
+      task.userId,
+      `[SYSTEM] Hatırlatıcı tetiklendi: "${actionText}"\n\nBu hatırlatıcıyı şimdi yerine getir. Gerekli aksiyonu al (mesaj gönder, bilgi ver, vb.) ve kullanıcıya bildir.`
+    );
+
+    // Send agent's response to user via Telegram
+    if (response.content) {
+      await bot.api.sendMessage(task.userId, response.content);
+    }
 
     // Mark reminder as sent
     const db = await userManager.getUserDb(task.userId);
