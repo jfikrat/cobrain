@@ -6,6 +6,7 @@
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { config } from "../config.ts";
+import { heartbeat } from "./heartbeat.ts";
 import type { ScheduledTask, TaskType } from "../types/autonomous.ts";
 
 export interface SchedulerConfig {
@@ -77,11 +78,15 @@ export class Scheduler {
     this.running = true;
     console.log(`[Scheduler] Started (check interval: ${this.config.checkIntervalMs}ms)`);
 
+    // Heartbeat: scheduler started
+    heartbeat("scheduler", { event: "started" });
+
     // Initial check
     this.checkAndRunTasks();
 
     // Set up periodic checks
     this.intervalId = setInterval(() => {
+      heartbeat("scheduler", { event: "tick" });
       this.checkAndRunTasks();
     }, this.config.checkIntervalMs);
   }

@@ -4,6 +4,7 @@
  */
 
 import { config } from "../config.ts";
+import { heartbeat } from "../services/heartbeat.ts";
 import { validateToken, startTokenCleanup, stopTokenCleanup } from "./auth.ts";
 import {
   handleOpen,
@@ -119,6 +120,9 @@ export function startWebServer(): void {
   });
 
   console.log(`[Web] Server started on http://localhost:${config.WEB_PORT}`);
+
+  // Heartbeat: server started
+  heartbeat("web_server", { event: "started", port: config.WEB_PORT });
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   type PreToolUseHookInput,
 } from "@anthropic-ai/claude-agent-sdk";
 import { userManager } from "../services/user-manager.ts";
+import { heartbeat } from "../services/heartbeat.ts";
 import { generateSystemPrompt, generatePersonaSystemPrompt } from "./prompts.ts";
 import { createMemoryServer } from "./tools/memory.ts";
 import { createGDriveServer } from "./tools/gdrive.ts";
@@ -466,6 +467,9 @@ export async function chat(userId: number, message: string | MultimodalMessage):
     console.log(
       `[Agent] Completed: ${numTurns} turns, ${toolsUsed.length} tools, $${totalCost.toFixed(4)}`
     );
+
+    // Heartbeat: agent completed successfully
+    heartbeat("ai_agent", { event: "completed", turns: numTurns, tools: toolsUsed.length, cost: totalCost });
 
     return {
       content: lastAssistantContent || "Yanıt alınamadı.",

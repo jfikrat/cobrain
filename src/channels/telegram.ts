@@ -1,6 +1,7 @@
 import { Bot } from "grammy";
 import { run } from "@grammyjs/runner";
 import { config } from "../config.ts";
+import { heartbeat } from "../services/heartbeat.ts";
 import { think, clearSession, getStats, userManager, isVectorMemoryAvailable, type MultimodalMessage } from "../brain/index.ts";
 import { initPermissions, clearAllPending } from "../agent/permissions.ts";
 import { whatsappDB, type PendingChat } from "../services/whatsapp-db.ts";
@@ -869,6 +870,9 @@ export async function startBot(): Promise<void> {
     { command: "scan", description: "WhatsApp mesajlarını tara" },
     { command: "reply", description: "WhatsApp'a cevap yaz" },
   ]);
+
+  // Heartbeat: bot started
+  heartbeat("telegram_bot", { event: "started" });
 
   // Grammy Runner kullan - concurrent processing için
   // Bu sayede permission callback'leri agent çalışırken de alınabilir

@@ -4,6 +4,7 @@
  */
 
 import { Bot } from "grammy";
+import { heartbeat } from "./heartbeat.ts";
 import { getScheduler, type Scheduler } from "./scheduler.ts";
 import { getTaskQueue, type TaskQueue } from "./task-queue.ts";
 import { getGoalsService } from "./goals.ts";
@@ -47,6 +48,9 @@ export function initProactive(botInstance: Bot): void {
 
   // Start Living Assistant (AI-powered proactive awareness)
   initLivingAssistant(bot);
+
+  // Heartbeat: proactive service started
+  heartbeat("proactive_service", { event: "started" });
 
   console.log("[Proactive] Services initialized (with Living Assistant)");
 }

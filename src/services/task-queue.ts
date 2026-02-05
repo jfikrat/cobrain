@@ -6,6 +6,7 @@
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { config } from "../config.ts";
+import { heartbeat } from "./heartbeat.ts";
 import type { QueuedTask, TaskType, TaskResult, TaskStatus } from "../types/autonomous.ts";
 
 export interface TaskQueueConfig {
@@ -81,11 +82,15 @@ export class TaskQueue {
     this.running = true;
     console.log(`[TaskQueue] Started (interval: ${this.config.processIntervalMs}ms)`);
 
+    // Heartbeat: task queue started
+    heartbeat("task_queue", { event: "started" });
+
     // Initial process
     this.processQueue();
 
     // Set up periodic processing
     this.intervalId = setInterval(() => {
+      heartbeat("task_queue", { event: "tick" });
       this.processQueue();
     }, this.config.processIntervalMs);
   }
