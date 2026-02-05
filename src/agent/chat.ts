@@ -20,6 +20,7 @@ import { createPersonaServer } from "./tools/persona.ts";
 import { createTelegramServer, getTelegramBot } from "./tools/telegram.ts";
 import { getTimeServer } from "./tools/time.ts";
 import { createMoodServer } from "./tools/mood.ts";
+import { createPhoneServer } from "./tools/phone.ts";
 import { getPersonaService } from "../services/persona.ts";
 import { needsPermission, askToolPermission, type PermissionMode } from "./permissions.ts";
 import { config } from "../config.ts";
@@ -71,6 +72,7 @@ const userMoodServers = new Map<number, ReturnType<typeof createMoodServer>>();
 // Shared servers (same for all users)
 let gdriveServer: ReturnType<typeof createGDriveServer> | null = null;
 let telegramServer: ReturnType<typeof createTelegramServer> | null = null;
+let phoneServer: ReturnType<typeof createPhoneServer> | null = null;
 
 /**
  * Get or create memory server for user
@@ -102,6 +104,16 @@ function getTelegramServer() {
     telegramServer = createTelegramServer();
   }
   return telegramServer;
+}
+
+/**
+ * Get or create phone server (shared)
+ */
+function getPhoneServer() {
+  if (!phoneServer) {
+    phoneServer = createPhoneServer();
+  }
+  return phoneServer;
 }
 
 /**
@@ -265,6 +277,7 @@ export async function chat(userId: number, message: string | MultimodalMessage):
           telegram: getTelegramServer(),
           time: getTimeServer(),
           mood: getMoodServer(userId),
+          phone: getPhoneServer(),
           // Helm - Browser control via Chrome extension
           helm: {
             type: "stdio" as const,
@@ -375,6 +388,21 @@ export async function chat(userId: number, message: string | MultimodalMessage):
                         break;
                       case "TodoWrite":
                         statusMessage = `📋 Görev listesini güncelliyorum...`;
+                        break;
+                      case "mcp__phone__phone_photo":
+                        statusMessage = `📸 Telefondan fotoğraf çekiyorum...`;
+                        break;
+                      case "mcp__phone__phone_audio":
+                        statusMessage = `🎤 Telefondan ses kaydediyorum...`;
+                        break;
+                      case "mcp__phone__phone_location":
+                        statusMessage = `📍 Telefonun konumunu alıyorum...`;
+                        break;
+                      case "mcp__phone__phone_battery":
+                        statusMessage = `🔋 Telefon pil durumunu kontrol ediyorum...`;
+                        break;
+                      case "mcp__phone__phone_list":
+                        statusMessage = `📱 Bağlı telefonları kontrol ediyorum...`;
                         break;
                       default:
                         if (!toolName.startsWith("telegram_")) {
