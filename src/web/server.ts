@@ -12,6 +12,15 @@ import {
   handleMessage,
   type WebSocketData,
 } from "./websocket.ts";
+import {
+  registerPhone,
+  phoneHeartbeat,
+  getPhones,
+  savePhoneMedia,
+  getPhoneMedia,
+  sendPhoneCommand,
+  isPhoneOnline,
+} from "../services/phone-agent.ts";
 import indexHtml from "./public/index.html";
 
 let server: ReturnType<typeof Bun.serve> | null = null;
@@ -50,7 +59,7 @@ export function startWebServer(): void {
     },
 
     // Handle all other requests
-    fetch(req, server) {
+    async fetch(req, server) {
       const url = new URL(req.url);
 
       // WebSocket upgrade
@@ -81,6 +90,144 @@ export function startWebServer(): void {
 
         return new Response("WebSocket upgrade failed", { status: 500 });
       }
+
+      // ========== Phone Agent API ==========
+
+      // Phone registration/heartbeat
+      if (url.pathname === "/api/phone/register" && req.method === "POST") {
+        try {
+          const body = await req.json() as {
+            id: string;
+            name: string;
+            port: number;
+            capabilities?: string[];
+          };
+
+          // Get IP from request
+          const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ||
+                     req.headers.get("x-real-ip") ||
+                     "unknown";
+
+          const phone = registerPhone(
+            body.id,
+            body.name,
+            ip,
+            body.port,
+            body.capabilities
+          );
+
+          return Response.json({ success: true, phone });
+        } catch (err) {
+          return Response.json({ success: false, error: String(err) }, { status: 400 });
+        }
+      }
+
+      // Phone heartbeat
+      if (url.pathname === "/api/phone/heartbeat" && req.method === "POST") {
+        try {
+          const body = await req.json() as { id: string };
+          const success = phoneHeartbeat(body.id);
+          return Response.json({ success });
+        } catch (err) {
+          return Response.json({ success: false, error: String(err) }, { status: 400 });
+        }
+      }
+
+      // List phones
+      if (url.pathname === "/api/phone/list" && req.method === "GET") {
+        const phones = getPhones().map(p => ({
+          ...p,
+          online: isPhoneOnline(p.id),
+        }));
+        return Response.json({ phones });
+      }
+
+      // Receive photo from phone
+      if (url.pathname === "/api/phone/photo" && req.method === "POST") {
+        try {
+          const formData = await req.formData();
+          const file = formData.get("image") as File | null;
+          const deviceId = formData.get("device_id") as string || "unknown";
+
+          if (!file) {
+            return Response.json({ success: false, error: "No image" }, { status: 400 });
+          }
+
+          const buffer = await file.arrayBuffer();
+          const media = await savePhoneMedia(deviceId, "photo", buffer);
+
+          console.log(`[Phone] Received photo from ${deviceId}: ${media.filename}`);
+          return Response.json({ success: true, media });
+        } catch (err) {
+          return Response.json({ success: false, error: String(err) }, { status: 400 });
+        }
+      }
+
+      // Receive audio from phone
+      if (url.pathname === "/api/phone/audio" && req.method === "POST") {
+        try {
+          const formData = await req.formData();
+          const file = formData.get("audio") as File | null;
+          const deviceId = formData.get("device_id") as string || "unknown";
+
+          if (!file) {
+            return Response.json({ success: false, error: "No audio" }, { status: 400 });
+          }
+
+          const buffer = await file.arrayBuffer();
+          const media = await savePhoneMedia(deviceId, "audio", buffer);
+
+          console.log(`[Phone] Received audio from ${deviceId}: ${media.filename}`);
+          return Response.json({ success: true, media });
+        } catch (err) {
+          return Response.json({ success: false, error: String(err) }, { status: 400 });
+        }
+      }
+
+      // Receive location from phone
+      if (url.pathname === "/api/phone/location" && req.method === "POST") {
+        try {
+          const body = await req.json() as {
+            device_id: string;
+            latitude: number;
+            longitude: number;
+            accuracy?: number;
+          };
+
+          console.log(`[Phone] Location from ${body.device_id}: ${body.latitude}, ${body.longitude}`);
+          return Response.json({ success: true, received: body });
+        } catch (err) {
+          return Response.json({ success: false, error: String(err) }, { status: 400 });
+        }
+      }
+
+      // Get recent media
+      if (url.pathname === "/api/phone/media" && req.method === "GET") {
+        const deviceId = url.searchParams.get("device_id") || undefined;
+        const type = url.searchParams.get("type") as "photo" | "audio" | "video" | undefined;
+        const limit = parseInt(url.searchParams.get("limit") || "10");
+
+        const media = await getPhoneMedia(deviceId, type, limit);
+        return Response.json({ media });
+      }
+
+      // Send command to phone
+      if (url.pathname === "/api/phone/command" && req.method === "POST") {
+        try {
+          const body = await req.json() as {
+            phone_id: string;
+            command: "photo" | "audio" | "location" | "battery" | "info";
+            params?: Record<string, unknown>;
+          };
+
+          const result = await sendPhoneCommand(body.phone_id, body.command, body.params);
+          return Response.json(result);
+        } catch (err) {
+          return Response.json({ success: false, error: String(err) }, { status: 400 });
+        }
+      }
+
+      // ========== End Phone Agent API ==========
 
       // 404 for unknown routes
       return new Response("Not Found", { status: 404 });

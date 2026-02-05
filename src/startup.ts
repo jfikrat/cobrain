@@ -16,6 +16,7 @@ import {
   stopHeartbeatMonitor,
 } from "./services/heartbeat.ts";
 import { startWebServer, stopWebServer } from "./web/server.ts";
+import { initPhoneAgent } from "./services/phone-agent.ts";
 
 console.log(`
    ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗███╗   ██╗
@@ -60,6 +61,9 @@ startBot();
 if (config.ENABLE_WEB_UI) {
   startWebServer();
 }
+
+// Initialize Phone Agent
+initPhoneAgent();
 
 // Initialize proactive features after bot starts
 if (config.ENABLE_AUTONOMOUS) {
