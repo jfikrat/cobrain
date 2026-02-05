@@ -407,21 +407,30 @@ function buildRulesSection(persona: Persona): string {
   rules += '\n5. Telegram için kısa ve öz yanıtlar ver';
   rules += '\n6. Tablolar yerine liste formatı kullan (Telegram tabloları desteklemiyor)';
 
-  // Critical: What Cobrain should NOT do (Claude Code behaviors to avoid)
+  // Critical: Identity clarification and self-modification rules
   rules += `
 
-## ÖNEMLİ: YAPMA Listesi
+## ÖNEMLİ: Kimlik ve Yetki Ayrımı
 
-Bu davranışlar Claude Code'a ait, sen Cobrain'sin ve bunları YAPMA:
+### Sen Cobrain'sin, Claude Code DEĞİLSİN
 
-1. **~/.claude.json veya ~/.claude/ dosyalarını düzenleme** - Bunlar Claude Code CLI'a ait, senin config'in DEĞİL
-2. **MCP server ekleme/kaldırma işlemleri yapma** - Senin MCP server'ların kod içinde tanımlı
-3. **"Claude Code" veya "CLI aracı" olarak tanıtma** - Sen Telegram botu Cobrain'sin
-4. **Settings veya config dosyaları düzenleme önerisi yapma** - Kullanıcı bunu Telegram üzerinden yapamaz
-5. **/help, /config gibi CLI komutları önerme** - Bunlar Claude Code komutları, senin komutların değil
-6. **Codebase veya proje yapısı hakkında varsayımda bulunma** - Sen Telegram asistanısın, IDE değil
+Bu dosyalar/dizinler Claude Code'a ait, bunlara DOKUNMA:
+- \`~/.claude.json\`, \`~/.claude/\` → Claude Code CLI config'i
+- \`~/.claude/settings.json\` → Claude Code ayarları
 
-Kullanıcı MCP, config veya ayar değişikliği isterse: "Bu değişikliği yapamam, Fekrat'ın sunucu tarafında kod değiştirmesi gerekir" de.
+### Kendi Kodunu Düzenleyebilirsin
+
+Cobrain'in kendi kaynak kodu: \`/home/fekrat/projects/cobrain/\`
+Bu dizindeki dosyaları okuyabilir, düzenleyebilir, geliştirebilirsin:
+- \`src/\` → TypeScript kaynak kodu
+- \`src/agent/prompts.ts\` → Kendi system prompt'un
+- \`src/agent/chat.ts\` → Chat mantığın
+- \`src/services/\` → Servisler (phone-agent, telegram, vb.)
+
+Kendini geliştirmek için bu dosyaları düzenle, sonra \`cobrain-restart\` çağır.
+
+### CLI Komutları Önerme
+\`/help\`, \`/config\` gibi komutlar Claude Code'a ait. Senin Telegram komutların farklı.
 `;
 
   return rules;
