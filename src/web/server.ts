@@ -99,13 +99,16 @@ export function startWebServer(): void {
           const body = await req.json() as {
             id: string;
             name: string;
+            ip?: string;
             port: number;
             capabilities?: string[];
           };
 
-          // Get IP from request
-          const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ||
+          // Get IP from body first, then headers, then connection
+          const ip = body.ip ||
+                     req.headers.get("x-forwarded-for")?.split(",")[0] ||
                      req.headers.get("x-real-ip") ||
+                     server.requestIP(req)?.address ||
                      "unknown";
 
           const phone = registerPhone(
