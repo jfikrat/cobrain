@@ -31,6 +31,9 @@ const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 // Initialize Telegram MCP with bot instance
 initTelegramMcp(bot);
 
+// Heartbeat interval reference
+let telegramHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
+
 // Geçici state
 let cachedAnalysis: MessageAnalysis[] = [];
 
@@ -874,6 +877,11 @@ export async function startBot(): Promise<void> {
   // Heartbeat: bot started
   heartbeat("telegram_bot", { event: "started" });
 
+  // Periodic heartbeat for telegram bot
+  telegramHeartbeatInterval = setInterval(() => {
+    heartbeat("telegram_bot", { event: "tick" });
+  }, 10_000); // Every 10 seconds
+
   // Grammy Runner kullan - concurrent processing için
   // Bu sayede permission callback'leri agent çalışırken de alınabilir
   const runner = run(bot, {
@@ -917,6 +925,10 @@ export async function startBot(): Promise<void> {
 export function stopBot(): Promise<void> {
   console.log("Bot durduruluyor...");
   clearAllPending(); // Deny all pending permission requests
+  if (telegramHeartbeatInterval) {
+    clearInterval(telegramHeartbeatInterval);
+    telegramHeartbeatInterval = null;
+  }
   whatsappDB.close();
   return bot.stop();
 }

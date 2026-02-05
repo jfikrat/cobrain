@@ -15,6 +15,7 @@ import {
 import indexHtml from "./public/index.html";
 
 let server: ReturnType<typeof Bun.serve> | null = null;
+let webHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Start the web server
@@ -123,12 +124,21 @@ export function startWebServer(): void {
 
   // Heartbeat: server started
   heartbeat("web_server", { event: "started", port: config.WEB_PORT });
+
+  // Periodic heartbeat for web server
+  webHeartbeatInterval = setInterval(() => {
+    heartbeat("web_server", { event: "tick" });
+  }, 10_000); // Every 10 seconds
 }
 
 /**
  * Stop the web server
  */
 export function stopWebServer(): void {
+  if (webHeartbeatInterval) {
+    clearInterval(webHeartbeatInterval);
+    webHeartbeatInterval = null;
+  }
   if (server) {
     server.stop();
     server = null;
