@@ -570,7 +570,7 @@ export async function chat(userId: number, message: string | MultimodalMessage):
 
     // Stale session from DB — SDK can't find it after restart
     // Clear and retry once with a fresh session
-    if (errorMessage.includes("No conversation found") && existingSessionId) {
+    if (existingSessionId && errorMessage.includes("exited with code")) {
       console.warn(`[Agent] Stale session detected, retrying with fresh session...`);
       userSessions.delete(userId);
       try {
