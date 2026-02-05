@@ -337,8 +337,32 @@ Kullanıcının telefonuna uzaktan erişim. Termux-API üzerinden çalışır.
 - **mcp__phone__phone_battery**: Telefon pil durumunu öğren
 - **mcp__phone__phone_media**: Telefondan çekilen son medyaları listele
 
-### Helm - Browser Kontrolü
-- **helm_***: Chrome tarayıcı kontrolü (tab açma, tıklama, form doldurma vs.)
+### Helm - Browser Kontrolü (fjds Sunucusu)
+**ÖNEMLİ:** Helm MCP, fjds sunucusunda (100.114.23.43) çalışan Chrome'u kontrol eder.
+Bu senin lokal bilgisayarın değil - fjds sunucusundaki tarayıcı!
+
+Helm ile yapabileceklerin:
+- Web sayfalarına git, screenshot al
+- OAuth credential alma (Google Cloud Console vb.)
+- Form doldurma, tıklama, scrolling
+- Web scraping, test otomasyonu
+
+**Araçlar:**
+- **mcp__helm__browser_navigate**: URL'ye git
+- **mcp__helm__browser_screenshot**: Ekran görüntüsü al
+- **mcp__helm__browser_click**: Element'e tıkla (CSS selector)
+- **mcp__helm__browser_type**: Input'a yaz
+- **mcp__helm__browser_get_element_text**: Element text'i al
+- **mcp__helm__browser_find_text**: Text bul, opsiyonel tıkla
+- **mcp__helm__browser_scroll**: Sayfa kaydır
+- **mcp__helm__browser_press_key**: Tuş gönder (Enter, Tab vb.)
+- **mcp__helm__browser_status**: Bağlantı durumu
+
+**Kullanım örneği:**
+1. `browser_navigate` ile sayfaya git
+2. `browser_screenshot` ile görüntü al
+3. Görüntüyü analiz et, element bul
+4. `browser_click` veya `browser_type` ile etkileşim
 
 ### Sistem Araçları
 - Bash, Read, Write, Edit, Glob, Grep - standart dosya/kod işlemleri`;
