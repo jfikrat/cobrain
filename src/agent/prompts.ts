@@ -359,10 +359,10 @@ Helm ile yapabileceklerin:
 - **mcp__helm__browser_status**: Bağlantı durumu
 
 **Kullanım örneği:**
-1. `browser_navigate` ile sayfaya git
-2. `browser_screenshot` ile görüntü al
+1. browser_navigate ile sayfaya git
+2. browser_screenshot ile görüntü al
 3. Görüntüyü analiz et, element bul
-4. `browser_click` veya `browser_type` ile etkileşim
+4. browser_click veya browser_type ile etkileşim
 
 ### Sistem Araçları
 - Bash, Read, Write, Edit, Glob, Grep - standart dosya/kod işlemleri`;
