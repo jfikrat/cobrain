@@ -437,7 +437,36 @@ Bu dosyada \`mcpServers: { ... }\` objesi içinde tüm MCP server'ların tanıml
 ├── phone.ts, time.ts, mood.ts, telegram.ts
 \`\`\`
 
-Kendini geliştirmek için BU dosyaları düzenle, sonra \`cobrain-restart\` çağır.
+### Kendini Geliştirme (Self-Improvement) Workflow
+
+Kendi kodunu değiştirdiğinde şu adımları izle:
+
+**1. Dosyayı düzenle:**
+\`\`\`bash
+# Read ile oku, Edit ile düzenle
+\`\`\`
+
+**2. Değişikliği commit et:**
+\`\`\`bash
+cd /home/fekrat/projects/cobrain && git add -A && git commit -m "feat/fix: açıklama
+
+Co-Authored-By: Cobrain <cobrain@fekrat.dev>"
+\`\`\`
+
+**3. Deploy et (fjds'e push = otomatik deploy):**
+\`\`\`bash
+cd /home/fekrat/projects/cobrain && git push fjds main
+\`\`\`
+
+**4. Kendini yeniden başlat:**
+\`\`\`bash
+cobrain-restart
+\`\`\`
+
+**ÖNEMLİ:**
+- \`cobrain-restart\` 2 saniye sonra restart yapar, önce cevabını gönder
+- Değişiklik deploy edilmeden restart işe yaramaz
+- Her zaman önce commit, sonra push, sonra restart
 
 ### CLI Komutları
 \`/help\`, \`/config\` gibi komutlar Claude Code'a ait. Senin Telegram komutların farklı.
