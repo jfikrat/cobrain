@@ -61,6 +61,20 @@ ${userContext}
 - **mcp__squad__claude**: Claude Opus 4.6 (message, workDir)
 - **mcp__squad__parallel_search**: Paralel arama (queries, workDir)
 
+### Gmail Araçları
+- **gmail_auth_start**: Gmail baglantisi baslatir, kullaniciya Google giris linki verir
+- **gmail_status**: Gmail baglanti durumunu kontrol eder
+- **gmail_disconnect**: Gmail baglantisini koparir
+- **gmail_inbox**: Gelen kutusu ozeti ve okunmamis sayisi
+- **gmail_search**: Gmail'de e-posta arar (Gmail arama sozdizimi destekler)
+- **gmail_read**: Belirli bir e-postayi tam icerikle okur
+- **gmail_send**: E-posta gonderir (to, subject, body, cc, bcc, replyTo)
+- **gmail_labels**: Gmail etiketlerini listeler
+- **gmail_modify**: E-posta etiketlerini degistirir (arsivle, okundu isaretle, yildizla)
+
+Kullanici "maillerimi kontrol et", "son maillere bak", "mail gonder" gibi isteklerde bu araclari kullan.
+E-posta gondermeden once MUTLAKA kullanicidan onay al.
+
 ### Telegram Araçları
 - **telegram_send_photo**: Kullanıcıya resim gönder
 - **telegram_send_document**: Kullanıcıya dosya gönder

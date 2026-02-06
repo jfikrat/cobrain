@@ -21,6 +21,7 @@ import { createTelegramServer, getTelegramBot } from "./tools/telegram.ts";
 import { getTimeServer } from "./tools/time.ts";
 import { createMoodServer } from "./tools/mood.ts";
 import { createPhoneServer } from "./tools/phone.ts";
+import { createGmailServer } from "./tools/gmail.ts";
 import { getPersonaService } from "../services/persona.ts";
 import { needsPermission, askToolPermission, type PermissionMode } from "./permissions.ts";
 import { UserMemory } from "../memory/sqlite.ts";
@@ -99,6 +100,7 @@ const userMemoryServers = new Map<number, ReturnType<typeof createMemoryServer>>
 const userGoalsServers = new Map<number, ReturnType<typeof createGoalsServer>>();
 const userPersonaServers = new Map<number, ReturnType<typeof createPersonaServer>>();
 const userMoodServers = new Map<number, ReturnType<typeof createMoodServer>>();
+const userGmailServers = new Map<number, ReturnType<typeof createGmailServer>>();
 
 // Shared servers (same for all users)
 let gdriveServer: ReturnType<typeof createGDriveServer> | null = null;
@@ -179,6 +181,18 @@ function getMoodServer(userId: number) {
   if (!server) {
     server = createMoodServer(userId);
     userMoodServers.set(userId, server);
+  }
+  return server;
+}
+
+/**
+ * Get or create Gmail server for user
+ */
+function getGmailServer(userId: number) {
+  let server = userGmailServers.get(userId);
+  if (!server) {
+    server = createGmailServer(String(userId));
+    userGmailServers.set(userId, server);
   }
   return server;
 }
@@ -304,6 +318,7 @@ export async function chat(userId: number, message: string | MultimodalMessage):
         mcpServers: {
           memory: getMemoryServer(userId),
           gdrive: getGDriveServer(),
+          gmail: getGmailServer(userId),
           goals: getGoalsServer(userId),
           persona: getPersonaServer(userId),
           telegram: getTelegramServer(),
