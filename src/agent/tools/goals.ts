@@ -134,9 +134,20 @@ export const createReminderTool = (userId: number) =>
       title: z.string().describe("Hatırlatıcı başlığı"),
       time: z.string().describe("Ne zaman hatırlat (örn: '10m', '1h', '2d', '15:30', 'tomorrow 9:00')"),
       message: z.string().optional().describe("Ek mesaj (opsiyonel)"),
-      repeat: z.enum(["daily", "weekly", "monthly"]).optional().describe("Tekrar paterni (opsiyonel)"),
+      repeat: z
+        .string()
+        .optional()
+        .describe("Tekrar paterni: 'daily', 'weekly', 'monthly' veya interval '2m', '5h', '1d'"),
+      maxExecutions: z
+        .number()
+        .optional()
+        .describe("Maksimum tetiklenme sayısı (tekrarlı hatırlatıcılar için). Örn: 7 kere 2dk arayla = repeat:'2m', maxExecutions:7"),
+      context: z
+        .record(z.unknown())
+        .optional()
+        .describe("Ek metadata (JSON). Örn: { chatId: '123', action: 'check_messages' }"),
     },
-    async ({ title, time, message, repeat }) => {
+    async ({ title, time, message, repeat, maxExecutions, context }) => {
       try {
         const triggerAt = parseTimeString(time);
         if (!triggerAt) {
@@ -152,15 +163,24 @@ export const createReminderTool = (userId: number) =>
           message,
           triggerAt: triggerAt.toISOString(),
           repeatPattern: repeat,
+          context,
+          maxExecutions,
         });
 
         console.log(`[Reminders] Created reminder #${reminder.id} for user ${userId}: ${title}`);
 
         const timeStr = triggerAt.toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" });
+        const parts = [
+          `⏰ Hatırlatıcı kuruldu:`,
+          `- ID: ${reminder.id}`,
+          `- "${title}"`,
+          `- Zaman: ${timeStr}`,
+        ];
+        if (repeat) parts.push(`- Tekrar: ${repeat}`);
+        if (maxExecutions) parts.push(`- Maks tekrar: ${maxExecutions}`);
+        if (context && Object.keys(context).length > 0) parts.push(`- Context: ${JSON.stringify(context)}`);
 
-        return toolSuccess(
-          `⏰ Hatırlatıcı kuruldu:\n- ID: ${reminder.id}\n- "${title}"\n- Zaman: ${timeStr}${repeat ? `\n- Tekrar: ${repeat}` : ""}`
-        );
+        return toolSuccess(parts.join("\n"));
       } catch (error) {
         return toolError("Hatırlatıcı oluşturulamadı", error);
       }
@@ -181,7 +201,12 @@ export const listRemindersTool = (userId: number) =>
         .map((r) => {
           const time = new Date(r.triggerAt).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" });
           const repeat = r.repeatPattern ? ` 🔄${r.repeatPattern}` : "";
-          return `⏰ #${r.id}: ${r.title} - ${time}${repeat}`;
+          const execInfo = r.maxExecutions
+            ? ` [${r.executionsDone}/${r.maxExecutions}]`
+            : r.executionsDone > 0
+              ? ` [x${r.executionsDone}]`
+              : "";
+          return `⏰ #${r.id}: ${r.title} - ${time}${repeat}${execInfo}`;
         })
         .join("\n");
 

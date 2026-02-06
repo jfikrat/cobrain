@@ -35,9 +35,12 @@ export interface Reminder {
   title: string;
   message?: string;
   triggerAt: string; // ISO datetime
-  repeatPattern?: string; // cron pattern for recurring
+  repeatPattern?: string; // "daily", "weekly", "monthly", or interval like "2m", "5h"
   status: ReminderStatus;
   createdAt: string;
+  context?: Record<string, unknown>; // Metadata: chatId, action type, etc.
+  maxExecutions?: number; // Max times to fire (null = unlimited for repeating)
+  executionsDone: number; // How many times fired so far
 }
 
 export interface ReminderInput {
@@ -45,6 +48,8 @@ export interface ReminderInput {
   message?: string;
   triggerAt: string;
   repeatPattern?: string;
+  context?: Record<string, unknown>;
+  maxExecutions?: number;
 }
 
 export type TaskType =

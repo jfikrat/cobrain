@@ -58,9 +58,23 @@ export class GoalsService {
         trigger_at DATETIME NOT NULL,
         repeat_pattern TEXT,
         status TEXT DEFAULT 'pending',
+        context TEXT DEFAULT '{}',
+        max_executions INTEGER,
+        executions_done INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Migration: add new columns for existing databases
+    try {
+      this.db.run(`ALTER TABLE reminders ADD COLUMN context TEXT DEFAULT '{}'`);
+    } catch { /* column already exists */ }
+    try {
+      this.db.run(`ALTER TABLE reminders ADD COLUMN max_executions INTEGER`);
+    } catch { /* column already exists */ }
+    try {
+      this.db.run(`ALTER TABLE reminders ADD COLUMN executions_done INTEGER DEFAULT 0`);
+    } catch { /* column already exists */ }
 
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_reminders_trigger ON reminders(trigger_at)`);
@@ -252,9 +266,16 @@ export class GoalsService {
 
   createReminder(input: ReminderInput): Reminder {
     const result = this.db.run(
-      `INSERT INTO reminders (title, message, trigger_at, repeat_pattern)
-       VALUES (?, ?, ?, ?)`,
-      [input.title, input.message ?? null, input.triggerAt, input.repeatPattern ?? null]
+      `INSERT INTO reminders (title, message, trigger_at, repeat_pattern, context, max_executions)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        input.title,
+        input.message ?? null,
+        input.triggerAt,
+        input.repeatPattern ?? null,
+        JSON.stringify(input.context ?? {}),
+        input.maxExecutions ?? null,
+      ]
     );
 
     return this.getReminder(Number(result.lastInsertRowid))!;
@@ -270,6 +291,9 @@ export class GoalsService {
           trigger_at: string;
           repeat_pattern: string | null;
           status: string;
+          context: string | null;
+          max_executions: number | null;
+          executions_done: number;
           created_at: string;
         },
         [number]
@@ -278,6 +302,21 @@ export class GoalsService {
 
     if (!row) return null;
 
+    return this.mapReminderRow(row);
+  }
+
+  private mapReminderRow(row: {
+    id: number;
+    title: string;
+    message: string | null;
+    trigger_at: string;
+    repeat_pattern: string | null;
+    status: string;
+    context: string | null;
+    max_executions: number | null;
+    executions_done: number;
+    created_at: string;
+  }): Reminder {
     return {
       id: row.id,
       title: row.title,
@@ -285,6 +324,9 @@ export class GoalsService {
       triggerAt: row.trigger_at,
       repeatPattern: row.repeat_pattern ?? undefined,
       status: row.status as ReminderStatus,
+      context: JSON.parse(row.context || "{}"),
+      maxExecutions: row.max_executions ?? undefined,
+      executionsDone: row.executions_done ?? 0,
       createdAt: row.created_at,
     };
   }
@@ -299,21 +341,16 @@ export class GoalsService {
           trigger_at: string;
           repeat_pattern: string | null;
           status: string;
+          context: string | null;
+          max_executions: number | null;
+          executions_done: number;
           created_at: string;
         },
         []
       >("SELECT * FROM reminders WHERE status = 'pending' ORDER BY trigger_at ASC")
       .all();
 
-    return rows.map((row) => ({
-      id: row.id,
-      title: row.title,
-      message: row.message ?? undefined,
-      triggerAt: row.trigger_at,
-      repeatPattern: row.repeat_pattern ?? undefined,
-      status: row.status as ReminderStatus,
-      createdAt: row.created_at,
-    }));
+    return rows.map((row) => this.mapReminderRow(row));
   }
 
   getDueReminders(): Reminder[] {
@@ -328,34 +365,49 @@ export class GoalsService {
           trigger_at: string;
           repeat_pattern: string | null;
           status: string;
+          context: string | null;
+          max_executions: number | null;
+          executions_done: number;
           created_at: string;
         },
         [string]
       >("SELECT * FROM reminders WHERE status = 'pending' AND trigger_at <= ? ORDER BY trigger_at ASC")
       .all(now);
 
-    return rows.map((row) => ({
-      id: row.id,
-      title: row.title,
-      message: row.message ?? undefined,
-      triggerAt: row.trigger_at,
-      repeatPattern: row.repeat_pattern ?? undefined,
-      status: row.status as ReminderStatus,
-      createdAt: row.created_at,
-    }));
+    return rows.map((row) => this.mapReminderRow(row));
   }
 
   markReminderSent(reminderId: number): void {
     const reminder = this.getReminder(reminderId);
     if (!reminder) return;
 
+    const newExecutionsDone = (reminder.executionsDone ?? 0) + 1;
+
     if (reminder.repeatPattern) {
-      // Recurring reminder - calculate next trigger
+      // Check if max executions reached
+      if (reminder.maxExecutions && newExecutionsDone >= reminder.maxExecutions) {
+        // Interval complete - mark as sent (done)
+        this.db.run(
+          "UPDATE reminders SET status = 'sent', executions_done = ? WHERE id = ?",
+          [newExecutionsDone, reminderId]
+        );
+        console.log(`[Reminders] #${reminderId} completed after ${newExecutionsDone}/${reminder.maxExecutions} executions`);
+        return;
+      }
+
+      // Recurring reminder - calculate next trigger and increment counter
       const nextTrigger = this.calculateNextTrigger(reminder.triggerAt, reminder.repeatPattern);
-      this.db.run("UPDATE reminders SET trigger_at = ? WHERE id = ?", [nextTrigger, reminderId]);
+      this.db.run(
+        "UPDATE reminders SET trigger_at = ?, executions_done = ? WHERE id = ?",
+        [nextTrigger, newExecutionsDone, reminderId]
+      );
+      console.log(`[Reminders] #${reminderId} execution ${newExecutionsDone}${reminder.maxExecutions ? `/${reminder.maxExecutions}` : ""}, next: ${nextTrigger}`);
     } else {
       // One-time reminder - mark as sent
-      this.db.run("UPDATE reminders SET status = 'sent' WHERE id = ?", [reminderId]);
+      this.db.run(
+        "UPDATE reminders SET status = 'sent', executions_done = ? WHERE id = ?",
+        [newExecutionsDone, reminderId]
+      );
     }
   }
 
@@ -386,32 +438,57 @@ export class GoalsService {
 
   /**
    * Calculate next trigger time for recurring reminders
+   * Supports: "daily", "weekly", "monthly", "2m" (minutes), "1h" (hours), "3d" (days)
    */
   private calculateNextTrigger(currentTrigger: string, pattern: string): string {
+    const now = new Date();
     const current = new Date(currentTrigger);
-    const next = new Date(current);
+    // Use "now" as base if current trigger is in the past (avoids stacking missed intervals)
+    const base = current < now ? now : current;
+    const next = new Date(base);
 
-    // Simple patterns: daily, weekly, monthly
+    // Named patterns
     switch (pattern.toLowerCase()) {
       case "daily":
         next.setDate(next.getDate() + 1);
-        break;
+        return next.toISOString();
       case "weekly":
         next.setDate(next.getDate() + 7);
-        break;
+        return next.toISOString();
       case "monthly":
         next.setMonth(next.getMonth() + 1);
-        break;
-      default:
-        // Assume it's a number of hours
-        const hours = parseInt(pattern, 10);
-        if (!isNaN(hours)) {
-          next.setHours(next.getHours() + hours);
-        } else {
-          next.setDate(next.getDate() + 1); // Default to daily
-        }
+        return next.toISOString();
     }
 
+    // Interval patterns: "2m", "5h", "3d" (same format as parseTimeString)
+    const intervalMatch = pattern.match(/^(\d+)([mhd])$/i);
+    if (intervalMatch) {
+      const amount = parseInt(intervalMatch[1]!, 10);
+      const unit = intervalMatch[2]!.toLowerCase();
+
+      switch (unit) {
+        case "m":
+          next.setMinutes(next.getMinutes() + amount);
+          break;
+        case "h":
+          next.setHours(next.getHours() + amount);
+          break;
+        case "d":
+          next.setDate(next.getDate() + amount);
+          break;
+      }
+      return next.toISOString();
+    }
+
+    // Legacy: plain number = hours
+    const hours = parseInt(pattern, 10);
+    if (!isNaN(hours)) {
+      next.setHours(next.getHours() + hours);
+      return next.toISOString();
+    }
+
+    // Fallback to daily
+    next.setDate(next.getDate() + 1);
     return next.toISOString();
   }
 
