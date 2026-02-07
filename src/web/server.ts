@@ -21,7 +21,7 @@ import {
   sendPhoneCommand,
   isPhoneOnline,
 } from "../services/phone-agent.ts";
-import { handleGmailOAuthCallback } from "../agent/tools/gmail.ts";
+
 import indexHtml from "./public/index.html";
 
 let server: ReturnType<typeof Bun.serve> | null = null;
@@ -232,39 +232,6 @@ export function startWebServer(): void {
       }
 
       // ========== End Phone Agent API ==========
-
-      // ========== Gmail OAuth Callback ==========
-      if (url.pathname === "/auth/gmail/callback" && req.method === "GET") {
-        const code = url.searchParams.get("code");
-        const state = url.searchParams.get("state"); // userId passed through OAuth state
-        const error = url.searchParams.get("error");
-
-        if (error) {
-          return new Response(
-            `<html><body><h2>Gmail baglantisi iptal edildi</h2><p>${error}</p><p>Bu pencereyi kapatabilirsin.</p></body></html>`,
-            { headers: { "Content-Type": "text/html; charset=utf-8" } }
-          );
-        }
-
-        if (!code || !state) {
-          return new Response("Missing code or state", { status: 400 });
-        }
-
-        const result = await handleGmailOAuthCallback(code, state);
-
-        if (result.success) {
-          return new Response(
-            `<html><body><h2>Gmail basariyla baglandi!</h2><p>Bu pencereyi kapatabilirsin. Cobrain artik Gmail'ini kullanabilir.</p></body></html>`,
-            { headers: { "Content-Type": "text/html; charset=utf-8" } }
-          );
-        } else {
-          return new Response(
-            `<html><body><h2>Gmail baglantisi basarisiz</h2><p>${result.error}</p></body></html>`,
-            { headers: { "Content-Type": "text/html; charset=utf-8" }, status: 500 }
-          );
-        }
-      }
-      // ========== End Gmail OAuth ==========
 
       // 404 for unknown routes
       return new Response("Not Found", { status: 404 });

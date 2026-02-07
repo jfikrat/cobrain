@@ -21,7 +21,8 @@ import { createTelegramServer, getTelegramBot } from "./tools/telegram.ts";
 import { getTimeServer } from "./tools/time.ts";
 import { createMoodServer } from "./tools/mood.ts";
 import { createPhoneServer } from "./tools/phone.ts";
-import { createGmailServer } from "./tools/gmail.ts";
+import { createN8nServer } from "./tools/n8n.ts";
+
 import { getPersonaService } from "../services/persona.ts";
 import { needsPermission, askToolPermission, type PermissionMode } from "./permissions.ts";
 import { UserMemory } from "../memory/sqlite.ts";
@@ -100,12 +101,13 @@ const userMemoryServers = new Map<number, ReturnType<typeof createMemoryServer>>
 const userGoalsServers = new Map<number, ReturnType<typeof createGoalsServer>>();
 const userPersonaServers = new Map<number, ReturnType<typeof createPersonaServer>>();
 const userMoodServers = new Map<number, ReturnType<typeof createMoodServer>>();
-const userGmailServers = new Map<number, ReturnType<typeof createGmailServer>>();
+
 
 // Shared servers (same for all users)
 let gdriveServer: ReturnType<typeof createGDriveServer> | null = null;
 let telegramServer: ReturnType<typeof createTelegramServer> | null = null;
 let phoneServer: ReturnType<typeof createPhoneServer> | null = null;
+let n8nServer: ReturnType<typeof createN8nServer> | null = null;
 
 /**
  * Get or create memory server for user
@@ -150,6 +152,16 @@ function getPhoneServer() {
 }
 
 /**
+ * Get or create n8n server (shared)
+ */
+function getN8nServer() {
+  if (!n8nServer) {
+    n8nServer = createN8nServer();
+  }
+  return n8nServer;
+}
+
+/**
  * Get or create goals server for user
  */
 function getGoalsServer(userId: number) {
@@ -185,17 +197,6 @@ function getMoodServer(userId: number) {
   return server;
 }
 
-/**
- * Get or create Gmail server for user
- */
-function getGmailServer(userId: number) {
-  let server = userGmailServers.get(userId);
-  if (!server) {
-    server = createGmailServer(String(userId));
-    userGmailServers.set(userId, server);
-  }
-  return server;
-}
 
 /**
  * Extract text content from assistant message
@@ -318,7 +319,8 @@ export async function chat(userId: number, message: string | MultimodalMessage):
         mcpServers: {
           memory: getMemoryServer(userId),
           gdrive: getGDriveServer(),
-          gmail: getGmailServer(userId),
+
+          n8n: getN8nServer(),
           goals: getGoalsServer(userId),
           persona: getPersonaServer(userId),
           telegram: getTelegramServer(),

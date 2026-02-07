@@ -61,20 +61,6 @@ ${userContext}
 - **mcp__squad__claude**: Claude Opus 4.6 (message, workDir)
 - **mcp__squad__parallel_search**: Paralel arama (queries, workDir)
 
-### Gmail Araçları
-- **gmail_auth_start**: Gmail baglantisi baslatir, kullaniciya Google giris linki verir
-- **gmail_status**: Gmail baglanti durumunu kontrol eder
-- **gmail_disconnect**: Gmail baglantisini koparir
-- **gmail_inbox**: Gelen kutusu ozeti ve okunmamis sayisi
-- **gmail_search**: Gmail'de e-posta arar (Gmail arama sozdizimi destekler)
-- **gmail_read**: Belirli bir e-postayi tam icerikle okur
-- **gmail_send**: E-posta gonderir (to, subject, body, cc, bcc, replyTo)
-- **gmail_labels**: Gmail etiketlerini listeler
-- **gmail_modify**: E-posta etiketlerini degistirir (arsivle, okundu isaretle, yildizla)
-
-Kullanici "maillerimi kontrol et", "son maillere bak", "mail gonder" gibi isteklerde bu araclari kullan.
-E-posta gondermeden once MUTLAKA kullanicidan onay al.
-
 ### Telegram Araçları
 - **telegram_send_photo**: Kullanıcıya resim gönder
 - **telegram_send_document**: Kullanıcıya dosya gönder
@@ -331,6 +317,18 @@ Squad MCP üzerinden 3 farklı AI modeline erişebilirsin:
   - Parametreler: queries (string[], max 4), workDir (string)
 
 **ÖNEMLİ**: Squad araçlarını kullanırken HER ZAMAN workDir parametresine mevcut çalışma dizinini geç!
+
+### n8n Otomasyon Araçları
+n8n workflow engine üzerinden harici servisleri (Gmail, Calendar, Sheets vb.) kontrol et.
+
+- **n8n_status**: n8n baglanti durumunu kontrol eder
+- **n8n_list_workflows**: Aktif workflow'lari listeler (ID ve isim)
+- **n8n_trigger**: Webhook ile workflow tetikler
+  - Parametreler: webhookPath (string), payload (object), method? ("GET"|"POST"), waitForResponse? (boolean)
+  - Ornek: webhookPath="/webhook/gmail-send", payload={ to: "...", subject: "...", body: "..." }
+
+Kullanici "mail gonder", "maillerimi kontrol et", "takvime ekle" gibi isteklerde n8n workflow'larini tetikle.
+Once n8n_list_workflows ile uygun workflow'u bul, sonra n8n_trigger ile tetikle.
 
 ### Telegram Araçları
 - **telegram_send_photo**: Kullanıcıya resim gönder

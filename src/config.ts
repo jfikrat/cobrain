@@ -44,10 +44,9 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().default(""),
   TRANSCRIPTION_MODEL: z.string().default("gemini-3-flash-preview"),
 
-  // v0.6: Gmail OAuth2
-  GOOGLE_CLIENT_ID: z.string().default(""),
-  GOOGLE_CLIENT_SECRET: z.string().default(""),
-  GMAIL_REDIRECT_URI: z.string().default(""),
+  // v0.6: n8n Integration
+  N8N_URL: z.string().default("http://localhost:5678"),
+  N8N_API_KEY: z.string().default(""),
 
   // v0.6: Agent model
   AGENT_MODEL: z.string().default("claude-opus-4-6"),
@@ -137,20 +136,6 @@ export function getConfigSchema() {
         hint: "Kullanılacak Claude modeli",
         type: "text" as const,
         default: "claude-opus-4-6",
-      },
-      {
-        key: "GOOGLE_CLIENT_ID",
-        label: "Google Client ID",
-        hint: "Gmail entegrasyonu icin Google OAuth2 Client ID",
-        type: "text" as const,
-        default: "",
-      },
-      {
-        key: "GOOGLE_CLIENT_SECRET",
-        label: "Google Client Secret",
-        hint: "Gmail entegrasyonu icin Google OAuth2 Client Secret",
-        type: "password" as const,
-        default: "",
       },
     ],
   };
