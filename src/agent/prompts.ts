@@ -300,20 +300,20 @@ function buildToolsSection(): string {
 - **gdrive_download**: Dosya indir
 - **gdrive_upload**: Dosya yükle
 
-### Squad MCP - Multi-Agent Araçlar
+### Squad MCP - Multi-Agent Araçlar (Gateway üzerinden)
 Squad MCP üzerinden 3 farklı AI modeline erişebilirsin:
 
-- **mcp__squad__codex**: GPT-5.2 Codex - Derin teknik analiz, mimari inceleme, debugging
+- **mcp__gateway__squad_codex**: GPT-5.2 Codex - Derin teknik analiz, mimari inceleme, debugging
   - Parametreler: message (string), workDir (string - her zaman mevcut çalışma dizini)
 
-- **mcp__squad__gemini**: Gemini 3 Flash/Pro - Hızlı analiz, genel sorgular
+- **mcp__gateway__squad_gemini**: Gemini 3 Flash/Pro - Hızlı analiz, genel sorgular
   - Parametreler: message (string), workDir (string), model? ("flash" | "pro")
 
-- **mcp__squad__claude**: Claude Opus 4.6 - Kod analizi, düzenleme, karmaşık görevler
+- **mcp__gateway__squad_claude**: Claude Opus 4.6 - Kod analizi, düzenleme, karmaşık görevler
   - Parametreler: message (string), workDir (string)
   - Read, Edit, Write, Bash, Grep, Glob araçlarına erişimi var
 
-- **mcp__squad__parallel_search**: Paralel arama - 2 Gemini + 2 Codex aynı anda
+- **mcp__gateway__squad_parallel_search**: Paralel arama - 2 Gemini + 2 Codex aynı anda
   - Parametreler: queries (string[], max 4), workDir (string)
 
 **ÖNEMLİ**: Squad araçlarını kullanırken HER ZAMAN workDir parametresine mevcut çalışma dizinini geç!
@@ -351,7 +351,7 @@ Kullanıcının telefonuna uzaktan erişim. Termux-API üzerinden çalışır.
 - **mcp__phone__phone_battery**: Telefon pil durumunu öğren
 - **mcp__phone__phone_media**: Telefondan çekilen son medyaları listele
 
-### Helm - Browser Kontrolü (fjds Sunucusu)
+### Helm - Browser Kontrolü (fjds Sunucusu, Gateway üzerinden)
 **ÖNEMLİ:** Helm MCP, fjds sunucusunda (100.114.23.43) çalışan Chrome'u kontrol eder.
 Bu senin lokal bilgisayarın değil - fjds sunucusundaki tarayıcı!
 
@@ -362,21 +362,31 @@ Helm ile yapabileceklerin:
 - Web scraping, test otomasyonu
 
 **Araçlar:**
-- **mcp__helm__browser_navigate**: URL'ye git
-- **mcp__helm__browser_screenshot**: Ekran görüntüsü al
-- **mcp__helm__browser_click**: Element'e tıkla (CSS selector)
-- **mcp__helm__browser_type**: Input'a yaz
-- **mcp__helm__browser_get_element_text**: Element text'i al
-- **mcp__helm__browser_find_text**: Text bul, opsiyonel tıkla
-- **mcp__helm__browser_scroll**: Sayfa kaydır
-- **mcp__helm__browser_press_key**: Tuş gönder (Enter, Tab vb.)
-- **mcp__helm__browser_status**: Bağlantı durumu
+- **mcp__gateway__helm_browser_navigate**: URL'ye git
+- **mcp__gateway__helm_browser_screenshot**: Ekran görüntüsü al
+- **mcp__gateway__helm_browser_click**: Element'e tıkla (CSS selector)
+- **mcp__gateway__helm_browser_type**: Input'a yaz
+- **mcp__gateway__helm_browser_get_element_text**: Element text'i al
+- **mcp__gateway__helm_browser_find_text**: Text bul, opsiyonel tıkla
+- **mcp__gateway__helm_browser_scroll**: Sayfa kaydır
+- **mcp__gateway__helm_browser_press_key**: Tuş gönder (Enter, Tab vb.)
+- **mcp__gateway__helm_browser_status**: Bağlantı durumu
 
 **Kullanım örneği:**
-1. browser_navigate ile sayfaya git
-2. browser_screenshot ile görüntü al
+1. helm_browser_navigate ile sayfaya git
+2. helm_browser_screenshot ile görüntü al
 3. Görüntüyü analiz et, element bul
-4. browser_click veya browser_type ile etkileşim
+4. helm_browser_click veya helm_browser_type ile etkileşim
+
+### Gateway — Servis Yönetimi
+Harici MCP servisleri (helm, squad, whatsapp) gateway üzerinden çalışır.
+Servisler ilk kullanımda otomatik aktive olur — manuel activate gerekmez.
+
+- **mcp__gateway__services**: Tüm servislerin durumunu listele
+- **mcp__gateway__health**: Servis sağlık kontrolü (ping)
+- **mcp__gateway__activate**: Servisi başlat ({name: "..."})
+- **mcp__gateway__deactivate**: Servisi durdur ({name: "..."})
+- **mcp__gateway__restart**: Servisi yeniden başlat ({name: "..."})
 
 ### Sistem Araçları
 - Bash, Read, Write, Edit, Glob, Grep - standart dosya/kod işlemleri`;
@@ -464,9 +474,10 @@ function buildRulesSection(persona: Persona): string {
 
 **MCP AYARLARIN BURADA:**
 \`\`\`
-/home/fekrat/projects/cobrain/src/agent/chat.ts (satır 273-300)
+/home/fekrat/projects/cobrain/src/agent/chat.ts — mcpServers objesi
 \`\`\`
 Bu dosyada \`mcpServers: { ... }\` objesi içinde tüm MCP server'ların tanımlı.
+Harici servisler (helm, squad, whatsapp) tek bir gateway MCP üzerinden çalışır.
 
 **Dahili MCP tool tanımları:**
 \`\`\`

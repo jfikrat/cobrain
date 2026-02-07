@@ -316,23 +316,11 @@ export async function chat(userId: number, message: string | MultimodalMessage):
           time: getTimeServer(),
           mood: getMoodServer(userId),
           phone: getPhoneServer(),
-          // Helm - Browser control via Chrome extension
-          helm: {
+          // Gateway - helm, squad, whatsapp via single MCP gateway
+          gateway: {
             type: "stdio" as const,
             command: "bun",
-            args: ["run", "/home/fjds/projects/helm-browser/server/index.ts"],
-          },
-          // Squad - Multi-agent MCP (Codex, Gemini, Claude Code)
-          squad: {
-            type: "stdio" as const,
-            command: "bun",
-            args: ["run", "/home/fjds/projects/squad/src/index.ts"],
-          },
-          // WhatsApp - Messaging via Baileys
-          whatsapp: {
-            type: "stdio" as const,
-            command: "bun",
-            args: ["run", "/home/fjds/projects/whatsapp/mcp-server.ts"],
+            args: ["run", "/home/fjds/projects/gateway/src/index.ts"],
           },
         },
 
@@ -372,81 +360,58 @@ export async function chat(userId: number, message: string | MultimodalMessage):
                     let statusMessage = "";
 
                     // Customize status message based on tool
-                    switch (toolName) {
-                      case "WebSearch":
-                        statusMessage = `🔍 Web'de araştırma yapıyorum: "${toolInput.query || ""}"`;
-                        break;
-                      case "WebFetch":
-                        statusMessage = `🌐 Web sayfasını okuyorum...`;
-                        break;
-                      case "Read":
-                        statusMessage = `📄 Dosya okuyorum: ${(toolInput.file_path as string || "").split("/").pop()}`;
-                        break;
-                      case "Write":
-                        statusMessage = `✍️ Dosya yazıyorum: ${(toolInput.file_path as string || "").split("/").pop()}`;
-                        break;
-                      case "Edit":
-                        statusMessage = `📝 Dosya düzenliyorum: ${(toolInput.file_path as string || "").split("/").pop()}`;
-                        break;
-                      case "Bash":
-                        statusMessage = `⚡ Komut çalıştırıyorum: ${(toolInput.command as string || "").slice(0, 50)}...`;
-                        break;
-                      case "Glob":
-                        statusMessage = `🔎 Dosya arıyorum: ${toolInput.pattern}`;
-                        break;
-                      case "Grep":
-                        statusMessage = `🔍 İçerik arıyorum: "${(toolInput.pattern as string || "").slice(0, 30)}..."`;
-                        break;
-                      case "mcp__memory__remember":
-                        statusMessage = `🧠 Hafızaya kaydediyorum...`;
-                        break;
-                      case "mcp__memory__recall":
-                        statusMessage = `🧠 Hafızamı tarıyorum: "${toolInput.query}"`;
-                        break;
-                      case "mcp__goals__create_goal":
-                        statusMessage = `🎯 Hedef oluşturuyorum...`;
-                        break;
-                      case "mcp__goals__create_reminder":
-                        statusMessage = `⏰ Hatırlatıcı kuruyorum...`;
-                        break;
-                      case "mcp__gdrive__gdrive_list":
-                        statusMessage = `📁 Google Drive'ı tarıyorum...`;
-                        break;
-                      case "mcp__squad__codex":
-                        statusMessage = `🤖 Codex ile analiz yapıyorum...`;
-                        break;
-                      case "mcp__squad__gemini":
-                        statusMessage = `🤖 Gemini ile kod üretiyorum...`;
-                        break;
-                      case "mcp__squad__claude":
-                        statusMessage = `🤖 Claude Code ile görüşüyorum...`;
-                        break;
-                      case "Task":
-                        statusMessage = `🚀 Yardımcı agent başlatıyorum: ${toolInput.description}`;
-                        break;
-                      case "TodoWrite":
-                        statusMessage = `📋 Görev listesini güncelliyorum...`;
-                        break;
-                      case "mcp__phone__phone_photo":
-                        statusMessage = `📸 Telefondan fotoğraf çekiyorum...`;
-                        break;
-                      case "mcp__phone__phone_audio":
-                        statusMessage = `🎤 Telefondan ses kaydediyorum...`;
-                        break;
-                      case "mcp__phone__phone_location":
-                        statusMessage = `📍 Telefonun konumunu alıyorum...`;
-                        break;
-                      case "mcp__phone__phone_battery":
-                        statusMessage = `🔋 Telefon pil durumunu kontrol ediyorum...`;
-                        break;
-                      case "mcp__phone__phone_list":
-                        statusMessage = `📱 Bağlı telefonları kontrol ediyorum...`;
-                        break;
-                      default:
-                        if (!toolName.startsWith("telegram_")) {
-                          // Skip telegram tools to avoid loops
-                          statusMessage = `🔧 ${toolName} kullanıyorum...`;
-                        }
+                    // Uses includes() to support both direct and gateway-prefixed tool names
+                    if (toolName === "WebSearch") {
+                      statusMessage = `🔍 Web'de araştırma yapıyorum: "${toolInput.query || ""}"`;
+                    } else if (toolName === "WebFetch") {
+                      statusMessage = `🌐 Web sayfasını okuyorum...`;
+                    } else if (toolName === "Read") {
+                      statusMessage = `📄 Dosya okuyorum: ${(toolInput.file_path as string || "").split("/").pop()}`;
+                    } else if (toolName === "Write") {
+                      statusMessage = `✍️ Dosya yazıyorum: ${(toolInput.file_path as string || "").split("/").pop()}`;
+                    } else if (toolName === "Edit") {
+                      statusMessage = `📝 Dosya düzenliyorum: ${(toolInput.file_path as string || "").split("/").pop()}`;
+                    } else if (toolName === "Bash") {
+                      statusMessage = `⚡ Komut çalıştırıyorum: ${(toolInput.command as string || "").slice(0, 50)}...`;
+                    } else if (toolName === "Glob") {
+                      statusMessage = `🔎 Dosya arıyorum: ${toolInput.pattern}`;
+                    } else if (toolName === "Grep") {
+                      statusMessage = `🔍 İçerik arıyorum: "${(toolInput.pattern as string || "").slice(0, 30)}..."`;
+                    } else if (toolName === "mcp__memory__remember") {
+                      statusMessage = `🧠 Hafızaya kaydediyorum...`;
+                    } else if (toolName === "mcp__memory__recall") {
+                      statusMessage = `🧠 Hafızamı tarıyorum: "${toolInput.query}"`;
+                    } else if (toolName === "mcp__goals__create_goal") {
+                      statusMessage = `🎯 Hedef oluşturuyorum...`;
+                    } else if (toolName === "mcp__goals__create_reminder") {
+                      statusMessage = `⏰ Hatırlatıcı kuruyorum...`;
+                    } else if (toolName === "mcp__gdrive__gdrive_list") {
+                      statusMessage = `📁 Google Drive'ı tarıyorum...`;
+                    } else if (toolName.includes("squad_codex")) {
+                      statusMessage = `🤖 Codex ile analiz yapıyorum...`;
+                    } else if (toolName.includes("squad_gemini")) {
+                      statusMessage = `🤖 Gemini ile kod üretiyorum...`;
+                    } else if (toolName.includes("squad_claude")) {
+                      statusMessage = `🤖 Claude Code ile görüşüyorum...`;
+                    } else if (toolName.includes("gateway__services") || toolName.includes("gateway__health")) {
+                      // Gateway management — skip notification
+                    } else if (toolName === "Task") {
+                      statusMessage = `🚀 Yardımcı agent başlatıyorum: ${toolInput.description}`;
+                    } else if (toolName === "TodoWrite") {
+                      statusMessage = `📋 Görev listesini güncelliyorum...`;
+                    } else if (toolName === "mcp__phone__phone_photo") {
+                      statusMessage = `📸 Telefondan fotoğraf çekiyorum...`;
+                    } else if (toolName === "mcp__phone__phone_audio") {
+                      statusMessage = `🎤 Telefondan ses kaydediyorum...`;
+                    } else if (toolName === "mcp__phone__phone_location") {
+                      statusMessage = `📍 Telefonun konumunu alıyorum...`;
+                    } else if (toolName === "mcp__phone__phone_battery") {
+                      statusMessage = `🔋 Telefon pil durumunu kontrol ediyorum...`;
+                    } else if (toolName === "mcp__phone__phone_list") {
+                      statusMessage = `📱 Bağlı telefonları kontrol ediyorum...`;
+                    } else if (!toolName.startsWith("telegram_") && !toolName.startsWith("mcp__telegram_")) {
+                      // Skip telegram tools to avoid loops
+                      statusMessage = `🔧 ${toolName} kullanıyorum...`;
                     }
 
                     // Send via telegram bot if available
