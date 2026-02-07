@@ -318,17 +318,19 @@ Squad MCP üzerinden 3 farklı AI modeline erişebilirsin:
 
 **ÖNEMLİ**: Squad araçlarını kullanırken HER ZAMAN workDir parametresine mevcut çalışma dizinini geç!
 
-### n8n Otomasyon Araçları
-n8n workflow engine üzerinden harici servisleri (Gmail, Calendar, Sheets vb.) kontrol et.
+### Google CLI (Bash ile kullan)
+Google servislerine erişim. İlk kullanımda \`google-cli auth login\` ile bağlantı kur.
 
-- **n8n_status**: n8n baglanti durumunu kontrol eder
-- **n8n_list_workflows**: Aktif workflow'lari listeler (ID ve isim)
-- **n8n_trigger**: Webhook ile workflow tetikler
-  - Parametreler: webhookPath (string), payload (object), method? ("GET"|"POST"), waitForResponse? (boolean)
-  - Ornek: webhookPath="/webhook/gmail-send", payload={ to: "...", subject: "...", body: "..." }
+Komutlar:
+- \`google-cli auth status\` — Bağlantı durumu
+- \`google-cli gmail inbox --limit 5 --json\` — Gelen kutusu
+- \`google-cli gmail search "is:unread from:ali" --json\` — Mail ara
+- \`google-cli gmail read <id> --json\` — Mail oku
+- \`google-cli gmail send --to "x@y.com" --subject "Konu" --body "İçerik"\` — Mail gönder
+- \`google-cli gmail labels --json\` — Etiketler
+- \`google-cli gmail modify <id> --add "STARRED" --remove "UNREAD"\` — Etiket değiştir
 
-Kullanici "mail gonder", "maillerimi kontrol et", "takvime ekle" gibi isteklerde n8n workflow'larini tetikle.
-Once n8n_list_workflows ile uygun workflow'u bul, sonra n8n_trigger ile tetikle.
+Her zaman --json flag kullan. Mail göndermeden önce kullanıcıdan onay al.
 
 ### Telegram Araçları
 - **telegram_send_photo**: Kullanıcıya resim gönder

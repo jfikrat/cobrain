@@ -21,7 +21,7 @@ import { createTelegramServer, getTelegramBot } from "./tools/telegram.ts";
 import { getTimeServer } from "./tools/time.ts";
 import { createMoodServer } from "./tools/mood.ts";
 import { createPhoneServer } from "./tools/phone.ts";
-import { createN8nServer } from "./tools/n8n.ts";
+
 
 import { getPersonaService } from "../services/persona.ts";
 import { needsPermission, askToolPermission, type PermissionMode } from "./permissions.ts";
@@ -107,7 +107,7 @@ const userMoodServers = new Map<number, ReturnType<typeof createMoodServer>>();
 let gdriveServer: ReturnType<typeof createGDriveServer> | null = null;
 let telegramServer: ReturnType<typeof createTelegramServer> | null = null;
 let phoneServer: ReturnType<typeof createPhoneServer> | null = null;
-let n8nServer: ReturnType<typeof createN8nServer> | null = null;
+
 
 /**
  * Get or create memory server for user
@@ -149,16 +149,6 @@ function getPhoneServer() {
     phoneServer = createPhoneServer();
   }
   return phoneServer;
-}
-
-/**
- * Get or create n8n server (shared)
- */
-function getN8nServer() {
-  if (!n8nServer) {
-    n8nServer = createN8nServer();
-  }
-  return n8nServer;
 }
 
 /**
@@ -320,7 +310,6 @@ export async function chat(userId: number, message: string | MultimodalMessage):
           memory: getMemoryServer(userId),
           gdrive: getGDriveServer(),
 
-          n8n: getN8nServer(),
           goals: getGoalsServer(userId),
           persona: getPersonaServer(userId),
           telegram: getTelegramServer(),

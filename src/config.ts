@@ -44,10 +44,6 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().default(""),
   TRANSCRIPTION_MODEL: z.string().default("gemini-3-flash-preview"),
 
-  // v0.6: n8n Integration
-  N8N_URL: z.string().default("http://localhost:5678"),
-  N8N_API_KEY: z.string().default(""),
-
   // v0.6: Agent model
   AGENT_MODEL: z.string().default("claude-opus-4-6"),
   MAX_AGENT_TURNS: z.coerce.number().default(20),
