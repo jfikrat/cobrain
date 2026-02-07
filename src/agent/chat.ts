@@ -14,13 +14,11 @@ import { userManager } from "../services/user-manager.ts";
 import { heartbeat } from "../services/heartbeat.ts";
 import { generatePersonaSystemPrompt } from "./prompts.ts";
 import { createMemoryServer } from "./tools/memory.ts";
-import { createGDriveServer } from "./tools/gdrive.ts";
 import { createGoalsServer } from "./tools/goals.ts";
 import { createPersonaServer } from "./tools/persona.ts";
 import { createTelegramServer, getTelegramBot } from "./tools/telegram.ts";
 import { getTimeServer } from "./tools/time.ts";
 import { createMoodServer } from "./tools/mood.ts";
-import { createPhoneServer } from "./tools/phone.ts";
 
 
 import { getPersonaService } from "../services/persona.ts";
@@ -104,9 +102,7 @@ const userMoodServers = new Map<number, ReturnType<typeof createMoodServer>>();
 
 
 // Shared servers (same for all users)
-let gdriveServer: ReturnType<typeof createGDriveServer> | null = null;
 let telegramServer: ReturnType<typeof createTelegramServer> | null = null;
-let phoneServer: ReturnType<typeof createPhoneServer> | null = null;
 
 
 /**
@@ -122,16 +118,6 @@ function getMemoryServer(userId: number) {
 }
 
 /**
- * Get or create GDrive server
- */
-function getGDriveServer() {
-  if (!gdriveServer) {
-    gdriveServer = createGDriveServer();
-  }
-  return gdriveServer;
-}
-
-/**
  * Get or create telegram server (shared)
  */
 function getTelegramServer() {
@@ -139,16 +125,6 @@ function getTelegramServer() {
     telegramServer = createTelegramServer();
   }
   return telegramServer;
-}
-
-/**
- * Get or create phone server (shared)
- */
-function getPhoneServer() {
-  if (!phoneServer) {
-    phoneServer = createPhoneServer();
-  }
-  return phoneServer;
 }
 
 /**
@@ -308,14 +284,11 @@ export async function chat(userId: number, message: string | MultimodalMessage):
         // MCP Servers (createSdkMcpServer returns full config)
         mcpServers: {
           memory: getMemoryServer(userId),
-          gdrive: getGDriveServer(),
-
           goals: getGoalsServer(userId),
           persona: getPersonaServer(userId),
           telegram: getTelegramServer(),
           time: getTimeServer(),
           mood: getMoodServer(userId),
-          phone: getPhoneServer(),
           // Gateway - helm, squad, whatsapp via single MCP gateway
           gateway: {
             type: "stdio" as const,
@@ -385,8 +358,10 @@ export async function chat(userId: number, message: string | MultimodalMessage):
                       statusMessage = `🎯 Hedef oluşturuyorum...`;
                     } else if (toolName === "mcp__goals__create_reminder") {
                       statusMessage = `⏰ Hatırlatıcı kuruyorum...`;
-                    } else if (toolName === "mcp__gdrive__gdrive_list") {
+                    } else if (toolName.includes("gdrive_list") || toolName.includes("gdrive_search") || toolName.includes("gdrive_dirs")) {
                       statusMessage = `📁 Google Drive'ı tarıyorum...`;
+                    } else if (toolName.includes("gdrive_link") || toolName.includes("gdrive_info")) {
+                      statusMessage = `📁 Google Drive dosya bilgisi alıyorum...`;
                     } else if (toolName.includes("squad_codex")) {
                       statusMessage = `🤖 Codex ile analiz yapıyorum...`;
                     } else if (toolName.includes("squad_gemini")) {
@@ -415,16 +390,6 @@ export async function chat(userId: number, message: string | MultimodalMessage):
                       statusMessage = `🚀 Yardımcı agent başlatıyorum: ${toolInput.description}`;
                     } else if (toolName === "TodoWrite") {
                       statusMessage = `📋 Görev listesini güncelliyorum...`;
-                    } else if (toolName === "mcp__phone__phone_photo") {
-                      statusMessage = `📸 Telefondan fotoğraf çekiyorum...`;
-                    } else if (toolName === "mcp__phone__phone_audio") {
-                      statusMessage = `🎤 Telefondan ses kaydediyorum...`;
-                    } else if (toolName === "mcp__phone__phone_location") {
-                      statusMessage = `📍 Telefonun konumunu alıyorum...`;
-                    } else if (toolName === "mcp__phone__phone_battery") {
-                      statusMessage = `🔋 Telefon pil durumunu kontrol ediyorum...`;
-                    } else if (toolName === "mcp__phone__phone_list") {
-                      statusMessage = `📱 Bağlı telefonları kontrol ediyorum...`;
                     } else if (!toolName.startsWith("telegram_") && !toolName.startsWith("mcp__telegram_")) {
                       // Skip telegram tools to avoid loops
                       statusMessage = `🔧 ${toolName} kullanıyorum...`;

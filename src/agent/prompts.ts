@@ -48,11 +48,12 @@ ${userContext}
 - **remember**: Önemli bilgileri uzun vadeli hafızaya kaydet
 - **recall**: Hafızada ara, ilgili bilgileri getir
 
-### Google Drive (rclone)
-- **gdrive_list**: Dosyaları listele
-- **gdrive_link**: Paylaşılabilir link oluştur
-- **gdrive_download**: Dosya indir
-- **gdrive_upload**: Dosya yükle
+### Google Drive (rclone, Gateway üzerinden)
+- **mcp__gateway__gdrive_list**: Dosyaları listele (path?, recursive?)
+- **mcp__gateway__gdrive_dirs**: Klasörleri listele
+- **mcp__gateway__gdrive_link**: Paylaşılabilir link oluştur (path)
+- **mcp__gateway__gdrive_info**: Dosya bilgisi al (path)
+- **mcp__gateway__gdrive_search**: Dosya ara (query, path?)
 
 ### Squad MCP - Multi-Agent Araçlar (Gateway üzerinden)
 - **mcp__gateway__squad_codex**: GPT-5.2 Codex (message, workDir)
@@ -63,16 +64,6 @@ ${userContext}
 ### Telegram Araçları
 - **telegram_send_photo**: Kullanıcıya resim gönder
 - **telegram_send_document**: Kullanıcıya dosya gönder
-
-### Telefon Araçları (Termux-API)
-Kullanıcının telefonuna uzaktan erişim. Fotoğraf çekmek, ses kaydetmek, konum almak için kullan.
-- **mcp__phone__phone_list**: Bağlı telefonları listele
-- **mcp__phone__phone_photo**: Telefonun kamerasıyla fotoğraf çek (front/back)
-- **mcp__phone__phone_audio**: Telefonun mikrofonuyla ses kaydet
-- **mcp__phone__phone_location**: Telefonun GPS konumunu al
-- **mcp__phone__phone_battery**: Telefon pil durumunu öğren
-
-Kullanıcı "beni gör", "neredeyim", "fotoğraf çek" gibi isteklerde bu araçları kullan.
 
 ### Sistem Araçları
 - Bash, Read, Write, Edit, Glob, Grep - standart dosya/kod işlemleri
@@ -293,11 +284,12 @@ function buildToolsSection(): string {
 - **create_reminder**: Hatırlatıcı kur
 - **list_reminders**: Hatırlatıcıları listele
 
-### Google Drive (rclone)
-- **gdrive_list**: Dosyaları listele
-- **gdrive_link**: Paylaşılabilir link oluştur
-- **gdrive_download**: Dosya indir
-- **gdrive_upload**: Dosya yükle
+### Google Drive (rclone, Gateway üzerinden)
+- **mcp__gateway__gdrive_list**: Dosyaları listele (path?, recursive?)
+- **mcp__gateway__gdrive_dirs**: Klasörleri listele
+- **mcp__gateway__gdrive_link**: Paylaşılabilir link oluştur (path)
+- **mcp__gateway__gdrive_info**: Dosya bilgisi al (path)
+- **mcp__gateway__gdrive_search**: Dosya ara (query, path?)
 
 ### Squad MCP - Multi-Agent Araçlar (Gateway üzerinden)
 Squad MCP üzerinden 3 farklı AI modeline erişebilirsin:
@@ -335,20 +327,6 @@ Her zaman --json flag kullan. Mail göndermeden önce kullanıcıdan onay al.
 - **telegram_send_photo**: Kullanıcıya resim gönder
 - **telegram_send_document**: Kullanıcıya dosya gönder
 - **telegram_send_message_with_buttons**: Butonlu mesaj gönder
-
-### Telefon Araçları (Termux-API)
-Kullanıcının telefonuna uzaktan erişim. Termux-API üzerinden çalışır.
-
-- **mcp__phone__phone_list**: Bağlı telefonları listele
-- **mcp__phone__phone_photo**: Telefonun kamerasıyla fotoğraf çek
-  - Parametreler: phone_id? (string), camera ("front" | "back")
-  - "Beni gör", "selfie çek" gibi isteklerde front kamera kullan
-- **mcp__phone__phone_audio**: Telefonun mikrofonuyla ses kaydet
-  - Parametreler: phone_id? (string), duration (1-60 saniye)
-- **mcp__phone__phone_location**: Telefonun GPS konumunu al
-  - "Neredeyim", "konumumu göster" gibi isteklerde kullan
-- **mcp__phone__phone_battery**: Telefon pil durumunu öğren
-- **mcp__phone__phone_media**: Telefondan çekilen son medyaları listele
 
 ### Helm - Browser Kontrolü (fjds Sunucusu, Gateway üzerinden)
 **ÖNEMLİ:** Helm MCP, fjds sunucusunda (100.114.23.43) çalışan Chrome'u kontrol eder.
