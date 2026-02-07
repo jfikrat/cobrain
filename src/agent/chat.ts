@@ -12,7 +12,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { userManager } from "../services/user-manager.ts";
 import { heartbeat } from "../services/heartbeat.ts";
-import { generateSystemPrompt, generatePersonaSystemPrompt } from "./prompts.ts";
+import { generatePersonaSystemPrompt } from "./prompts.ts";
 import { createMemoryServer } from "./tools/memory.ts";
 import { createGDriveServer } from "./tools/gdrive.ts";
 import { createGoalsServer } from "./tools/goals.ts";
@@ -393,7 +393,23 @@ export async function chat(userId: number, message: string | MultimodalMessage):
                       statusMessage = `🤖 Gemini ile kod üretiyorum...`;
                     } else if (toolName.includes("squad_claude")) {
                       statusMessage = `🤖 Claude Code ile görüşüyorum...`;
-                    } else if (toolName.includes("gateway__services") || toolName.includes("gateway__health")) {
+                    } else if (toolName.includes("helm_browser_navigate")) {
+                      statusMessage = `🌐 Sayfaya gidiyorum...`;
+                    } else if (toolName.includes("helm_browser_screenshot")) {
+                      statusMessage = `📸 Ekran görüntüsü alıyorum...`;
+                    } else if (toolName.includes("helm_browser_click")) {
+                      statusMessage = `👆 Elemente tıklıyorum...`;
+                    } else if (toolName.includes("helm_browser_type")) {
+                      statusMessage = `⌨️ Metin yazıyorum...`;
+                    } else if (toolName.includes("whatsapp_send_message")) {
+                      statusMessage = `💬 WhatsApp mesajı gönderiyorum...`;
+                    } else if (toolName.includes("whatsapp_get_messages")) {
+                      statusMessage = `💬 WhatsApp mesajlarını okuyorum...`;
+                    } else if (toolName.includes("whatsapp_get_chats")) {
+                      statusMessage = `💬 WhatsApp sohbetlerini listeliyorum...`;
+                    } else if (toolName.includes("whatsapp_get_contacts")) {
+                      statusMessage = `📇 WhatsApp kişilerini arıyorum...`;
+                    } else if (toolName.includes("gateway__services") || toolName.includes("gateway__health") || toolName.includes("gateway__activate") || toolName.includes("gateway__deactivate") || toolName.includes("gateway__restart")) {
                       // Gateway management — skip notification
                     } else if (toolName === "Task") {
                       statusMessage = `🚀 Yardımcı agent başlatıyorum: ${toolInput.description}`;

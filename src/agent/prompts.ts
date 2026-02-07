@@ -6,7 +6,6 @@
 
 import type { UserSettings } from "../types/user.ts";
 import type { Persona } from "../types/persona.ts";
-import { DEFAULT_PERSONA } from "../types/persona.ts";
 
 /**
  * Ana Cobrain system prompt'u oluştur (legacy, settings-based)
@@ -55,11 +54,11 @@ ${userContext}
 - **gdrive_download**: Dosya indir
 - **gdrive_upload**: Dosya yükle
 
-### Squad MCP - Multi-Agent Araçlar
-- **mcp__squad__codex**: GPT-5.2 Codex (message, workDir)
-- **mcp__squad__gemini**: Gemini 3 (message, workDir, model?)
-- **mcp__squad__claude**: Claude Opus 4.6 (message, workDir)
-- **mcp__squad__parallel_search**: Paralel arama (queries, workDir)
+### Squad MCP - Multi-Agent Araçlar (Gateway üzerinden)
+- **mcp__gateway__squad_codex**: GPT-5.2 Codex (message, workDir)
+- **mcp__gateway__squad_gemini**: Gemini 3 (message, workDir, model?)
+- **mcp__gateway__squad_claude**: Claude Opus 4.6 (message, workDir)
+- **mcp__gateway__squad_parallel_search**: Paralel arama (queries, workDir)
 
 ### Telegram Araçları
 - **telegram_send_photo**: Kullanıcıya resim gönder
@@ -373,10 +372,26 @@ Helm ile yapabileceklerin:
 - **mcp__gateway__helm_browser_status**: Bağlantı durumu
 
 **Kullanım örneği:**
-1. helm_browser_navigate ile sayfaya git
-2. helm_browser_screenshot ile görüntü al
+1. mcp__gateway__helm_browser_navigate ile sayfaya git
+2. mcp__gateway__helm_browser_screenshot ile görüntü al
 3. Görüntüyü analiz et, element bul
-4. helm_browser_click veya helm_browser_type ile etkileşim
+4. mcp__gateway__helm_browser_click veya mcp__gateway__helm_browser_type ile etkileşim
+
+### WhatsApp (Gateway üzerinden)
+**KRİTİK:** Mesaj göndermeden ÖNCE mutlaka kullanıcıdan onay al!
+
+- **mcp__gateway__whatsapp_send_message**: Mesaj gönder (to, message)
+- **mcp__gateway__whatsapp_get_chats**: Son sohbetleri listele
+- **mcp__gateway__whatsapp_get_messages**: Sohbet geçmişi (chatId, limit?)
+- **mcp__gateway__whatsapp_get_contacts**: Kişi listesi (search?, limit?)
+- **mcp__gateway__whatsapp_get_status**: Bağlantı durumu
+- **mcp__gateway__whatsapp_get_groups**: Grupları listele
+- **mcp__gateway__whatsapp_send_image**: Resim gönder (to, imagePath, caption?)
+- **mcp__gateway__whatsapp_send_document**: Dosya gönder (to, filePath, filename?)
+- **mcp__gateway__whatsapp_get_calls**: Arama geçmişi
+- **mcp__gateway__whatsapp_react**: Mesaja tepki ver
+- **mcp__gateway__whatsapp_mark_read**: Okundu olarak işaretle
+- **mcp__gateway__whatsapp_get_presence**: Çevrimiçi durumu
 
 ### Gateway — Servis Yönetimi
 Harici MCP servisleri (helm, squad, whatsapp) gateway üzerinden çalışır.
