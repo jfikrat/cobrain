@@ -414,8 +414,65 @@ Helm ile yapabileceklerin:
 - **mcp__gateway__whatsapp_mark_read**: Okundu olarak işaretle
 - **mcp__gateway__whatsapp_get_presence**: Çevrimiçi durumu
 
+### Grok (Gateway üzerinden)
+grok.com API'lerine erişim. Grok AI ile sohbet, finans verileri, haberler, ses ve medya araçları.
+
+**Sohbet:**
+- **mcp__gateway__grok_send_message**: Grok'a mesaj gönder (message, model?, conversationId?)
+- **mcp__gateway__grok_quick_answer**: Hızlı yanıt al (yeni sohbet oluşturur)
+- **mcp__gateway__grok_list_conversations**: Sohbetleri listele
+- **mcp__gateway__grok_get_conversation**: Sohbet detayı (conversationId)
+- **mcp__gateway__grok_delete_conversation**: Sohbet sil (conversationId)
+- **mcp__gateway__grok_run_code**: Grok sandbox'ta kod çalıştır
+- **mcp__gateway__grok_read_response**: Mevcut yanıtı oku
+
+**Modeller:** grok-3, grok-4, grok-4-1, grok-4-heavy, grok-4-1-thinking
+- **mcp__gateway__grok_list_models**: Mevcut modelleri listele
+
+**Finans:**
+- **mcp__gateway__grok_finance_overview**: Piyasa genel görünümü
+- **mcp__gateway__grok_finance_chart**: Fiyat grafiği (ticker, timespan)
+- **mcp__gateway__grok_finance_summary**: Hisse özeti (ticker)
+- **mcp__gateway__grok_financials**: Mali tablolar (ticker, timeframe)
+- **mcp__gateway__grok_related_tickers**: İlgili hisseler (ticker)
+
+**Haberler & Trendler:**
+- **mcp__gateway__grok_get_stories**: Gündem haberleri
+- **mcp__gateway__grok_get_story**: Haber detayı (storyId)
+- **mcp__gateway__grok_source_posts**: Kaynak postlar
+- **mcp__gateway__grok_discussion_posts**: Tartışma postları (storyId)
+
+**Ses:**
+- **mcp__gateway__grok_tts**: Metinden sese dönüştür
+- **mcp__gateway__grok_speech_to_text**: Sesten metne dönüştür
+- **mcp__gateway__grok_list_voices**: Mevcut sesleri listele
+
+**Hafıza:**
+- **mcp__gateway__grok_create_memory**: Grok hafızasına kaydet
+- **mcp__gateway__grok_list_memories**: Grok hafızasını listele
+- **mcp__gateway__grok_delete_memory**: Hafıza sil
+
+**Medya:**
+- **mcp__gateway__grok_create_media_post**: Medya postu oluştur
+- **mcp__gateway__grok_list_media_posts**: Postları listele
+- **mcp__gateway__grok_list_image_generations**: Görsel üretimlerini listele
+
+**Görevler:**
+- **mcp__gateway__grok_list_tasks**: Zamanlanmış görevleri listele
+- **mcp__gateway__grok_task_results**: Görev sonuçları (taskId)
+
+**Projeler & Workspace:**
+- **mcp__gateway__grok_list_assets**: Projeleri listele
+- **mcp__gateway__grok_create_asset**: Yeni proje oluştur
+- **mcp__gateway__grok_search_assets**: Proje ara (query)
+- **mcp__gateway__grok_list_workspaces**: Workspace'leri listele
+
+**Auth:**
+- **mcp__gateway__grok_get_auth_status**: Bağlantı durumu
+- **mcp__gateway__grok_get_user**: Kullanıcı bilgisi
+
 ### Gateway — Servis Yönetimi
-Harici MCP servisleri (helm, squad, whatsapp) gateway üzerinden çalışır.
+Harici MCP servisleri (helm, squad, whatsapp, grok) gateway üzerinden çalışır.
 Servisler ilk kullanımda otomatik aktive olur — manuel activate gerekmez.
 
 - **mcp__gateway__services**: Tüm servislerin durumunu listele
