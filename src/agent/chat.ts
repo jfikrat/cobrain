@@ -19,6 +19,7 @@ import { createPersonaServer } from "./tools/persona.ts";
 import { createTelegramServer, getTelegramBot } from "./tools/telegram.ts";
 import { getTimeServer } from "./tools/time.ts";
 import { createMoodServer } from "./tools/mood.ts";
+import { createLocationServer } from "./tools/location.ts";
 
 
 import { getPersonaService } from "../services/persona.ts";
@@ -101,6 +102,7 @@ const userMemoryServers = new Map<number, ReturnType<typeof createMemoryServer>>
 const userGoalsServers = new Map<number, ReturnType<typeof createGoalsServer>>();
 const userPersonaServers = new Map<number, ReturnType<typeof createPersonaServer>>();
 const userMoodServers = new Map<number, ReturnType<typeof createMoodServer>>();
+const userLocationServers = new Map<number, ReturnType<typeof createLocationServer>>();
 
 
 // Shared servers (same for all users)
@@ -161,6 +163,18 @@ function getMoodServer(userId: number) {
   if (!server) {
     server = createMoodServer(userId);
     userMoodServers.set(userId, server);
+  }
+  return server;
+}
+
+/**
+ * Get or create location server for user
+ */
+function getLocationServer(userId: number) {
+  let server = userLocationServers.get(userId);
+  if (!server) {
+    server = createLocationServer(userId);
+    userLocationServers.set(userId, server);
   }
   return server;
 }
@@ -321,6 +335,7 @@ export async function chat(userId: number, message: string | MultimodalMessage):
           telegram: getTelegramServer(),
           time: getTimeServer(),
           mood: getMoodServer(userId),
+          location: getLocationServer(userId),
           // Gateway - helm, squad, whatsapp via single MCP gateway
           gateway: {
             type: "stdio" as const,
@@ -390,6 +405,14 @@ export async function chat(userId: number, message: string | MultimodalMessage):
                       statusMessage = `🎯 Hedef oluşturuyorum...`;
                     } else if (toolName === "mcp__goals__create_reminder") {
                       statusMessage = `⏰ Hatırlatıcı kuruyorum...`;
+                    } else if (toolName === "mcp__location__save_location") {
+                      statusMessage = `📍 Konum kaydediyorum: "${toolInput.name}"`;
+                    } else if (toolName === "mcp__location__get_distance") {
+                      statusMessage = `🗺️ Mesafe hesaplıyorum: ${toolInput.origin} → ${toolInput.destination}`;
+                    } else if (toolName === "mcp__location__geocode") {
+                      statusMessage = `🗺️ Adres çözümlüyorum...`;
+                    } else if (toolName === "mcp__location__list_locations") {
+                      statusMessage = `📍 Kayıtlı konumları listeliyorum...`;
                     } else if (toolName.includes("gdrive_list") || toolName.includes("gdrive_search") || toolName.includes("gdrive_dirs")) {
                       statusMessage = `📁 Google Drive'ı tarıyorum...`;
                     } else if (toolName.includes("gdrive_link") || toolName.includes("gdrive_info")) {
