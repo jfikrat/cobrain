@@ -8,6 +8,23 @@ import type { UserSettings } from "../types/user.ts";
 import type { Persona } from "../types/persona.ts";
 
 /**
+ * Dynamic context injected into system prompt per conversation
+ */
+export interface DynamicContext {
+  time: {
+    now: string;        // "08 Şubat 2026, Pazar, 02:30"
+    dayPart: string;    // "gece" | "sabah" | "öğle" | "akşam"
+    isWeekend: boolean;
+  };
+  mood?: {
+    current: string;    // "good", "low" etc.
+    energy: number;     // 1-5
+    trend: string;      // "improving" | "stable" | "declining"
+  };
+  recentMemories?: string[];  // Son 5 hafıza entry'sinin content'leri
+}
+
+/**
  * Ana Cobrain system prompt'u oluştur (legacy, settings-based)
  * @deprecated Use generatePersonaSystemPrompt instead
  */
@@ -131,10 +148,10 @@ function buildUserContext(
 /**
  * Generate XML-structured system prompt from persona
  */
-export function generatePersonaSystemPrompt(persona: Persona): string {
-  const xml = buildPersonaXml(persona);
+export function generatePersonaSystemPrompt(persona: Persona, dynamicContext?: DynamicContext): string {
+  const xml = buildPersonaXml(persona, dynamicContext);
   const tools = buildToolsSection();
-  const rules = buildRulesSection(persona);
+  const rules = buildRulesSection(persona, dynamicContext);
   const format = buildFormatSection(persona);
 
   // Strong identity preamble to override any default Claude Code identity
@@ -165,7 +182,7 @@ ${format}`;
 /**
  * Build XML persona block
  */
-function buildPersonaXml(persona: Persona): string {
+function buildPersonaXml(persona: Persona, dynamicContext?: DynamicContext): string {
   const { identity, voice, behavior, boundaries, userContext } = persona;
 
   // Voice descriptions
@@ -189,6 +206,9 @@ ${boundaries.alwaysAskPermission.map(a => `    <action>${escapeXml(a)}</action>`
 
   // User context
   const userContextXml = buildUserContextXml(userContext);
+
+  // Dynamic context XML
+  const dynamicContextXml = dynamicContext ? buildDynamicContextXml(dynamicContext) : '';
 
   return `<cobrain-system-prompt version="1.0">
 
@@ -220,7 +240,7 @@ ${boundaries.alwaysAskPermission.map(a => `    <action>${escapeXml(a)}</action>`
 </boundaries>
 
 ${userContextXml}
-
+${dynamicContextXml}
 </cobrain-system-prompt>`;
 }
 
@@ -259,6 +279,29 @@ ${ctx.communicationNotes.map(n => `    <note>${escapeXml(n)}</note>`).join('\n')
   }
 
   xml += '\n</user-context>';
+  return xml;
+}
+
+/**
+ * Build dynamic context XML (time, mood, recent memories)
+ */
+function buildDynamicContextXml(ctx: DynamicContext): string {
+  let xml = `<dynamic-context>
+  <time now="${escapeXml(ctx.time.now)}" dayPart="${escapeXml(ctx.time.dayPart)}" isWeekend="${ctx.time.isWeekend}"/>`;
+
+  if (ctx.mood) {
+    xml += `\n  <mood current="${escapeXml(ctx.mood.current)}" energy="${ctx.mood.energy}" trend="${escapeXml(ctx.mood.trend)}"/>`;
+  }
+
+  if (ctx.recentMemories && ctx.recentMemories.length > 0) {
+    xml += `\n  <recent-memories>`;
+    for (const mem of ctx.recentMemories) {
+      xml += `\n    <memory>${escapeXml(mem)}</memory>`;
+    }
+    xml += `\n  </recent-memories>`;
+  }
+
+  xml += `\n</dynamic-context>`;
   return xml;
 }
 
@@ -388,7 +431,7 @@ Servisler ilk kullanımda otomatik aktive olur — manuel activate gerekmez.
 /**
  * Build rules section based on persona
  */
-function buildRulesSection(persona: Persona): string {
+function buildRulesSection(persona: Persona, dynamicContext?: DynamicContext): string {
   const { behavior, boundaries, voice } = persona;
 
   let rules = `## Çalışma İlkeleri
@@ -513,6 +556,29 @@ cobrain-restart
 ### CLI Komutları
 \`/help\`, \`/config\` gibi komutlar Claude Code'a ait. Senin Telegram komutların farklı.
 `;
+
+  // Contextual awareness rules (only when dynamic context is available)
+  if (dynamicContext) {
+    rules += `
+## Bağlamsal Farkındalık
+
+### Zaman Uyumu
+- Gece (00-06): Kısa yanıtlar ver, gereksiz detaydan kaçın, "geç saatte" farkındalığı göster
+- Sabah (06-12): Enerjik ol, günün planını hatırlat, motive edici
+- Öğle (12-18): Normal tempo, detaylı yanıtlara açık
+- Akşam (18-00): Sakin, günün özetini sunmaya hazır, rahat ton
+
+### Mood Uyumu
+- Mood düşükse (low/bad): Destekleyici ol, kısa tut, çözüm odaklı, empati göster
+- Mood iyiyse (good/great): Enerjiyi paylaş, iddialı öneriler sun
+- Mood nötralse: Normal davran
+
+### Hafıza Kullanımı
+- Son hafıza bilgilerini doğal şekilde referans et (zorlamadan)
+- "Daha önce bahsettiğin..." veya "Geçen konuşmamızda..." gibi doğal geçişler kullan
+- Her yanıtta hafızadan bahsetmek zorunda değilsin, sadece ilgili olduğunda
+`;
+  }
 
   return rules;
 }

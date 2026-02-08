@@ -12,7 +12,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { userManager } from "../services/user-manager.ts";
 import { heartbeat } from "../services/heartbeat.ts";
-import { generatePersonaSystemPrompt } from "./prompts.ts";
+import { generatePersonaSystemPrompt, type DynamicContext } from "./prompts.ts";
 import { createMemoryServer } from "./tools/memory.ts";
 import { createGoalsServer } from "./tools/goals.ts";
 import { createPersonaServer } from "./tools/persona.ts";
@@ -22,6 +22,8 @@ import { createMoodServer } from "./tools/mood.ts";
 
 
 import { getPersonaService } from "../services/persona.ts";
+import { getMoodTrackingService } from "../services/mood-tracking.ts";
+import { SmartMemory } from "../memory/smart-memory.ts";
 import { needsPermission, askToolPermission, type PermissionMode } from "./permissions.ts";
 import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
@@ -222,10 +224,40 @@ export async function chat(userId: number, message: string | MultimodalMessage):
   const settings = await userManager.getUserSettings(userId);
   const userFolder = userManager.getUserFolder(userId);
 
-  // Get persona and generate system prompt
+  // Get persona
   const personaService = await getPersonaService(userId);
   const persona = await personaService.getActivePersona();
-  const systemPrompt = generatePersonaSystemPrompt(persona);
+
+  // Build dynamic context (time + mood + recent memories)
+  const dynamicTime = buildTimeContext();
+
+  let dynamicMood: DynamicContext['mood'] = undefined;
+  try {
+    const moodService = await getMoodTrackingService(userId);
+    const current = moodService.getCurrentMood();
+    const trend = moodService.getMoodTrend(7);
+    if (current) {
+      dynamicMood = {
+        current: current.mood,
+        energy: current.energy,
+        trend: trend.direction,
+      };
+    }
+  } catch {}
+
+  let recentMemories: string[] = [];
+  try {
+    const memory = new SmartMemory(userFolder, userId);
+    const entries = memory.getRecent(5);
+    recentMemories = entries.map(e => e.content);
+    memory.close();
+  } catch {}
+
+  const systemPrompt = generatePersonaSystemPrompt(persona, {
+    time: dynamicTime,
+    mood: dynamicMood,
+    recentMemories,
+  });
 
   // Get or resume session (checks in-memory cache, then DB with TTL)
   const existingSessionId = await getOrResumeSession(userId);
@@ -565,4 +597,24 @@ export function getSessionInfo(userId: number): { sessionId: string | null } {
   return {
     sessionId: userSessions.get(userId) || null,
   };
+}
+
+/**
+ * Build time context for dynamic prompt injection
+ */
+function buildTimeContext(): DynamicContext['time'] {
+  const now = new Date();
+  const hour = now.getHours();
+  const dayPart = hour < 6 ? "gece" : hour < 12 ? "sabah" : hour < 18 ? "öğle" : "akşam";
+  const isWeekend = [0, 6].includes(now.getDay());
+  const formatted = now.toLocaleDateString("tr-TR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    weekday: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Istanbul",
+  });
+  return { now: formatted, dayPart, isWeekend };
 }
