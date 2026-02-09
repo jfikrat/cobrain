@@ -770,6 +770,41 @@ bot.on("message:photo", async (ctx) => {
   }
 });
 
+// ============ KONUM MESAJI HANDLER ============
+
+bot.on("message:location", async (ctx) => {
+  const userId = ctx.from?.id ?? 0;
+
+  if (!isAuthorized(userId)) {
+    console.log(`Yetkisiz erişim denemesi: ${userId}`);
+    return;
+  }
+
+  // Record interaction for Living Assistant
+  recordInteraction(userId);
+
+  try {
+    const { latitude, longitude } = ctx.message.location;
+
+    // Konum bilgisini metin olarak AI'a gönder
+    const locationText = `Kullanıcı Telegram'dan konum paylaştı: latitude=${latitude}, longitude=${longitude}
+
+Bu konumu analiz et:
+1. Reverse geocode yaparak adresini bul
+2. Kullanıcıya nerede olduğunu söyle
+3. Eğer kullanıcı daha önce bir bağlamda konuşuyorduysa (konum kaydetme, mesafe hesaplama vb.) bu konumu o bağlamda kullan`;
+
+    await userManager.ensureUser(userId);
+    const response = await think(userId, locationText);
+
+    await ctx.reply(response.content, { parse_mode: "HTML" });
+
+  } catch (error) {
+    console.error("Location handler error:", error);
+    await ctx.reply("❌ Konum işlenirken hata oluştu!");
+  }
+});
+
 // ============ MESAJ HANDLER (AI Sohbet) ============
 
 bot.on("message:text", async (ctx) => {
