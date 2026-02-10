@@ -6,7 +6,7 @@
 
 import { Database } from "bun:sqlite";
 
-const WHATSAPP_DB_PATH = process.env.WHATSAPP_DB_PATH || "/home/fekrat/baileys-test/db/whatsapp.db";
+const WHATSAPP_DB_PATH = process.env.WHATSAPP_DB_PATH || "/home/fjds/projects/whatsapp/db/whatsapp.db";
 
 export interface Contact {
   jid: string;
@@ -233,6 +233,49 @@ class WhatsAppDBService {
       connected: !!userId,
       user: userName || null,
     };
+  }
+
+  /**
+   * Okunmamış DM bildirimlerini getir (gruplar hariç)
+   */
+  getPendingNotifications(limit: number = 20): {
+    id: number;
+    chat_jid: string;
+    sender_jid: string;
+    sender_name: string;
+    message_id: string;
+    content: string;
+    message_type: string;
+    created_at: number;
+  }[] {
+    if (!this.db) return [];
+    try {
+      return this.db.query<any, [number]>(
+        `SELECT * FROM notifications
+         WHERE status = 'pending' AND is_group = 0
+         ORDER BY created_at ASC
+         LIMIT ?`
+      ).all(limit);
+    } catch {
+      return []; // Table might not exist yet
+    }
+  }
+
+  /**
+   * Bildirimleri okundu olarak isaretle
+   */
+  markNotificationsRead(ids: number[]): void {
+    if (!this.db || ids.length === 0) return;
+    try {
+      const placeholders = ids.map(() => "?").join(",");
+      this.db.run(
+        `UPDATE notifications SET status = 'read', read_at = strftime('%s', 'now')
+         WHERE id IN (${placeholders})`,
+        ...ids
+      );
+    } catch {
+      // Ignore if table doesn't exist
+    }
   }
 
   close() {

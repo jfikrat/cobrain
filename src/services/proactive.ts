@@ -11,6 +11,7 @@ import { getGoalsService } from "./goals.ts";
 import { userManager } from "./user-manager.ts";
 import { pruneMemories, think } from "../brain/index.ts";
 import { initLivingAssistant, stopLivingAssistant, recordInteraction, recordUserActivity } from "./living-assistant.ts";
+import { whatsappDB } from "./whatsapp-db.ts";
 import type { ScheduledTask, QueuedTask, TaskResult, TaskType } from "../types/autonomous.ts";
 
 let bot: Bot | null = null;
@@ -46,6 +47,9 @@ export function initProactive(botInstance: Bot): void {
   // Start reminder check interval (every minute)
   startReminderChecker();
 
+  // Start WhatsApp DM notification checker (every 30 seconds)
+  startWhatsAppNotificationChecker();
+
   // Start Living Assistant (AI-powered proactive awareness)
   initLivingAssistant(bot);
 
@@ -68,6 +72,11 @@ export function stopProactive(): void {
   if (reminderIntervalId) {
     clearInterval(reminderIntervalId);
     reminderIntervalId = null;
+  }
+
+  if (whatsappNotifIntervalId) {
+    clearInterval(whatsappNotifIntervalId);
+    whatsappNotifIntervalId = null;
   }
 
   // Stop Living Assistant
@@ -303,4 +312,89 @@ async function checkDueReminders(): Promise<void> {
   } catch (error) {
     console.error(`[Proactive] Error checking reminders:`, error);
   }
+}
+
+// ========== WHATSAPP DM NOTIFICATION CHECKER ==========
+
+let whatsappNotifIntervalId: ReturnType<typeof setInterval> | null = null;
+
+function startWhatsAppNotificationChecker(): void {
+  if (!whatsappDB.isAvailable()) {
+    console.log("[Proactive] WhatsApp DB unavailable, DM notifications disabled");
+    return;
+  }
+
+  // Check every 30 seconds
+  whatsappNotifIntervalId = setInterval(async () => {
+    await checkWhatsAppNotifications();
+  }, 30_000);
+
+  // Initial check after 10 seconds (let everything start up first)
+  setTimeout(() => checkWhatsAppNotifications(), 10_000);
+
+  console.log("[Proactive] WhatsApp DM notification checker started (30s interval)");
+}
+
+async function checkWhatsAppNotifications(): Promise<void> {
+  if (!bot) return;
+
+  try {
+    const notifications = whatsappDB.getPendingNotifications(10);
+    if (notifications.length === 0) return;
+
+    const { config } = await import("../config.ts");
+    const userId = config.MY_TELEGRAM_ID;
+
+    // Group notifications by sender for cleaner display
+    const bySender = new Map<string, typeof notifications>();
+    for (const notif of notifications) {
+      const key = notif.sender_name || notif.chat_jid;
+      if (!bySender.has(key)) bySender.set(key, []);
+      bySender.get(key)!.push(notif);
+    }
+
+    // Build notification message
+    let message = `<b>WhatsApp</b>\n\n`;
+
+    for (const [sender, msgs] of bySender) {
+      if (msgs.length === 1) {
+        const msg = msgs[0];
+        const typeLabel = msg.message_type === "audio" ? "[Ses] " :
+                         msg.message_type === "image" ? "[Resim] " :
+                         msg.message_type === "video" ? "[Video] " :
+                         msg.message_type === "document" ? "[Dosya] " : "";
+        const content = (msg.content || "").slice(0, 100);
+        message += `<b>${escapeHtml(sender)}</b>: ${typeLabel}${escapeHtml(content)}\n`;
+      } else {
+        message += `<b>${escapeHtml(sender)}</b>: ${msgs.length} yeni mesaj\n`;
+        // Show last message preview
+        const last = msgs[msgs.length - 1];
+        const content = (last.content || "").slice(0, 80);
+        if (content) {
+          message += `  <i>${escapeHtml(content)}</i>\n`;
+        }
+      }
+    }
+
+    // Send to Telegram
+    await bot.api.sendMessage(userId, message, { parse_mode: "HTML" });
+
+    // Mark as read
+    const ids = notifications.map((n) => n.id);
+    whatsappDB.markNotificationsRead(ids);
+
+    heartbeat("whatsapp_notifications", {
+      sent: notifications.length,
+      senders: bySender.size,
+    });
+  } catch (error) {
+    console.error("[Proactive] WhatsApp notification check error:", error);
+  }
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
