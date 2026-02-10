@@ -349,35 +349,19 @@ async function checkWhatsAppNotifications(): Promise<void> {
     const dms = notifications.filter((n) => !n.is_group);
     const groupMsgs = notifications.filter((n) => n.is_group);
 
-    // --- DMs: simple notification to Telegram ---
+    // --- DMs: AI analysis + smart reply ---
     if (dms.length > 0) {
+      // Group by sender
       const bySender = new Map<string, typeof dms>();
       for (const notif of dms) {
-        const key = notif.sender_name || notif.chat_jid;
+        const key = notif.chat_jid; // group by chat JID for accurate reply targeting
         if (!bySender.has(key)) bySender.set(key, []);
         bySender.get(key)!.push(notif);
       }
 
-      let message = `<b>WhatsApp</b>\n\n`;
-      for (const [sender, msgs] of bySender) {
-        if (msgs.length === 1) {
-          const msg = msgs[0];
-          const typeLabel = msg.message_type === "audio" ? "[Ses] " :
-                           msg.message_type === "image" ? "[Resim] " :
-                           msg.message_type === "video" ? "[Video] " :
-                           msg.message_type === "document" ? "[Dosya] " : "";
-          const content = (msg.content || "").slice(0, 100);
-          message += `<b>${escapeHtml(sender)}</b>: ${typeLabel}${escapeHtml(content)}\n`;
-        } else {
-          message += `<b>${escapeHtml(sender)}</b>: ${msgs.length} yeni mesaj\n`;
-          const last = msgs[msgs.length - 1];
-          const content = (last.content || "").slice(0, 80);
-          if (content) {
-            message += `  <i>${escapeHtml(content)}</i>\n`;
-          }
-        }
+      for (const [chatJid, msgs] of bySender) {
+        await handleDMMessages(msgs, chatJid, userId);
       }
-      await bot.api.sendMessage(userId, message, { parse_mode: "HTML" });
     }
 
     // --- Group messages: AI analysis + auto-reply ---
@@ -397,6 +381,139 @@ async function checkWhatsAppNotifications(): Promise<void> {
   } catch (error) {
     console.error("[Proactive] WhatsApp notification check error:", error);
   }
+}
+
+/**
+ * Handle incoming DMs with AI analysis.
+ *
+ * Tier 1 - Auto-reply (no approval needed):
+ *   Simple greetings, "are you available?", sticker/emoji responses
+ *
+ * Tier 2 - Notify + suggest reply (user approves):
+ *   Questions, meeting requests, important messages
+ *
+ * Tier 3 - Just notify:
+ *   Media, unclear messages, topics I don't know about
+ */
+async function handleDMMessages(
+  messages: ReturnType<typeof whatsappDB.getPendingNotifications>,
+  chatJid: string,
+  telegramUserId: number
+): Promise<void> {
+  if (!bot) return;
+
+  const senderName = messages[0].sender_name || chatJid.split("@")[0];
+  const msgSummary = messages.map((m) => {
+    const typeLabel = m.message_type !== "text" ? `[${m.message_type}] ` : "";
+    return `${typeLabel}${m.content || ""}`;
+  }).join("\n");
+
+  const prompt = `[SYSTEM - WhatsApp DM Analizi]
+
+"${senderName}" sana dogrudan mesaj gondermis:
+
+${msgSummary}
+
+Analiz et ve karar ver:
+
+KATMAN 1 - Otomatik cevapla (onay gerektirmez):
+- Basit selamlasmalar: selam, merhaba, gunaydin, nasilsin, naber
+- "Musait misin?", "Uygun musun?" -> "Fekrat su an musait degil, en kisa surede doner"
+- Tesekkur mesajlari -> kisa karsilik
+
+KATMAN 2 - Kullaniciya sor (onay gerektirir):
+- Soru iceren mesajlar (randevu, bulusma, bilgi istegi)
+- Onemli konular, uzun mesajlar
+- Cevap verilebilir ama emin degilsen
+
+KATMAN 3 - Sadece bildir:
+- Medya (resim, video, ses, dosya) -- sadece bildirim
+- Belirsiz, anlamsiz veya konu disinda mesajlar
+- Bilmedigin konular
+
+KURALLAR:
+- Sen Cobrain'sin, Fekrat'in AI asistani
+- Samimi ama profesyonel ol
+- Kisinin ismini kullan
+- Kisa ve dogal yaz, uzun cumleler kurma
+
+Yanit formati (JSON):
+{
+  "tier": 1 | 2 | 3,
+  "reason": "kisa aciklama",
+  "reply": "cevap metni (tier 1 icin otomatik gonderilecek)",
+  "suggestedReply": "onerilen cevap (tier 2 icin kullaniciya gosterilecek)"
+}
+
+SADECE JSON dondur.`;
+
+  try {
+    const response = await think(telegramUserId, prompt);
+    const content = response.content || "";
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      // Fallback: just notify
+      await sendDMNotification(messages, senderName, telegramUserId);
+      return;
+    }
+
+    const analysis = JSON.parse(jsonMatch[0]);
+
+    if (analysis.tier === 1 && analysis.reply) {
+      // TIER 1: Auto-reply
+      whatsappDB.addToOutbox(chatJid, analysis.reply);
+
+      const notifyMsg = `<b>WhatsApp - ${escapeHtml(senderName)}</b>\n\n` +
+        messages.map(m => {
+          const typeLabel = m.message_type !== "text" ? `[${m.message_type}] ` : "";
+          return `${typeLabel}${escapeHtml((m.content || "").slice(0, 80))}`;
+        }).join("\n") +
+        `\n\n<i>Otomatik cevap: "${escapeHtml(analysis.reply)}"</i>`;
+
+      await bot.api.sendMessage(telegramUserId, notifyMsg, { parse_mode: "HTML" });
+      console.log(`[Proactive] DM auto-replied to ${senderName}: ${analysis.reply}`);
+
+    } else if (analysis.tier === 2 && analysis.suggestedReply) {
+      // TIER 2: Notify + suggest
+      const notifyMsg = `<b>WhatsApp - ${escapeHtml(senderName)}</b>\n\n` +
+        messages.map(m => {
+          const typeLabel = m.message_type !== "text" ? `[${m.message_type}] ` : "";
+          return `${typeLabel}${escapeHtml((m.content || "").slice(0, 100))}`;
+        }).join("\n") +
+        `\n\n<b>Onerilen cevap:</b> <i>"${escapeHtml(analysis.suggestedReply)}"</i>` +
+        `\n<i>${escapeHtml(analysis.reason || "")}</i>`;
+
+      await bot.api.sendMessage(telegramUserId, notifyMsg, { parse_mode: "HTML" });
+
+    } else {
+      // TIER 3: Just notify
+      await sendDMNotification(messages, senderName, telegramUserId);
+    }
+  } catch (error) {
+    console.error(`[Proactive] DM analysis error for ${senderName}:`, error);
+    await sendDMNotification(messages, senderName, telegramUserId);
+  }
+}
+
+/** Simple DM notification (fallback / tier 3) */
+async function sendDMNotification(
+  messages: ReturnType<typeof whatsappDB.getPendingNotifications>,
+  senderName: string,
+  telegramUserId: number
+): Promise<void> {
+  if (!bot) return;
+
+  let message = `<b>WhatsApp - ${escapeHtml(senderName)}</b>\n\n`;
+  for (const m of messages) {
+    const typeLabel = m.message_type === "audio" ? "[Ses] " :
+                     m.message_type === "image" ? "[Resim] " :
+                     m.message_type === "video" ? "[Video] " :
+                     m.message_type === "document" ? "[Dosya] " : "";
+    const content = (m.content || "").slice(0, 100);
+    message += `${typeLabel}${escapeHtml(content)}\n`;
+  }
+  await bot.api.sendMessage(telegramUserId, message, { parse_mode: "HTML" });
 }
 
 /**
