@@ -45,9 +45,18 @@ export class Scheduler {
         config TEXT DEFAULT '{}',
         enabled INTEGER DEFAULT 1,
         last_run_at DATETIME,
-        next_run_at DATETIME
+        next_run_at DATETIME,
+        running_since DATETIME DEFAULT NULL
       )
     `);
+
+    // Migration: add running_since column for existing installs
+    try {
+      this.globalDb.run(`ALTER TABLE scheduled_tasks ADD COLUMN running_since DATETIME DEFAULT NULL`);
+      console.log("[Scheduler] Migrated: added running_since column");
+    } catch {
+      // Column already exists — ignore
+    }
 
     this.globalDb.run(`CREATE INDEX IF NOT EXISTS idx_scheduled_next_run ON scheduled_tasks(next_run_at)`);
     this.globalDb.run(`CREATE INDEX IF NOT EXISTS idx_scheduled_enabled ON scheduled_tasks(enabled)`);
@@ -73,6 +82,14 @@ export class Scheduler {
     if (this.running) {
       console.log("[Scheduler] Already running");
       return;
+    }
+
+    // Crash recovery: clear stale running_since locks from previous process
+    const recovered = this.globalDb.run(
+      `UPDATE scheduled_tasks SET running_since = NULL WHERE running_since IS NOT NULL`
+    );
+    if (recovered.changes > 0) {
+      console.log(`[Scheduler] Recovered ${recovered.changes} stuck task(s) from previous run`);
     }
 
     this.running = true;
@@ -109,7 +126,7 @@ export class Scheduler {
   private async checkAndRunTasks(): Promise<void> {
     const now = new Date().toISOString();
 
-    // Get due tasks
+    // Get due tasks (skip already-running ones via running_since lock)
     const dueTasks = this.globalDb
       .query<
         {
@@ -126,6 +143,7 @@ export class Scheduler {
       >(
         `SELECT * FROM scheduled_tasks
          WHERE enabled = 1
+         AND running_since IS NULL
          AND (next_run_at IS NULL OR next_run_at <= ?)
          ORDER BY next_run_at ASC`
       )
@@ -158,17 +176,28 @@ export class Scheduler {
       return;
     }
 
+    // Atomic claim: set running_since lock (prevents overlap)
+    const claimed = this.globalDb.run(
+      `UPDATE scheduled_tasks SET running_since = CURRENT_TIMESTAMP
+       WHERE id = ? AND running_since IS NULL`,
+      [task.id]
+    );
+    if (claimed.changes === 0) {
+      console.log(`[Scheduler] Task #${task.id} already running, skipping`);
+      return;
+    }
+
     try {
       console.log(`[Scheduler] Running task #${task.id} (${task.taskType}) for user ${task.userId}`);
 
       await handler(task);
 
-      // Update last_run_at and calculate next_run_at
+      // Update last_run_at, calculate next_run_at, release lock
       const nextRun = this.calculateNextRun(task.schedule);
 
       this.globalDb.run(
         `UPDATE scheduled_tasks
-         SET last_run_at = CURRENT_TIMESTAMP, next_run_at = ?
+         SET last_run_at = CURRENT_TIMESTAMP, next_run_at = ?, running_since = NULL
          WHERE id = ?`,
         [nextRun, task.id]
       );
@@ -177,9 +206,12 @@ export class Scheduler {
     } catch (error) {
       console.error(`[Scheduler] Task #${task.id} failed:`, error);
 
-      // Still update next_run_at to prevent infinite retries
+      // Still update next_run_at and release lock to prevent infinite retries
       const nextRun = this.calculateNextRun(task.schedule);
-      this.globalDb.run(`UPDATE scheduled_tasks SET next_run_at = ? WHERE id = ?`, [nextRun, task.id]);
+      this.globalDb.run(
+        `UPDATE scheduled_tasks SET next_run_at = ?, running_since = NULL WHERE id = ?`,
+        [nextRun, task.id]
+      );
     }
   }
 

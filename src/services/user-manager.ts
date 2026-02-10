@@ -53,6 +53,7 @@ export class UserManager {
         enabled INTEGER DEFAULT 1,
         last_run_at DATETIME,
         next_run_at DATETIME,
+        running_since DATETIME DEFAULT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id)
       )
     `);
@@ -70,6 +71,7 @@ export class UserManager {
         started_at DATETIME,
         completed_at DATETIME,
         error TEXT,
+        source_key TEXT DEFAULT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id)
       )
     `);

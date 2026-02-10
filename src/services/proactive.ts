@@ -137,12 +137,12 @@ export function stopProactive(): void {
 
 async function handleDailySummary(task: ScheduledTask): Promise<void> {
   const taskQueue = getTaskQueue();
-  taskQueue.enqueue(task.userId, "daily_summary", { scheduledTaskId: task.id }, 1);
+  taskQueue.enqueue(task.userId, "daily_summary", { scheduledTaskId: task.id }, 1, `scheduled:${task.id}`);
 }
 
 async function handleGoalCheck(task: ScheduledTask): Promise<void> {
   const taskQueue = getTaskQueue();
-  taskQueue.enqueue(task.userId, "goal_check", { scheduledTaskId: task.id }, 1);
+  taskQueue.enqueue(task.userId, "goal_check", { scheduledTaskId: task.id }, 1, `scheduled:${task.id}`);
 }
 
 async function handleReminder(task: ScheduledTask): Promise<void> {
@@ -152,7 +152,7 @@ async function handleReminder(task: ScheduledTask): Promise<void> {
 
 async function handleMemoryPrune(task: ScheduledTask): Promise<void> {
   const taskQueue = getTaskQueue();
-  taskQueue.enqueue(task.userId, "memory_prune", { scheduledTaskId: task.id }, 0);
+  taskQueue.enqueue(task.userId, "memory_prune", { scheduledTaskId: task.id }, 0, `scheduled:${task.id}`);
 }
 
 // ========== QUEUE TASK HANDLERS ==========
@@ -345,7 +345,7 @@ async function checkDueReminders(): Promise<void> {
     const dueReminders = goalsService.getDueReminders();
 
     for (const reminder of dueReminders) {
-      // Queue the reminder task
+      // Queue the reminder task (with dedup key to prevent double-enqueue)
       taskQueue.enqueue(
         userId,
         "reminder",
@@ -354,7 +354,8 @@ async function checkDueReminders(): Promise<void> {
           title: reminder.title,
           message: reminder.message,
         },
-        5 // High priority
+        5, // High priority
+        `reminder:${reminder.id}`
       );
     }
   } catch (error) {

@@ -70,6 +70,7 @@ export interface ScheduledTask {
   enabled: boolean;
   lastRunAt?: string;
   nextRunAt?: string;
+  runningSince?: string; // lock timestamp — NULL = idle, non-NULL = running
 }
 
 export interface QueuedTask {
@@ -83,6 +84,7 @@ export interface QueuedTask {
   startedAt?: string;
   completedAt?: string;
   error?: string;
+  sourceKey?: string; // dedup key — e.g. "reminder:5", "scheduled:3"
 }
 
 export interface TaskResult {

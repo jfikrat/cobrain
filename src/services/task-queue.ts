@@ -49,12 +49,22 @@ export class TaskQueue {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         started_at DATETIME,
         completed_at DATETIME,
-        error TEXT
+        error TEXT,
+        source_key TEXT DEFAULT NULL
       )
     `);
 
+    // Migration: add source_key column for existing installs
+    try {
+      this.globalDb.run(`ALTER TABLE task_queue ADD COLUMN source_key TEXT DEFAULT NULL`);
+      console.log("[TaskQueue] Migrated: added source_key column");
+    } catch {
+      // Column already exists — ignore
+    }
+
     this.globalDb.run(`CREATE INDEX IF NOT EXISTS idx_queue_status ON task_queue(status, priority DESC)`);
     this.globalDb.run(`CREATE INDEX IF NOT EXISTS idx_queue_user ON task_queue(user_id)`);
+    this.globalDb.run(`CREATE INDEX IF NOT EXISTS idx_queue_source_key ON task_queue(source_key, status)`);
   }
 
   /**
@@ -77,6 +87,14 @@ export class TaskQueue {
     if (this.running) {
       console.log("[TaskQueue] Already running");
       return;
+    }
+
+    // Crash recovery: reset stuck 'running' tasks from previous process
+    const recovered = this.globalDb.run(
+      `UPDATE task_queue SET status = 'pending', started_at = NULL WHERE status = 'running'`
+    );
+    if (recovered.changes > 0) {
+      console.log(`[TaskQueue] Recovered ${recovered.changes} stuck task(s) from previous run`);
     }
 
     this.running = true;
@@ -115,44 +133,59 @@ export class TaskQueue {
     const available = this.config.maxConcurrent - this.runningTasks.size;
     if (available <= 0) return;
 
-    // Get pending tasks
-    const pendingTasks = this.globalDb
-      .query<
-        {
-          id: number;
-          user_id: number;
-          task_type: string;
-          payload: string;
-          priority: number;
-          status: string;
-          created_at: string;
-          started_at: string | null;
-          completed_at: string | null;
-          error: string | null;
-        },
-        [number]
-      >(
-        `SELECT * FROM task_queue
-         WHERE status = 'pending'
-         ORDER BY priority DESC, created_at ASC
-         LIMIT ?`
-      )
-      .all(available);
+    // Atomic claim: SELECT + UPDATE in a single transaction
+    const claimTasks = this.globalDb.transaction((limit: number) => {
+      const pending = this.globalDb
+        .query<
+          {
+            id: number;
+            user_id: number;
+            task_type: string;
+            payload: string;
+            priority: number;
+            status: string;
+            created_at: string;
+            started_at: string | null;
+            completed_at: string | null;
+            error: string | null;
+            source_key: string | null;
+          },
+          [number]
+        >(
+          `SELECT * FROM task_queue
+           WHERE status = 'pending'
+           ORDER BY priority DESC, created_at ASC
+           LIMIT ?`
+        )
+        .all(limit);
 
-    for (const row of pendingTasks) {
-      if (this.runningTasks.has(row.id)) continue;
+      const claimed: typeof pending = [];
+      for (const row of pending) {
+        if (this.runningTasks.has(row.id)) continue;
+        this.globalDb.run(
+          `UPDATE task_queue SET status = 'running', started_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'`,
+          [row.id]
+        );
+        claimed.push(row);
+      }
+      return claimed;
+    });
 
+    const claimedTasks = claimTasks(available);
+
+    for (const row of claimedTasks) {
       const task: QueuedTask = {
         id: row.id,
         userId: row.user_id,
         taskType: row.task_type as TaskType,
         payload: JSON.parse(row.payload),
         priority: row.priority,
-        status: row.status as TaskStatus,
+        status: "running" as TaskStatus,
         createdAt: row.created_at,
-        startedAt: row.started_at ?? undefined,
+        startedAt: new Date().toISOString(),
         completedAt: row.completed_at ?? undefined,
         error: row.error ?? undefined,
+        sourceKey: row.source_key ?? undefined,
       };
 
       // Run task in background
@@ -174,11 +207,7 @@ export class TaskQueue {
 
     this.runningTasks.add(task.id);
 
-    // Mark as running
-    this.globalDb.run(
-      `UPDATE task_queue SET status = 'running', started_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [task.id]
-    );
+    // Already marked as 'running' in processQueue transaction
 
     try {
       console.log(`[TaskQueue] Processing task #${task.id} (${task.taskType})`);
@@ -222,16 +251,31 @@ export class TaskQueue {
     userId: number,
     taskType: TaskType,
     payload: Record<string, unknown>,
-    priority: number = 0
-  ): number {
+    priority: number = 0,
+    sourceKey?: string
+  ): number | null {
+    // Dedup: if sourceKey given, check for existing pending/running task with same key
+    if (sourceKey) {
+      const existing = this.globalDb
+        .query<{ id: number }, [string]>(
+          `SELECT id FROM task_queue WHERE source_key = ? AND status IN ('pending', 'running') LIMIT 1`
+        )
+        .get(sourceKey);
+
+      if (existing) {
+        console.log(`[TaskQueue] Dedup: task with key "${sourceKey}" already queued (#${existing.id}), skipping`);
+        return null;
+      }
+    }
+
     const result = this.globalDb.run(
-      `INSERT INTO task_queue (user_id, task_type, payload, priority)
-       VALUES (?, ?, ?, ?)`,
-      [userId, taskType, JSON.stringify(payload), priority]
+      `INSERT INTO task_queue (user_id, task_type, payload, priority, source_key)
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, taskType, JSON.stringify(payload), priority, sourceKey ?? null]
     );
 
     const taskId = Number(result.lastInsertRowid);
-    console.log(`[TaskQueue] Task #${taskId} queued (${taskType}, priority: ${priority})`);
+    console.log(`[TaskQueue] Task #${taskId} queued (${taskType}, priority: ${priority}${sourceKey ? `, key: ${sourceKey}` : ""})`);
 
     return taskId;
   }
