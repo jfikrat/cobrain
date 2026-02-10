@@ -576,7 +576,7 @@ Harici servisler (helm, squad, whatsapp) tek bir gateway MCP üzerinden çalış
 \`\`\`
 /home/fekrat/projects/cobrain/src/agent/tools/
 ├── memory.ts, goals.ts, gdrive.ts, persona.ts
-├── phone.ts, time.ts, mood.ts, telegram.ts
+├── time.ts, mood.ts, telegram.ts
 \`\`\`
 
 ### Kendini Geliştirme (Self-Improvement) Workflow
