@@ -252,12 +252,27 @@ class WhatsAppDBService {
   }[] {
     if (!this.db) return [];
     try {
-      return this.db.query<any, [number]>(
-        `SELECT * FROM notifications
-         WHERE status = 'pending'
-         ORDER BY created_at ASC
-         LIMIT ?`
-      ).all(limit);
+      // Atomic: SELECT + UPDATE in transaction to prevent race conditions
+      const tx = this.db.transaction(() => {
+        const rows = this.db!.query<any, [number]>(
+          `SELECT * FROM notifications
+           WHERE status = 'pending'
+           ORDER BY created_at ASC
+           LIMIT ?`
+        ).all(limit);
+
+        if (rows.length > 0) {
+          const ids = rows.map((r: any) => r.id);
+          const placeholders = ids.map(() => "?").join(",");
+          this.db!.run(
+            `UPDATE notifications SET status = 'processing' WHERE id IN (${placeholders})`,
+            ids
+          );
+        }
+
+        return rows;
+      });
+      return tx();
     } catch {
       return []; // Table might not exist yet
     }
@@ -266,16 +281,18 @@ class WhatsAppDBService {
   /**
    * Outbox'a mesaj ekle (otomatik cevaplama icin)
    */
-  addToOutbox(toJid: string, message: string): void {
-    if (!this.db) return;
+  addToOutbox(toJid: string, message: string): boolean {
+    if (!this.db) return false;
     try {
       this.db.run(
         `INSERT INTO outbox (to_jid, message_type, content, status)
          VALUES (?, 'text', ?, 'pending')`,
         [toJid, message]
       );
+      return true;
     } catch (error) {
       console.error("[WhatsApp DB] Failed to add to outbox:", error);
+      return false;
     }
   }
 
@@ -289,7 +306,24 @@ class WhatsAppDBService {
       this.db.run(
         `UPDATE notifications SET status = 'read', read_at = strftime('%s', 'now')
          WHERE id IN (${placeholders})`,
-        ...ids
+        ids
+      );
+    } catch {
+      // Ignore if table doesn't exist
+    }
+  }
+
+  /**
+   * Roll back processing → pending on failure
+   */
+  markNotificationsFailed(ids: number[]): void {
+    if (!this.db || ids.length === 0) return;
+    try {
+      const placeholders = ids.map(() => "?").join(",");
+      this.db.run(
+        `UPDATE notifications SET status = 'pending'
+         WHERE id IN (${placeholders}) AND status = 'processing'`,
+        ids
       );
     } catch {
       // Ignore if table doesn't exist

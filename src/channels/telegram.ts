@@ -797,7 +797,11 @@ Bu konumu analiz et:
     await userManager.ensureUser(userId);
     const response = await think(userId, locationText);
 
-    await ctx.reply(response.content, { parse_mode: "HTML" });
+    try {
+      await ctx.reply(response.content, { parse_mode: "HTML" });
+    } catch {
+      await ctx.reply(response.content);
+    }
 
   } catch (error) {
     console.error("Location handler error:", error);

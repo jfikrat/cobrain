@@ -56,6 +56,11 @@ const envSchema = z.object({
   HEARTBEAT_STALE_AFTER_MS: z.coerce.number().default(120_000),
   HEARTBEAT_LOG_INTERVAL_MS: z.coerce.number().default(30_000),
 
+  // v0.8: WhatsApp notification settings
+  WHATSAPP_STALE_MAX_AGE_SEC: z.coerce.number().default(300),
+  WHATSAPP_ALLOWED_GROUP_JIDS: z.string().default(""),
+  WHATSAPP_MAX_REPLY_LENGTH: z.coerce.number().default(500),
+
   // Legacy (kept for migration)
   DB_PATH: z.string().default("./data/cobrain.db"),
 });

@@ -235,3 +235,92 @@ Format: NUMARA:PUAN (her satırda bir tane)`;
 
   return results.sort((a, b) => b.score - a.score).slice(0, limit);
 }
+
+// ========== WhatsApp Tier Classification ==========
+
+export interface TierClassification {
+  tier: 1 | 2 | 3;
+  reason: string;
+  reply?: string;
+  suggestedReply?: string;
+}
+
+export interface GroupClassification {
+  shouldReply: boolean;
+  reason: string;
+  reply?: string;
+  notifyUser: string;
+}
+
+/**
+ * Classify WhatsApp message tier using Haiku (~25x cheaper than Opus)
+ */
+export async function classifyWhatsAppMessage(
+  senderName: string,
+  messages: string,
+  context: "dm" | "group",
+  groupName?: string
+): Promise<TierClassification | GroupClassification> {
+  if (context === "dm") {
+    const prompt = `WhatsApp DM analizi. "${senderName}" mesaj göndermiş:
+
+${messages}
+
+Karar ver:
+TIER 1 (otomatik cevapla): Selamlasma, "musait misin?", tesekkur
+TIER 2 (kullaniciya bildir + öneri): Soru, randevu, önemli konu
+TIER 3 (sadece bildir): Medya, belirsiz, bilinmeyen konu
+
+KURALLAR: Sen Cobrain, Fekrat'ın asistanı. Samimi ama kısa yaz.
+
+JSON döndür:
+{"tier": 1|2|3, "reason": "kısa", "reply": "tier1 cevap", "suggestedReply": "tier2 öneri"}`;
+
+    const systemPrompt = "WhatsApp mesaj sınıflandırıcısın. SADECE geçerli JSON döndür, başka bir şey yazma.";
+    const raw = await complete(prompt, systemPrompt, 300);
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return { tier: 3, reason: "parse_error" };
+    }
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        tier: [1, 2, 3].includes(parsed.tier) ? parsed.tier : 3,
+        reason: String(parsed.reason || ""),
+        reply: parsed.reply ? String(parsed.reply) : undefined,
+        suggestedReply: parsed.suggestedReply ? String(parsed.suggestedReply) : undefined,
+      };
+    } catch {
+      return { tier: 3, reason: "json_parse_error" };
+    }
+  } else {
+    const prompt = `WhatsApp grup analizi. "${groupName}" grubunda mesajlar:
+
+${messages}
+
+Fekrat'a yönelik mi? Cevap vermeli mi?
+
+KURALLAR: Aile grubu, samimi ol. Emin değilsen CEVAP VERME.
+
+JSON döndür:
+{"shouldReply": true/false, "reason": "kısa", "reply": "cevap", "notifyUser": "Telegram bildirimi"}`;
+
+    const systemPrompt = "WhatsApp grup mesaj analizcisisin. SADECE geçerli JSON döndür.";
+    const raw = await complete(prompt, systemPrompt, 300);
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return { shouldReply: false, reason: "parse_error", notifyUser: "" };
+    }
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        shouldReply: Boolean(parsed.shouldReply),
+        reason: String(parsed.reason || ""),
+        reply: parsed.reply ? String(parsed.reply) : undefined,
+        notifyUser: String(parsed.notifyUser || ""),
+      };
+    } catch {
+      return { shouldReply: false, reason: "json_parse_error", notifyUser: "" };
+    }
+  }
+}

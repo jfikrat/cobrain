@@ -12,9 +12,57 @@ import { userManager } from "./user-manager.ts";
 import { pruneMemories, think } from "../brain/index.ts";
 import { initLivingAssistant, stopLivingAssistant, recordInteraction, recordUserActivity } from "./living-assistant.ts";
 import { whatsappDB } from "./whatsapp-db.ts";
+import { escapeHtml } from "../utils/escape-html.ts";
+import { classifyWhatsAppMessage, type TierClassification, type GroupClassification } from "./haiku.ts";
 import type { ScheduledTask, QueuedTask, TaskResult, TaskType } from "../types/autonomous.ts";
 
 let bot: Bot | null = null;
+
+// ========== VALIDATION & SANITIZATION ==========
+
+const INJECTION_PATTERNS = [
+  /\[SYSTEM\]/i,
+  /\[INST\]/i,
+  /\[\/INST\]/i,
+  /<\|im_start\|>/i,
+  /<\|im_end\|>/i,
+  /<<SYS>>/i,
+  /Human:/i,
+  /Assistant:/i,
+];
+
+/** Sanitize user message content before embedding in prompts */
+function sanitizeForPrompt(text: string): string {
+  let sanitized = text;
+  for (const pattern of INJECTION_PATTERNS) {
+    sanitized = sanitized.replace(pattern, "[FILTERED]");
+  }
+  return sanitized;
+}
+
+/** Validate reply before sending to WhatsApp */
+function validateReply(reply: string, maxLength: number): { valid: boolean; reason?: string } {
+  if (!reply || reply.trim().length === 0) {
+    return { valid: false, reason: "empty_reply" };
+  }
+  if (reply.length > maxLength) {
+    return { valid: false, reason: "too_long" };
+  }
+  for (const pattern of INJECTION_PATTERNS) {
+    if (pattern.test(reply)) {
+      return { valid: false, reason: "injection_pattern" };
+    }
+  }
+  return { valid: true };
+}
+
+/** Processing result for heartbeat metrics */
+interface ProcessingResult {
+  tier?: number;
+  outboxSuccess?: boolean;
+  model: string;
+  error?: string;
+}
 
 // Re-export for use in telegram channel (now from living-assistant)
 export { recordInteraction, recordUserActivity };
@@ -338,164 +386,163 @@ function startWhatsAppNotificationChecker(): void {
 async function checkWhatsAppNotifications(): Promise<void> {
   if (!bot) return;
 
+  const allNotifications = whatsappDB.getPendingNotifications(10);
+  if (allNotifications.length === 0) return;
+
+  const allIds = allNotifications.map((n) => n.id);
+
   try {
-    const allNotifications = whatsappDB.getPendingNotifications(10);
-    if (allNotifications.length === 0) return;
+    const { config } = await import("../config.ts");
+    const userId = config.MY_TELEGRAM_ID;
+    const maxAgeSec = config.WHATSAPP_STALE_MAX_AGE_SEC;
+    const allowedGroupJids = config.WHATSAPP_ALLOWED_GROUP_JIDS
+      ? config.WHATSAPP_ALLOWED_GROUP_JIDS.split(",").map((j) => j.trim()).filter(Boolean)
+      : [];
 
-    // Filter out old messages (>5 min) to avoid stale notifications after worker restart
+    // Filter stale messages
     const nowSec = Math.floor(Date.now() / 1000);
-    const MAX_AGE_SEC = 300; // 5 minutes
-    const notifications = allNotifications.filter((n) => {
-      const msgTs = (n as any).message_timestamp || 0;
-      if (msgTs === 0) return true; // no timestamp = legacy, allow
-      return (nowSec - msgTs) < MAX_AGE_SEC;
-    });
+    const notifications: typeof allNotifications = [];
+    const staleDMs: typeof allNotifications = [];
 
-    // Mark old ones as read immediately so they don't pile up
+    for (const n of allNotifications) {
+      const msgTs = n.message_timestamp || 0;
+      if (msgTs === 0 || (nowSec - msgTs) < maxAgeSec) {
+        notifications.push(n);
+      } else if (!n.is_group) {
+        staleDMs.push(n);
+      }
+      // Stale group messages are silently discarded
+    }
+
+    // Notify about stale DMs
     const staleIds = allNotifications
       .filter((n) => !notifications.includes(n))
       .map((n) => n.id);
     if (staleIds.length > 0) {
       whatsappDB.markNotificationsRead(staleIds);
-      console.log(`[Proactive] Skipped ${staleIds.length} stale notifications (>5min old)`);
+      console.log(`[Proactive] Skipped ${staleIds.length} stale notifications (>${maxAgeSec}s old)`);
+    }
+
+    if (staleDMs.length > 0) {
+      const senderNames = [...new Set(staleDMs.map((n) => n.sender_name || n.chat_jid.split("@")[0] || "?"))];
+      const staleMsg = `<i>${staleDMs.length} eski WhatsApp mesaji atlandi: ${senderNames.map((s) => escapeHtml(s)).join(", ")}</i>`;
+      await bot.api.sendMessage(userId, staleMsg, { parse_mode: "HTML" });
     }
 
     if (notifications.length === 0) return;
-
-    const { config } = await import("../config.ts");
-    const userId = config.MY_TELEGRAM_ID;
 
     // Separate DMs and group messages
     const dms = notifications.filter((n) => !n.is_group);
     const groupMsgs = notifications.filter((n) => n.is_group);
 
-    // --- DMs: AI analysis + smart reply ---
+    const results: ProcessingResult[] = [];
+
+    // --- DMs: Group by chat_jid, classify with Haiku ---
     if (dms.length > 0) {
-      // Group by sender
       const bySender = new Map<string, typeof dms>();
       for (const notif of dms) {
-        const key = notif.chat_jid; // group by chat JID for accurate reply targeting
+        const key = notif.chat_jid;
         if (!bySender.has(key)) bySender.set(key, []);
         bySender.get(key)!.push(notif);
       }
 
       for (const [chatJid, msgs] of bySender) {
-        await handleDMMessages(msgs, chatJid, userId);
+        const result = await handleDMMessages(msgs, chatJid, userId, config.WHATSAPP_MAX_REPLY_LENGTH);
+        results.push(result);
       }
     }
 
-    // --- Group messages: AI analysis + auto-reply ---
+    // --- Group messages: Group by chat_jid, check allowlist ---
     if (groupMsgs.length > 0) {
-      await handleWatchedGroupMessages(groupMsgs, userId);
+      const byGroup = new Map<string, typeof groupMsgs>();
+      for (const notif of groupMsgs) {
+        const key = notif.chat_jid;
+        if (!byGroup.has(key)) byGroup.set(key, []);
+        byGroup.get(key)!.push(notif);
+      }
+
+      for (const [groupJid, msgs] of byGroup) {
+        const replyAllowed = allowedGroupJids.length > 0 && allowedGroupJids.includes(groupJid);
+        const result = await handleWatchedGroupMessages(msgs, userId, replyAllowed, config.WHATSAPP_MAX_REPLY_LENGTH);
+        results.push(result);
+      }
     }
 
     // Mark all as read
     const ids = notifications.map((n) => n.id);
     whatsappDB.markNotificationsRead(ids);
 
+    // Heartbeat with detailed metrics
+    const tierCounts = { tier1: 0, tier2: 0, tier3: 0 };
+    let outboxErrors = 0;
+    for (const r of results) {
+      if (r.tier === 1) tierCounts.tier1++;
+      else if (r.tier === 2) tierCounts.tier2++;
+      else tierCounts.tier3++;
+      if (r.outboxSuccess === false) outboxErrors++;
+    }
+
     heartbeat("whatsapp_notifications", {
       sent: notifications.length,
       dms: dms.length,
       groups: groupMsgs.length,
+      stale: staleIds.length,
+      ...tierCounts,
+      outboxErrors,
+      model: "haiku",
     });
   } catch (error) {
     console.error("[Proactive] WhatsApp notification check error:", error);
+    // Roll back processing → pending on failure
+    whatsappDB.markNotificationsFailed(allIds);
   }
 }
 
 /**
- * Handle incoming DMs with AI analysis.
- *
- * Tier 1 - Auto-reply (no approval needed):
- *   Simple greetings, "are you available?", sticker/emoji responses
- *
- * Tier 2 - Notify + suggest reply (user approves):
- *   Questions, meeting requests, important messages
- *
- * Tier 3 - Just notify:
- *   Media, unclear messages, topics I don't know about
+ * Handle incoming DMs with Haiku classification (2-stage LLM).
+ * Tier 1: Auto-reply | Tier 2: Notify + suggest | Tier 3: Just notify
  */
 async function handleDMMessages(
   messages: ReturnType<typeof whatsappDB.getPendingNotifications>,
   chatJid: string,
-  telegramUserId: number
-): Promise<void> {
-  if (!bot) return;
+  telegramUserId: number,
+  maxReplyLength: number
+): Promise<ProcessingResult> {
+  if (!bot) return { model: "haiku", tier: 3, error: "bot_not_initialized" };
 
-  const senderName = messages[0].sender_name || chatJid.split("@")[0];
+  const firstMsg = messages[0]!;
+  const senderName = firstMsg.sender_name || chatJid.split("@")[0] || "?";
   const msgSummary = messages.map((m) => {
     const typeLabel = m.message_type !== "text" ? `[${m.message_type}] ` : "";
-    return `${typeLabel}${m.content || ""}`;
+    return `${typeLabel}${sanitizeForPrompt(m.content || "")}`;
   }).join("\n");
 
-  const prompt = `[SYSTEM - WhatsApp DM Analizi]
-
-"${senderName}" sana dogrudan mesaj gondermis:
-
-${msgSummary}
-
-Analiz et ve karar ver:
-
-KATMAN 1 - Otomatik cevapla (onay gerektirmez):
-- Basit selamlasmalar: selam, merhaba, gunaydin, nasilsin, naber
-- "Musait misin?", "Uygun musun?" -> "Fekrat su an musait degil, en kisa surede doner"
-- Tesekkur mesajlari -> kisa karsilik
-
-KATMAN 2 - Kullaniciya sor (onay gerektirir):
-- Soru iceren mesajlar (randevu, bulusma, bilgi istegi)
-- Onemli konular, uzun mesajlar
-- Cevap verilebilir ama emin degilsen
-
-KATMAN 3 - Sadece bildir:
-- Medya (resim, video, ses, dosya) -- sadece bildirim
-- Belirsiz, anlamsiz veya konu disinda mesajlar
-- Bilmedigin konular
-
-KURALLAR:
-- Sen Cobrain'sin, Fekrat'in AI asistani
-- Samimi ama profesyonel ol
-- Kisinin ismini kullan
-- Kisa ve dogal yaz, uzun cumleler kurma
-
-Yanit formati (JSON):
-{
-  "tier": 1 | 2 | 3,
-  "reason": "kisa aciklama",
-  "reply": "cevap metni (tier 1 icin otomatik gonderilecek)",
-  "suggestedReply": "onerilen cevap (tier 2 icin kullaniciya gosterilecek)"
-}
-
-SADECE JSON dondur.`;
-
   try {
-    const response = await think(telegramUserId, prompt);
-    const content = response.content || "";
-
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      // Fallback: just notify
-      await sendDMNotification(messages, senderName, telegramUserId);
-      return;
-    }
-
-    const analysis = JSON.parse(jsonMatch[0]);
+    const analysis = await classifyWhatsAppMessage(senderName, msgSummary, "dm") as TierClassification;
 
     if (analysis.tier === 1 && analysis.reply) {
-      // TIER 1: Auto-reply
-      whatsappDB.addToOutbox(chatJid, analysis.reply);
+      const validation = validateReply(analysis.reply, maxReplyLength);
+      if (!validation.valid) {
+        console.log(`[Proactive] DM reply validation failed (${validation.reason}), downgrading to tier 3`);
+        await sendDMNotification(messages, senderName, telegramUserId);
+        return { model: "haiku", tier: 3, error: `validation_${validation.reason}` };
+      }
+
+      const outboxOk = whatsappDB.addToOutbox(chatJid, analysis.reply);
 
       const notifyMsg = `<b>WhatsApp - ${escapeHtml(senderName)}</b>\n\n` +
         messages.map(m => {
           const typeLabel = m.message_type !== "text" ? `[${m.message_type}] ` : "";
           return `${typeLabel}${escapeHtml((m.content || "").slice(0, 80))}`;
         }).join("\n") +
-        `\n\n<i>Otomatik cevap: "${escapeHtml(analysis.reply)}"</i>`;
+        `\n\n<i>Otomatik cevap: "${escapeHtml(analysis.reply)}"</i>` +
+        (!outboxOk ? `\n<b>Outbox hatasi!</b>` : "");
 
       await bot.api.sendMessage(telegramUserId, notifyMsg, { parse_mode: "HTML" });
       console.log(`[Proactive] DM auto-replied to ${senderName}: ${analysis.reply}`);
+      return { model: "haiku", tier: 1, outboxSuccess: outboxOk };
 
     } else if (analysis.tier === 2 && analysis.suggestedReply) {
-      // TIER 2: Notify + suggest
       const notifyMsg = `<b>WhatsApp - ${escapeHtml(senderName)}</b>\n\n` +
         messages.map(m => {
           const typeLabel = m.message_type !== "text" ? `[${m.message_type}] ` : "";
@@ -505,14 +552,16 @@ SADECE JSON dondur.`;
         `\n<i>${escapeHtml(analysis.reason || "")}</i>`;
 
       await bot.api.sendMessage(telegramUserId, notifyMsg, { parse_mode: "HTML" });
+      return { model: "haiku", tier: 2 };
 
     } else {
-      // TIER 3: Just notify
       await sendDMNotification(messages, senderName, telegramUserId);
+      return { model: "haiku", tier: 3 };
     }
   } catch (error) {
     console.error(`[Proactive] DM analysis error for ${senderName}:`, error);
     await sendDMNotification(messages, senderName, telegramUserId);
+    return { model: "haiku", tier: 3, error: String(error) };
   }
 }
 
@@ -537,114 +586,82 @@ async function sendDMNotification(
 }
 
 /**
- * Analyze watched group messages with AI and auto-reply if appropriate.
- * Rules:
- * - NEVER reply to work groups (only watched/family groups)
- * - Only reply if message is clearly directed at Fekrat or easily answerable
- * - Inform user via Telegram about what happened
+ * Analyze watched group messages with Haiku classification.
+ * Respects allowlist: only groups in WHATSAPP_ALLOWED_GROUP_JIDS can receive auto-replies.
  */
 async function handleWatchedGroupMessages(
   messages: ReturnType<typeof whatsappDB.getPendingNotifications>,
-  telegramUserId: number
-): Promise<void> {
-  if (!bot) return;
+  telegramUserId: number,
+  replyAllowed: boolean,
+  maxReplyLength: number
+): Promise<ProcessingResult> {
+  if (!bot) return { model: "haiku", tier: 3, error: "bot_not_initialized" };
 
-  // Build context for AI
+  const firstMsg = messages[0]!;
+  const groupJid = firstMsg.chat_jid;
+  const groupName = firstMsg.sender_name?.split(" @ ")[1] || groupJid;
+
   const msgSummary = messages.map((m) => {
-    return `[${m.sender_name}]: ${m.content || `[${m.message_type}]`}`;
+    const sender = (m.sender_name || "").split(" @ ")[0] || "?";
+    return `[${sender}]: ${sanitizeForPrompt(m.content || `[${m.message_type}]`)}`;
   }).join("\n");
 
-  const groupJid = messages[0].chat_jid;
-  const groupName = messages[0].sender_name?.split(" @ ")[1] || groupJid;
-
-  const prompt = `[SYSTEM - WhatsApp Grup Analizi]
-
-Aile/kisisel grup "${groupName}" icinde yeni mesajlar var:
-
-${msgSummary}
-
-Analiz et:
-1. Bu mesajlardan herhangi biri Fekrat'a (bana) yonelik mi? (direkt isim geciyor mu, soru soruluyor mu, cevap bekleniyor mu)
-2. Kolayca cevaplayabilecegim bir sey var mi? (selamlasma, basit soru, tesekkur vb.)
-
-KURALLAR:
-- Bu bir AILE grubu, samimi ol
-- Eger cevap vermek uygunsa, kisa ve dogal bir cevap yaz
-- Eger cevap vermek uygun degilse veya emin degilsen, CEVAP VERME
-- Is gruplarina ASLA mesaj atma (bu zaten sadece izlenen gruplarda calisir)
-- Hitap kurallari: Inci Hanim, Feyzullah Bey icin hanim/bey kullan. Alicem ve Doga icin samimi ol.
-
-Yanit formatı (JSON):
-{
-  "shouldReply": true/false,
-  "reason": "neden cevap verilmeli/verilmemeli (kisa)",
-  "reply": "cevap metni (sadece shouldReply=true ise)",
-  "notifyUser": "Telegram'a gonderilecek bildirim mesaji"
-}
-
-SADECE JSON dondur, baska bir sey yazma.`;
-
   try {
-    const response = await think(telegramUserId, prompt);
-    const content = response.content || "";
+    const analysis = await classifyWhatsAppMessage("", msgSummary, "group", groupName) as GroupClassification;
 
-    // Try to parse JSON from response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      // Couldn't parse, just notify
-      let message = `<b>WhatsApp - ${escapeHtml(groupName)}</b>\n\n`;
-      for (const m of messages) {
-        const sender = (m.sender_name || "").split(" @ ")[0];
-        message += `<b>${escapeHtml(sender)}</b>: ${escapeHtml((m.content || "").slice(0, 100))}\n`;
+    if (replyAllowed && analysis.shouldReply && analysis.reply) {
+      const validation = validateReply(analysis.reply, maxReplyLength);
+      if (!validation.valid) {
+        console.log(`[Proactive] Group reply validation failed (${validation.reason}), skipping reply`);
+        await sendGroupNotification(messages, groupName, telegramUserId, analysis.reason);
+        return { model: "haiku", tier: 3, error: `validation_${validation.reason}` };
       }
-      await bot.api.sendMessage(telegramUserId, message, { parse_mode: "HTML" });
-      return;
-    }
 
-    const analysis = JSON.parse(jsonMatch[0]);
+      const outboxOk = whatsappDB.addToOutbox(groupJid, analysis.reply);
 
-    if (analysis.shouldReply && analysis.reply) {
-      // Auto-reply via WhatsApp outbox
-      whatsappDB.addToOutbox(groupJid, analysis.reply);
-
-      // Notify user what we did
       const notifyMsg = `<b>WhatsApp - ${escapeHtml(groupName)}</b>\n\n` +
         messages.map(m => {
-          const sender = (m.sender_name || "").split(" @ ")[0];
+          const sender = (m.sender_name || "").split(" @ ")[0] || "?";
           return `<b>${escapeHtml(sender)}</b>: ${escapeHtml((m.content || "").slice(0, 80))}`;
         }).join("\n") +
         `\n\n<i>Otomatik cevap gonderdim: "${escapeHtml(analysis.reply)}"</i>` +
-        `\n<i>Sebep: ${escapeHtml(analysis.reason || "")}</i>`;
+        `\n<i>Sebep: ${escapeHtml(analysis.reason || "")}</i>` +
+        (!outboxOk ? `\n<b>Outbox hatasi!</b>` : "");
 
       await bot.api.sendMessage(telegramUserId, notifyMsg, { parse_mode: "HTML" });
       console.log(`[Proactive] Auto-replied to ${groupName}: ${analysis.reply}`);
+      return { model: "haiku", tier: 1, outboxSuccess: outboxOk };
     } else {
-      // Just notify, no reply
-      let message = `<b>WhatsApp - ${escapeHtml(groupName)}</b>\n\n`;
-      for (const m of messages) {
-        const sender = (m.sender_name || "").split(" @ ")[0];
-        message += `<b>${escapeHtml(sender)}</b>: ${escapeHtml((m.content || "").slice(0, 100))}\n`;
+      if (!replyAllowed && analysis.shouldReply) {
+        console.log(`[Proactive] Group ${groupJid} not in allowlist, skipping reply`);
       }
-      if (analysis.reason) {
-        message += `\n<i>${escapeHtml(analysis.reason)}</i>`;
-      }
-      await bot.api.sendMessage(telegramUserId, message, { parse_mode: "HTML" });
+      await sendGroupNotification(messages, groupName, telegramUserId, analysis.reason);
+      return { model: "haiku", tier: 3 };
     }
   } catch (error) {
     console.error("[Proactive] Group message analysis error:", error);
-    // Fallback: just notify
-    let message = `<b>WhatsApp - ${escapeHtml(groupName)}</b>\n\n`;
-    for (const m of messages) {
-      const sender = (m.sender_name || "").split(" @ ")[0];
-      message += `<b>${escapeHtml(sender)}</b>: ${escapeHtml((m.content || "").slice(0, 100))}\n`;
-    }
-    await bot.api.sendMessage(telegramUserId, message, { parse_mode: "HTML" });
+    await sendGroupNotification(messages, groupName, telegramUserId);
+    return { model: "haiku", tier: 3, error: String(error) };
   }
 }
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+/** Simple group notification (fallback / no-reply) */
+async function sendGroupNotification(
+  messages: ReturnType<typeof whatsappDB.getPendingNotifications>,
+  groupName: string,
+  telegramUserId: number,
+  reason?: string
+): Promise<void> {
+  if (!bot) return;
+
+  let message = `<b>WhatsApp - ${escapeHtml(groupName)}</b>\n\n`;
+  for (const m of messages) {
+    const sender = (m.sender_name || "").split(" @ ")[0] || "?";
+    message += `<b>${escapeHtml(sender)}</b>: ${escapeHtml((m.content || "").slice(0, 100))}\n`;
+  }
+  if (reason) {
+    message += `\n<i>${escapeHtml(reason)}</i>`;
+  }
+  await bot.api.sendMessage(telegramUserId, message, { parse_mode: "HTML" });
 }
+

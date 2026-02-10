@@ -1,5 +1,6 @@
 import { InlineKeyboard } from "grammy";
 import type { MessageAnalysis, DailySummary } from "./analyzer.ts";
+import { escapeHtml } from "../utils/escape-html.ts";
 
 // ============ ÖZET FORMATLARI ============
 
@@ -256,9 +257,3 @@ function formatWaitingTime(minutes: number): string {
   }
 }
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
