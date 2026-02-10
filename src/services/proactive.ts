@@ -345,50 +345,163 @@ async function checkWhatsAppNotifications(): Promise<void> {
     const { config } = await import("../config.ts");
     const userId = config.MY_TELEGRAM_ID;
 
-    // Group notifications by sender for cleaner display
-    const bySender = new Map<string, typeof notifications>();
-    for (const notif of notifications) {
-      const key = notif.sender_name || notif.chat_jid;
-      if (!bySender.has(key)) bySender.set(key, []);
-      bySender.get(key)!.push(notif);
-    }
+    // Separate DMs and group messages
+    const dms = notifications.filter((n) => !n.is_group);
+    const groupMsgs = notifications.filter((n) => n.is_group);
 
-    // Build notification message
-    let message = `<b>WhatsApp</b>\n\n`;
+    // --- DMs: simple notification to Telegram ---
+    if (dms.length > 0) {
+      const bySender = new Map<string, typeof dms>();
+      for (const notif of dms) {
+        const key = notif.sender_name || notif.chat_jid;
+        if (!bySender.has(key)) bySender.set(key, []);
+        bySender.get(key)!.push(notif);
+      }
 
-    for (const [sender, msgs] of bySender) {
-      if (msgs.length === 1) {
-        const msg = msgs[0];
-        const typeLabel = msg.message_type === "audio" ? "[Ses] " :
-                         msg.message_type === "image" ? "[Resim] " :
-                         msg.message_type === "video" ? "[Video] " :
-                         msg.message_type === "document" ? "[Dosya] " : "";
-        const content = (msg.content || "").slice(0, 100);
-        message += `<b>${escapeHtml(sender)}</b>: ${typeLabel}${escapeHtml(content)}\n`;
-      } else {
-        message += `<b>${escapeHtml(sender)}</b>: ${msgs.length} yeni mesaj\n`;
-        // Show last message preview
-        const last = msgs[msgs.length - 1];
-        const content = (last.content || "").slice(0, 80);
-        if (content) {
-          message += `  <i>${escapeHtml(content)}</i>\n`;
+      let message = `<b>WhatsApp</b>\n\n`;
+      for (const [sender, msgs] of bySender) {
+        if (msgs.length === 1) {
+          const msg = msgs[0];
+          const typeLabel = msg.message_type === "audio" ? "[Ses] " :
+                           msg.message_type === "image" ? "[Resim] " :
+                           msg.message_type === "video" ? "[Video] " :
+                           msg.message_type === "document" ? "[Dosya] " : "";
+          const content = (msg.content || "").slice(0, 100);
+          message += `<b>${escapeHtml(sender)}</b>: ${typeLabel}${escapeHtml(content)}\n`;
+        } else {
+          message += `<b>${escapeHtml(sender)}</b>: ${msgs.length} yeni mesaj\n`;
+          const last = msgs[msgs.length - 1];
+          const content = (last.content || "").slice(0, 80);
+          if (content) {
+            message += `  <i>${escapeHtml(content)}</i>\n`;
+          }
         }
       }
+      await bot.api.sendMessage(userId, message, { parse_mode: "HTML" });
     }
 
-    // Send to Telegram
-    await bot.api.sendMessage(userId, message, { parse_mode: "HTML" });
+    // --- Group messages: AI analysis + auto-reply ---
+    if (groupMsgs.length > 0) {
+      await handleWatchedGroupMessages(groupMsgs, userId);
+    }
 
-    // Mark as read
+    // Mark all as read
     const ids = notifications.map((n) => n.id);
     whatsappDB.markNotificationsRead(ids);
 
     heartbeat("whatsapp_notifications", {
       sent: notifications.length,
-      senders: bySender.size,
+      dms: dms.length,
+      groups: groupMsgs.length,
     });
   } catch (error) {
     console.error("[Proactive] WhatsApp notification check error:", error);
+  }
+}
+
+/**
+ * Analyze watched group messages with AI and auto-reply if appropriate.
+ * Rules:
+ * - NEVER reply to work groups (only watched/family groups)
+ * - Only reply if message is clearly directed at Fekrat or easily answerable
+ * - Inform user via Telegram about what happened
+ */
+async function handleWatchedGroupMessages(
+  messages: ReturnType<typeof whatsappDB.getPendingNotifications>,
+  telegramUserId: number
+): Promise<void> {
+  if (!bot) return;
+
+  // Build context for AI
+  const msgSummary = messages.map((m) => {
+    return `[${m.sender_name}]: ${m.content || `[${m.message_type}]`}`;
+  }).join("\n");
+
+  const groupJid = messages[0].chat_jid;
+  const groupName = messages[0].sender_name?.split(" @ ")[1] || groupJid;
+
+  const prompt = `[SYSTEM - WhatsApp Grup Analizi]
+
+Aile/kisisel grup "${groupName}" icinde yeni mesajlar var:
+
+${msgSummary}
+
+Analiz et:
+1. Bu mesajlardan herhangi biri Fekrat'a (bana) yonelik mi? (direkt isim geciyor mu, soru soruluyor mu, cevap bekleniyor mu)
+2. Kolayca cevaplayabilecegim bir sey var mi? (selamlasma, basit soru, tesekkur vb.)
+
+KURALLAR:
+- Bu bir AILE grubu, samimi ol
+- Eger cevap vermek uygunsa, kisa ve dogal bir cevap yaz
+- Eger cevap vermek uygun degilse veya emin degilsen, CEVAP VERME
+- Is gruplarina ASLA mesaj atma (bu zaten sadece izlenen gruplarda calisir)
+- Hitap kurallari: Inci Hanim, Feyzullah Bey icin hanim/bey kullan. Alicem ve Doga icin samimi ol.
+
+Yanit formatı (JSON):
+{
+  "shouldReply": true/false,
+  "reason": "neden cevap verilmeli/verilmemeli (kisa)",
+  "reply": "cevap metni (sadece shouldReply=true ise)",
+  "notifyUser": "Telegram'a gonderilecek bildirim mesaji"
+}
+
+SADECE JSON dondur, baska bir sey yazma.`;
+
+  try {
+    const response = await think(telegramUserId, prompt);
+    const content = response.content || "";
+
+    // Try to parse JSON from response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      // Couldn't parse, just notify
+      let message = `<b>WhatsApp - ${escapeHtml(groupName)}</b>\n\n`;
+      for (const m of messages) {
+        const sender = (m.sender_name || "").split(" @ ")[0];
+        message += `<b>${escapeHtml(sender)}</b>: ${escapeHtml((m.content || "").slice(0, 100))}\n`;
+      }
+      await bot.api.sendMessage(telegramUserId, message, { parse_mode: "HTML" });
+      return;
+    }
+
+    const analysis = JSON.parse(jsonMatch[0]);
+
+    if (analysis.shouldReply && analysis.reply) {
+      // Auto-reply via WhatsApp outbox
+      whatsappDB.addToOutbox(groupJid, analysis.reply);
+
+      // Notify user what we did
+      const notifyMsg = `<b>WhatsApp - ${escapeHtml(groupName)}</b>\n\n` +
+        messages.map(m => {
+          const sender = (m.sender_name || "").split(" @ ")[0];
+          return `<b>${escapeHtml(sender)}</b>: ${escapeHtml((m.content || "").slice(0, 80))}`;
+        }).join("\n") +
+        `\n\n<i>Otomatik cevap gonderdim: "${escapeHtml(analysis.reply)}"</i>` +
+        `\n<i>Sebep: ${escapeHtml(analysis.reason || "")}</i>`;
+
+      await bot.api.sendMessage(telegramUserId, notifyMsg, { parse_mode: "HTML" });
+      console.log(`[Proactive] Auto-replied to ${groupName}: ${analysis.reply}`);
+    } else {
+      // Just notify, no reply
+      let message = `<b>WhatsApp - ${escapeHtml(groupName)}</b>\n\n`;
+      for (const m of messages) {
+        const sender = (m.sender_name || "").split(" @ ")[0];
+        message += `<b>${escapeHtml(sender)}</b>: ${escapeHtml((m.content || "").slice(0, 100))}\n`;
+      }
+      if (analysis.reason) {
+        message += `\n<i>${escapeHtml(analysis.reason)}</i>`;
+      }
+      await bot.api.sendMessage(telegramUserId, message, { parse_mode: "HTML" });
+    }
+  } catch (error) {
+    console.error("[Proactive] Group message analysis error:", error);
+    // Fallback: just notify
+    let message = `<b>WhatsApp - ${escapeHtml(groupName)}</b>\n\n`;
+    for (const m of messages) {
+      const sender = (m.sender_name || "").split(" @ ")[0];
+      message += `<b>${escapeHtml(sender)}</b>: ${escapeHtml((m.content || "").slice(0, 100))}\n`;
+    }
+    await bot.api.sendMessage(telegramUserId, message, { parse_mode: "HTML" });
   }
 }
 

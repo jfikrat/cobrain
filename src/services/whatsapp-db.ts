@@ -262,6 +262,22 @@ class WhatsAppDBService {
   }
 
   /**
+   * Outbox'a mesaj ekle (otomatik cevaplama icin)
+   */
+  addToOutbox(toJid: string, message: string): void {
+    if (!this.db) return;
+    try {
+      this.db.run(
+        `INSERT INTO outbox (to_jid, message_type, content, status)
+         VALUES (?, 'text', ?, 'pending')`,
+        [toJid, message]
+      );
+    } catch (error) {
+      console.error("[WhatsApp DB] Failed to add to outbox:", error);
+    }
+  }
+
+  /**
    * Bildirimleri okundu olarak isaretle
    */
   markNotificationsRead(ids: number[]): void {
