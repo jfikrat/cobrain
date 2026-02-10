@@ -445,8 +445,14 @@ export async function chat(userId: number, message: string | MultimodalMessage):
                       statusMessage = `🚀 Yardımcı agent başlatıyorum: ${toolInput.description}`;
                     } else if (toolName === "TodoWrite") {
                       statusMessage = `📋 Görev listesini güncelliyorum...`;
-                    } else if (!toolName.startsWith("telegram_") && !toolName.startsWith("mcp__telegram_")) {
-                      // Skip telegram tools to avoid loops
+                    } else if (
+                      !toolName.startsWith("telegram_") &&
+                      !toolName.startsWith("mcp__telegram_") &&
+                      toolName !== "AskUserQuestion" &&
+                      toolName !== "EnterPlanMode" &&
+                      toolName !== "ExitPlanMode"
+                    ) {
+                      // Skip telegram tools (avoid loops) and internal SDK tools
                       statusMessage = `🔧 ${toolName} kullanıyorum...`;
                     }
 
