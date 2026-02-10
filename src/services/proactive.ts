@@ -339,7 +339,27 @@ async function checkWhatsAppNotifications(): Promise<void> {
   if (!bot) return;
 
   try {
-    const notifications = whatsappDB.getPendingNotifications(10);
+    const allNotifications = whatsappDB.getPendingNotifications(10);
+    if (allNotifications.length === 0) return;
+
+    // Filter out old messages (>5 min) to avoid stale notifications after worker restart
+    const nowSec = Math.floor(Date.now() / 1000);
+    const MAX_AGE_SEC = 300; // 5 minutes
+    const notifications = allNotifications.filter((n) => {
+      const msgTs = (n as any).message_timestamp || 0;
+      if (msgTs === 0) return true; // no timestamp = legacy, allow
+      return (nowSec - msgTs) < MAX_AGE_SEC;
+    });
+
+    // Mark old ones as read immediately so they don't pile up
+    const staleIds = allNotifications
+      .filter((n) => !notifications.includes(n))
+      .map((n) => n.id);
+    if (staleIds.length > 0) {
+      whatsappDB.markNotificationsRead(staleIds);
+      console.log(`[Proactive] Skipped ${staleIds.length} stale notifications (>5min old)`);
+    }
+
     if (notifications.length === 0) return;
 
     const { config } = await import("../config.ts");

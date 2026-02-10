@@ -246,13 +246,15 @@ class WhatsAppDBService {
     message_id: string;
     content: string;
     message_type: string;
+    is_group: number;
+    message_timestamp: number;
     created_at: number;
   }[] {
     if (!this.db) return [];
     try {
       return this.db.query<any, [number]>(
         `SELECT * FROM notifications
-         WHERE status = 'pending' AND is_group = 0
+         WHERE status = 'pending'
          ORDER BY created_at ASC
          LIMIT ?`
       ).all(limit);
