@@ -400,12 +400,19 @@ async function checkWhatsAppNotifications(): Promise<void> {
       ? config.WHATSAPP_ALLOWED_GROUP_JIDS.split(",").map((j) => j.trim()).filter(Boolean)
       : [];
 
-    // Filter stale messages
+    // Filter status updates and stale messages
     const nowSec = Math.floor(Date.now() / 1000);
     const notifications: typeof allNotifications = [];
     const staleDMs: typeof allNotifications = [];
+    const statusUpdateIds: number[] = [];
 
     for (const n of allNotifications) {
+      // Skip WhatsApp status updates (stories) — only real messages matter
+      if (n.chat_jid === "status@broadcast") {
+        statusUpdateIds.push(n.id);
+        continue;
+      }
+
       const msgTs = n.message_timestamp || 0;
       if (msgTs === 0 || (nowSec - msgTs) < maxAgeSec) {
         notifications.push(n);
@@ -413,6 +420,11 @@ async function checkWhatsAppNotifications(): Promise<void> {
         staleDMs.push(n);
       }
       // Stale group messages are silently discarded
+    }
+
+    // Silently mark status updates as read
+    if (statusUpdateIds.length > 0) {
+      whatsappDB.markNotificationsRead(statusUpdateIds);
     }
 
     // Notify about stale DMs
