@@ -12,6 +12,7 @@ import {
   handleMessage,
   type WebSocketData,
 } from "./websocket.ts";
+import { chat } from "../agent/chat.ts";
 import indexHtml from "./public/index.html";
 
 let server: ReturnType<typeof Bun.serve> | null = null;
@@ -80,6 +81,29 @@ export function startWebServer(): void {
         }
 
         return new Response("WebSocket upgrade failed", { status: 500 });
+      }
+
+      // POST /api/chat — REST API for external agents (Claude Code etc.)
+      if (url.pathname === "/api/chat" && req.method === "POST") {
+        const authHeader = req.headers.get("authorization");
+        const apiKey = config.COBRAIN_API_KEY;
+        if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
+          return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        try {
+          const body = await req.json();
+          const { message, model } = body as { message: string; model?: string };
+          if (!message) {
+            return Response.json({ error: "message required" }, { status: 400 });
+          }
+
+          const response = await chat(config.MY_TELEGRAM_ID, message, undefined, model);
+          return Response.json(response);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          return Response.json({ error: msg }, { status: 500 });
+        }
       }
 
       // 404 for unknown routes

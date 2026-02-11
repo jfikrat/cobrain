@@ -71,6 +71,9 @@ const envSchema = z.object({
   WHATSAPP_ALLOWED_GROUP_JIDS: z.string().default(""),
   WHATSAPP_MAX_REPLY_LENGTH: z.coerce.number().default(500),
 
+  // v1.0: REST API
+  COBRAIN_API_KEY: z.string().default(""),
+
   // Legacy (kept for migration)
   DB_PATH: z.string().default("./data/cobrain.db"),
 });

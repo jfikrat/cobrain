@@ -128,6 +128,24 @@ bun --hot src/index.ts
 
 For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
 
+## WhatsApp Proactive Context
+
+WhatsApp mesajları Cobrain AI conversation context'ine otomatik inject edilir.
+
+**Akış:**
+```
+WA mesaj → proactive.ts (30s poll, Haiku classify) → session-state.json (recentWhatsApp[])
+→ chat.ts (DynamicContext populate) → prompts.ts (<recent-whatsapp> XML) → AI context
+```
+
+**Dosyalar:**
+- `src/services/session-state.ts` — `WhatsAppNotification` tipi, `addWhatsAppNotification()` helper, max 10 entry, 24h TTL
+- `src/services/proactive.ts` — Her tier (DM 1/2/3 + Group) sonrası session state update (`appConfig.FF_SESSION_STATE` flag)
+- `src/agent/prompts.ts` — `DynamicContext.recentWhatsApp` + `<recent-whatsapp>` XML bloğu
+- `src/agent/chat.ts` — Session state'den WA mesajları okuyup DynamicContext'e map etme
+
+**Feature flag:** `FF_SESSION_STATE` — kapalıysa WA context devre dışı
+
 ## Self-Management
 
 ### Restart
