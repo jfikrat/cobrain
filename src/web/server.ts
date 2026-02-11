@@ -13,6 +13,7 @@ import {
   type WebSocketData,
 } from "./websocket.ts";
 import { chat } from "../agent/chat.ts";
+import { bot } from "../channels/telegram.ts";
 import indexHtml from "./public/index.html";
 
 let server: ReturnType<typeof Bun.serve> | null = null;
@@ -99,6 +100,12 @@ export function startWebServer(): void {
           }
 
           const response = await chat(config.MY_TELEGRAM_ID, message, undefined, model);
+
+          // Mirror to Telegram (fire-and-forget)
+          const userId = config.MY_TELEGRAM_ID;
+          bot.api.sendMessage(userId, `📡 *API:* ${message}`, { parse_mode: "Markdown" }).catch(() => {});
+          bot.api.sendMessage(userId, response.content).catch(() => {});
+
           return Response.json(response);
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
