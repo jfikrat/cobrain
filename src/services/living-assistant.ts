@@ -58,6 +58,26 @@ interface ProactiveDecision {
   reason: string;
 }
 
+// Code review cycle — rotate list of core files
+const CODE_REVIEW_FILES = [
+  "src/agent/chat.ts",
+  "src/services/living-assistant.ts",
+  "src/brain/index.ts",
+  "src/memory/smart-memory.ts",
+  "src/services/proactive.ts",
+  "src/channels/telegram.ts",
+  "src/services/whatsapp.ts",
+  "src/agent/prompts.ts",
+  "src/brain/router-lite.ts",
+  "src/brain/event-store.ts",
+  "src/services/scheduler.ts",
+  "src/services/task-queue.ts",
+  "src/config.ts",
+];
+
+let lastCodeReviewDate: string | null = null;
+let codeReviewIndex = 0;
+
 // Cooldown tracking
 interface CooldownEntry {
   lastSent: number;
@@ -149,6 +169,13 @@ async function runAwarenessLoop(): Promise<void> {
     await checkUserContext(userId);
   } catch (error) {
     console.error(`[LivingAssistant] Error:`, error);
+  }
+
+  // Code review cycle — once per day, around 14:00-15:00
+  try {
+    await maybeRunCodeReview(userId);
+  } catch (error) {
+    console.error(`[LivingAssistant] Code review error:`, error);
   }
 }
 
@@ -661,5 +688,151 @@ export async function recordUserActivity(userId: number): Promise<void> {
     patternService.recordInteraction();
   } catch (error) {
     console.warn("[LivingAssistant] Activity recording failed:", error);
+  }
+}
+
+/**
+ * Code Review Cycle — daily proactive code observation
+ * Reads one source file per day, analyzes with Haiku, saves as code-obs memory
+ */
+async function maybeRunCodeReview(userId: number): Promise<void> {
+  const now = new Date();
+  const hour = now.getHours();
+  const today = now.toISOString().slice(0, 10);
+
+  // Only run between 14:00-15:00, once per day
+  if (hour !== 14) return;
+  if (lastCodeReviewDate === today) return;
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return;
+
+  // Pick next file in rotation
+  const filePath = CODE_REVIEW_FILES[codeReviewIndex % CODE_REVIEW_FILES.length]!;
+  codeReviewIndex++;
+  lastCodeReviewDate = today;
+
+  const fullPath = `/home/fjds/projects/cobrain/${filePath}`;
+
+  console.log(`[CodeReview] Starting daily review: ${filePath}`);
+
+  try {
+    // Read the file
+    const file = Bun.file(fullPath);
+    if (!(await file.exists())) {
+      console.warn(`[CodeReview] File not found: ${fullPath}`);
+      return;
+    }
+
+    const content = await file.text();
+
+    // Truncate if too long (keep first 4000 chars for Haiku context)
+    const truncated = content.length > 4000 ? content.slice(0, 4000) + "\n\n[... truncated ...]" : content;
+
+    // Analyze with Haiku
+    const response = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: HAIKU_MODEL,
+        max_tokens: 500,
+        system: `Sen bir kod review uzmanısın. Verilen TypeScript dosyasını analiz et.
+Her gözlemi şu formatta JSON array olarak döndür:
+[
+  {
+    "type": "bug" | "improvement" | "performance" | "architecture" | "cleanup",
+    "priority": "low" | "medium" | "high",
+    "observation": "kısa açıklama",
+    "suggestion": "öneri"
+  }
+]
+Sadece gerçek, somut gözlemler yaz. Bulgu yoksa boş array döndür: []
+Maksimum 3 gözlem.`,
+        messages: [
+          {
+            role: "user",
+            content: `Dosya: ${filePath}\n\n${truncated}`,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[CodeReview] Haiku API error: ${response.status}`);
+      return;
+    }
+
+    const data = (await response.json()) as {
+      content: Array<{ type: string; text?: string }>;
+    };
+
+    const text = data.content.find((c) => c.type === "text")?.text || "";
+
+    // Parse observations
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      console.log(`[CodeReview] No observations for ${filePath}`);
+      return;
+    }
+
+    const observations = JSON.parse(jsonMatch[0]) as Array<{
+      type: string;
+      priority: string;
+      observation: string;
+      suggestion: string;
+    }>;
+
+    if (observations.length === 0) {
+      console.log(`[CodeReview] No issues found in ${filePath}`);
+      return;
+    }
+
+    // Save each observation to smart-memory
+    const userFolder = userManager.getUserFolder(userId);
+    const memory = new SmartMemory(userFolder, userId);
+
+    let highPriorityBugs: string[] = [];
+
+    for (const obs of observations) {
+      const content = `[code-obs] [${obs.type}] [${obs.priority}] Dosya: ${filePath}\nGözlem: ${obs.observation}\nÖneri: ${obs.suggestion}`;
+
+      await memory.store({
+        type: "semantic",
+        content,
+        summary: `[code-obs] ${filePath}: ${obs.observation.slice(0, 80)}`,
+        importance: obs.priority === "high" ? 0.9 : obs.priority === "medium" ? 0.7 : 0.5,
+        source: "code-review-cycle",
+        metadata: {
+          file: filePath,
+          obsType: obs.type,
+          priority: obs.priority,
+          date: today,
+        },
+      });
+
+      // Track high priority bugs for notification
+      if (obs.priority === "high" && obs.type === "bug") {
+        highPriorityBugs.push(`${filePath}: ${obs.observation}`);
+      }
+    }
+
+    memory.close();
+
+    console.log(`[CodeReview] ${observations.length} observation(s) saved for ${filePath}`);
+
+    // Notify user about high priority bugs only
+    if (highPriorityBugs.length > 0 && bot) {
+      const bugMsg = highPriorityBugs.map((b) => `- ${b}`).join("\n");
+      await bot.api.sendMessage(
+        userId,
+        `🐛 Code review'da yüksek öncelikli bug buldum:\n${bugMsg}\n\nDetay: recall("code-obs") ile bakabilirsin.`
+      );
+    }
+  } catch (error) {
+    console.error(`[CodeReview] Error reviewing ${filePath}:`, error);
   }
 }
