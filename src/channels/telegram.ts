@@ -242,7 +242,72 @@ bot.command("clear", async (ctx) => {
   await clearSession(userId); // Session ve history birlikte temizlenir
   cachedAnalysis = [];
 
+  // Reset session state
+  if (config.FF_SESSION_STATE) {
+    const { saveSessionState, DEFAULT_SESSION_STATE } = await import("../services/session-state.ts");
+    saveSessionState(userId, { ...DEFAULT_SESSION_STATE });
+  }
+
   await ctx.reply(`🗑️ Temizlendi! Session ve sohbet geçmişi sıfırlandı.`);
+});
+
+bot.command("phase", async (ctx) => {
+  if (!isAuthorized(ctx.from?.id ?? 0)) return;
+
+  const userId = ctx.from?.id ?? 0;
+
+  if (!config.FF_SESSION_STATE) {
+    await ctx.reply("Session state devre dışı (FF_SESSION_STATE=false)");
+    return;
+  }
+
+  const { getSessionState, updateSessionState } = await import("../services/session-state.ts");
+  const args = ctx.message?.text?.split(" ").slice(1) || [];
+
+  if (args.length === 0) {
+    // Show current state
+    const state = getSessionState(userId);
+    const phaseEmoji: Record<string, string> = {
+      exploring: "🔍",
+      decided: "✅",
+      implementing: "🔨",
+      deployed: "🚀",
+      archived: "📦",
+    };
+
+    let text = `📊 <b>Session State</b>\n\n`;
+    text += `<b>Phase:</b> ${phaseEmoji[state.conversationPhase] || ""} ${state.conversationPhase}\n`;
+    text += `<b>Topic:</b> ${state.lastTopic || "(yok)"}\n`;
+    text += `<b>Confidence:</b> ${(state.confidence * 100).toFixed(0)}%\n`;
+    text += `<b>Last message:</b> ${state.lastUserMessage ? state.lastUserMessage.slice(0, 80) + "..." : "(yok)"}\n`;
+
+    if (state.pendingActions.length > 0) {
+      text += `\n<b>Pending actions:</b>\n`;
+      for (const action of state.pendingActions) {
+        text += `• ${action}\n`;
+      }
+    }
+
+    text += `\n<i>Override: /phase exploring|decided|implementing|deployed|archived</i>`;
+
+    await ctx.reply(text, { parse_mode: "HTML" });
+  } else {
+    // Manual phase override
+    const validPhases = ["exploring", "decided", "implementing", "deployed", "archived"];
+    const newPhase = args[0]!.toLowerCase();
+
+    if (!validPhases.includes(newPhase)) {
+      await ctx.reply(`Geçersiz phase. Geçerli değerler: ${validPhases.join(", ")}`);
+      return;
+    }
+
+    updateSessionState(userId, {
+      conversationPhase: newPhase as any,
+      confidence: 1.0,
+    });
+
+    await ctx.reply(`Phase güncellendi: ${newPhase} (confidence: 100%)`);
+  }
 });
 
 bot.command("restart", async (ctx) => {
@@ -916,6 +981,9 @@ export async function startBot(): Promise<void> {
     // Ayarlar
     { command: "persona", description: "Persona ayarlarını görüntüle" },
     { command: "mode", description: "Permission modunu değiştir" },
+
+    // Session
+    { command: "phase", description: "Session phase durumu / override" },
 
     // WhatsApp
     { command: "scan", description: "WhatsApp mesajlarını tara" },

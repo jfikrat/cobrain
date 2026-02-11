@@ -25,6 +25,7 @@ import { createLocationServer } from "./tools/location.ts";
 import { getPersonaService } from "../services/persona.ts";
 import { getMoodTrackingService } from "../services/mood-tracking.ts";
 import { SmartMemory } from "../memory/smart-memory.ts";
+import { getSessionState } from "../services/session-state.ts";
 import { needsPermission, askToolPermission, type PermissionMode } from "./permissions.ts";
 import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
@@ -274,10 +275,28 @@ export async function chat(
     memory.close();
   } catch {}
 
+  // Session state for continuity
+  let sessionState: DynamicContext['sessionState'] = undefined;
+  if (config.FF_SESSION_STATE) {
+    try {
+      const state = getSessionState(userId);
+      if (state.lastTopic) {
+        sessionState = {
+          lastTopic: state.lastTopic,
+          topicContext: state.topicContext,
+          pendingActions: state.pendingActions,
+          conversationPhase: state.conversationPhase,
+          lastUserMessage: state.lastUserMessage,
+        };
+      }
+    } catch {}
+  }
+
   const systemPrompt = generatePersonaSystemPrompt(persona, {
     time: dynamicTime,
     mood: dynamicMood,
     recentMemories,
+    sessionState,
   });
 
   // Get or resume session (checks in-memory cache, then DB with TTL)

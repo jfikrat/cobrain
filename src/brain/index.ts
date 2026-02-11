@@ -19,6 +19,9 @@ import { generateTraceId } from "../types/brain-events.ts";
 import { getEventStore } from "./event-store.ts";
 import { routeLite } from "./router-lite.ts";
 
+// Session state persistence
+import { updateSessionState, detectPhase, detectTopic } from "../services/session-state.ts";
+
 // Initialize Haiku on module load (for fallback CLI mode)
 if (!config.USE_AGENT_SDK) {
   initHaiku();
@@ -178,6 +181,25 @@ export async function think(userId: number, message: string | MultimodalMessage,
         costUsd: response.costUsd,
         latencyMs: Date.now() - startMs,
       });
+    }
+
+    // Session state update (after response)
+    if (config.FF_SESSION_STATE) {
+      try {
+        const detectedPhase = detectPhase(response.content);
+        const detectedTopic = detectTopic(textMessage, response.content);
+        const updates: Record<string, unknown> = {
+          lastUserMessage: textMessage.slice(0, 200),
+        };
+        if (detectedTopic) updates.lastTopic = detectedTopic;
+        if (detectedPhase) {
+          updates.conversationPhase = detectedPhase.phase;
+          updates.confidence = detectedPhase.confidence;
+        }
+        updateSessionState(userId, updates as any);
+      } catch (err) {
+        console.warn(`[Brain] Session state update failed:`, err);
+      }
     }
 
     return response;

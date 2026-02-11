@@ -22,6 +22,13 @@ export interface DynamicContext {
     trend: string;      // "improving" | "stable" | "declining"
   };
   recentMemories?: string[];  // Son 5 hafıza entry'sinin content'leri
+  sessionState?: {
+    lastTopic: string | null;
+    topicContext: string;
+    pendingActions: string[];
+    conversationPhase: string;
+    lastUserMessage: string;
+  };
 }
 
 /**
@@ -299,6 +306,23 @@ function buildDynamicContextXml(ctx: DynamicContext): string {
       xml += `\n    <memory>${escapeXml(mem)}</memory>`;
     }
     xml += `\n  </recent-memories>`;
+  }
+
+  if (ctx.sessionState && ctx.sessionState.lastTopic) {
+    xml += `\n  <session-continuity>`;
+    xml += `\n    <last-topic>${escapeXml(ctx.sessionState.lastTopic)}</last-topic>`;
+    xml += `\n    <phase>${escapeXml(ctx.sessionState.conversationPhase)}</phase>`;
+    if (ctx.sessionState.lastUserMessage) {
+      xml += `\n    <last-user-message>${escapeXml(ctx.sessionState.lastUserMessage)}</last-user-message>`;
+    }
+    if (ctx.sessionState.pendingActions.length > 0) {
+      xml += `\n    <pending-actions>`;
+      for (const action of ctx.sessionState.pendingActions) {
+        xml += `\n      <action>${escapeXml(action)}</action>`;
+      }
+      xml += `\n    </pending-actions>`;
+    }
+    xml += `\n  </session-continuity>`;
   }
 
   xml += `\n</dynamic-context>`;

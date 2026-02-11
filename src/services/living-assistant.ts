@@ -12,6 +12,7 @@ import { getActivityPatternService } from "./activity-patterns.ts";
 import { SmartMemory, type FollowupCandidate } from "../memory/smart-memory.ts";
 import { config } from "../config.ts";
 import { heartbeat } from "./heartbeat.ts";
+import { getSessionState, updateSessionState } from "./session-state.ts";
 
 // Haiku API for cheap analysis
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
@@ -110,6 +111,24 @@ const COOLDOWN_RULES = {
 export function initLivingAssistant(botInstance: Bot): void {
   bot = botInstance;
 
+  // Restore volatile state from session-state.json
+  if (config.FF_SESSION_STATE) {
+    try {
+      const state = getSessionState(config.MY_TELEGRAM_ID);
+      lastCodeReviewDate = state.lastCodeReviewDate;
+      codeReviewIndex = state.codeReviewIndex;
+      if (state.lastInteractionTime > 0)
+        lastInteractionTime.set(config.MY_TELEGRAM_ID, state.lastInteractionTime);
+      if (state.lastNotificationTime > 0)
+        lastNotificationTime.set(config.MY_TELEGRAM_ID, state.lastNotificationTime);
+      for (const [key, entry] of Object.entries(state.cooldowns))
+        cooldowns.set(key, entry);
+      console.log(`[LivingAssistant] State restored: codeReviewIdx=${codeReviewIndex}, cooldowns=${cooldowns.size}`);
+    } catch (err) {
+      console.warn(`[LivingAssistant] State restore failed:`, err);
+    }
+  }
+
   // Start the awareness loop
   const interval = config.HEARTBEAT_LOG_INTERVAL_MS || 30_000;
   intervalId = setInterval(() => {
@@ -135,6 +154,9 @@ export function stopLivingAssistant(): void {
  */
 export function recordInteraction(userId: number): void {
   lastInteractionTime.set(userId, Date.now());
+  if (config.FF_SESSION_STATE) {
+    updateSessionState(userId, { lastInteractionTime: Date.now() });
+  }
 }
 
 /**
@@ -594,6 +616,13 @@ async function sendNotification(
         break;
     }
 
+    // Persist cooldowns and notification time
+    if (config.FF_SESSION_STATE) {
+      const cooldownObj: Record<string, { lastSent: number; type: string }> = {};
+      for (const [key, entry] of cooldowns.entries()) cooldownObj[key] = entry;
+      updateSessionState(userId, { lastNotificationTime: Date.now(), cooldowns: cooldownObj });
+    }
+
     console.log(`[LivingAssistant] Sent ${priority}/${type} notification to user ${userId}`);
   } catch (error) {
     console.error(`[LivingAssistant] Failed to send notification:`, error);
@@ -711,6 +740,11 @@ async function maybeRunCodeReview(userId: number): Promise<void> {
   const filePath = CODE_REVIEW_FILES[codeReviewIndex % CODE_REVIEW_FILES.length]!;
   codeReviewIndex++;
   lastCodeReviewDate = today;
+
+  // Persist code review state
+  if (config.FF_SESSION_STATE) {
+    updateSessionState(config.MY_TELEGRAM_ID, { codeReviewIndex, lastCodeReviewDate: today });
+  }
 
   const fullPath = `/home/fjds/projects/cobrain/${filePath}`;
 
