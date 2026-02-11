@@ -15,6 +15,8 @@ import { whatsappDB } from "./whatsapp-db.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
 import { classifyWhatsAppMessage, type TierClassification, type GroupClassification } from "./haiku.ts";
 import type { ScheduledTask, QueuedTask, TaskResult, TaskType } from "../types/autonomous.ts";
+import { addWhatsAppNotification } from "./session-state.ts";
+import { config as appConfig } from "../config.ts";
 
 let bot: Bot | null = null;
 
@@ -553,6 +555,15 @@ async function handleDMMessages(
 
       await bot.api.sendMessage(telegramUserId, notifyMsg, { parse_mode: "HTML" });
       console.log(`[Proactive] DM auto-replied to ${senderName}: ${analysis.reply}`);
+
+      if (appConfig.FF_SESSION_STATE) {
+        addWhatsAppNotification(telegramUserId, {
+          senderName, chatJid,
+          preview: (messages[0]?.content || "").slice(0, 100),
+          tier: 1, autoReply: analysis.reply,
+          isGroup: false, timestamp: Date.now(),
+        });
+      }
       return { model: "haiku", tier: 1, outboxSuccess: outboxOk };
 
     } else if (analysis.tier === 2 && analysis.suggestedReply) {
@@ -565,10 +576,26 @@ async function handleDMMessages(
         `\n<i>${escapeHtml(analysis.reason || "")}</i>`;
 
       await bot.api.sendMessage(telegramUserId, notifyMsg, { parse_mode: "HTML" });
+
+      if (appConfig.FF_SESSION_STATE) {
+        addWhatsAppNotification(telegramUserId, {
+          senderName, chatJid,
+          preview: (messages[0]?.content || "").slice(0, 100),
+          tier: 2, isGroup: false, timestamp: Date.now(),
+        });
+      }
       return { model: "haiku", tier: 2 };
 
     } else {
       await sendDMNotification(messages, senderName, telegramUserId);
+
+      if (appConfig.FF_SESSION_STATE) {
+        addWhatsAppNotification(telegramUserId, {
+          senderName, chatJid,
+          preview: (messages[0]?.content || "").slice(0, 100),
+          tier: 3, isGroup: false, timestamp: Date.now(),
+        });
+      }
       return { model: "haiku", tier: 3 };
     }
   } catch (error) {
@@ -643,12 +670,29 @@ async function handleWatchedGroupMessages(
 
       await bot.api.sendMessage(telegramUserId, notifyMsg, { parse_mode: "HTML" });
       console.log(`[Proactive] Auto-replied to ${groupName}: ${analysis.reply}`);
+
+      if (appConfig.FF_SESSION_STATE) {
+        addWhatsAppNotification(telegramUserId, {
+          senderName: groupName, chatJid: groupJid,
+          preview: msgSummary.slice(0, 100),
+          tier: 1, autoReply: analysis.reply,
+          isGroup: true, timestamp: Date.now(),
+        });
+      }
       return { model: "haiku", tier: 1, outboxSuccess: outboxOk };
     } else {
       if (!replyAllowed && analysis.shouldReply) {
         console.log(`[Proactive] Group ${groupJid} not in allowlist, skipping reply`);
       }
       await sendGroupNotification(messages, groupName, telegramUserId, analysis.reason);
+
+      if (appConfig.FF_SESSION_STATE) {
+        addWhatsAppNotification(telegramUserId, {
+          senderName: groupName, chatJid: groupJid,
+          preview: msgSummary.slice(0, 100),
+          tier: 3, isGroup: true, timestamp: Date.now(),
+        });
+      }
       return { model: "haiku", tier: 3 };
     }
   } catch (error) {

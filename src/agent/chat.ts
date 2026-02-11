@@ -277,6 +277,7 @@ export async function chat(
 
   // Session state for continuity
   let sessionState: DynamicContext['sessionState'] = undefined;
+  let recentWhatsApp: DynamicContext['recentWhatsApp'] = undefined;
   if (config.FF_SESSION_STATE) {
     try {
       const state = getSessionState(userId);
@@ -289,6 +290,21 @@ export async function chat(
           lastUserMessage: state.lastUserMessage,
         };
       }
+      // WhatsApp context
+      if (state.recentWhatsApp.length > 0) {
+        const now = Date.now();
+        recentWhatsApp = state.recentWhatsApp
+          .filter(n => now - n.timestamp < 24 * 60 * 60 * 1000)
+          .map(n => ({
+            senderName: n.senderName,
+            preview: n.preview,
+            tier: n.tier,
+            autoReply: n.autoReply,
+            isGroup: n.isGroup,
+            minutesAgo: Math.round((now - n.timestamp) / 60000),
+          }));
+        if (recentWhatsApp.length === 0) recentWhatsApp = undefined;
+      }
     } catch {}
   }
 
@@ -297,6 +313,7 @@ export async function chat(
     mood: dynamicMood,
     recentMemories,
     sessionState,
+    recentWhatsApp,
   });
 
   // Get or resume session (checks in-memory cache, then DB with TTL)

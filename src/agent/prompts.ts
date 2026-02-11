@@ -22,6 +22,14 @@ export interface DynamicContext {
     trend: string;      // "improving" | "stable" | "declining"
   };
   recentMemories?: string[];  // Son 5 hafıza entry'sinin content'leri
+  recentWhatsApp?: Array<{
+    senderName: string;
+    preview: string;
+    tier: number;
+    autoReply?: string;
+    isGroup: boolean;
+    minutesAgo: number;
+  }>;
   sessionState?: {
     lastTopic: string | null;
     topicContext: string;
@@ -323,6 +331,23 @@ function buildDynamicContextXml(ctx: DynamicContext): string {
       xml += `\n    </pending-actions>`;
     }
     xml += `\n  </session-continuity>`;
+  }
+
+  if (ctx.recentWhatsApp && ctx.recentWhatsApp.length > 0) {
+    xml += `\n  <recent-whatsapp>`;
+    for (const wa of ctx.recentWhatsApp) {
+      const attrs = [
+        `sender="${escapeXml(wa.senderName)}"`,
+        `group="${wa.isGroup}"`,
+        `tier="${wa.tier}"`,
+        `minutes-ago="${wa.minutesAgo}"`,
+      ];
+      if (wa.autoReply) {
+        attrs.push(`auto-reply="${escapeXml(wa.autoReply)}"`);
+      }
+      xml += `\n    <message ${attrs.join(' ')}>${escapeXml(wa.preview)}</message>`;
+    }
+    xml += `\n  </recent-whatsapp>`;
   }
 
   xml += `\n</dynamic-context>`;

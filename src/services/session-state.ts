@@ -12,6 +12,16 @@ import { userManager } from "./user-manager.ts";
 
 export type ConversationPhase = "exploring" | "decided" | "implementing" | "deployed" | "archived";
 
+export interface WhatsAppNotification {
+  senderName: string;
+  chatJid: string;
+  preview: string;        // mesaj özeti (max 100 char)
+  tier: number;           // 1=auto-replied, 2=suggested, 3=notify-only
+  autoReply?: string;     // tier 1 ise gönderilen cevap
+  isGroup: boolean;
+  timestamp: number;      // Date.now()
+}
+
 export interface SessionState {
   // Conversation continuity
   lastTopic: string | null;
@@ -27,6 +37,9 @@ export interface SessionState {
   lastNotificationTime: number;
   codeReviewIndex: number;
   lastCodeReviewDate: string | null;
+
+  // WhatsApp context
+  recentWhatsApp: WhatsAppNotification[];
 
   // Meta
   updatedAt: string;
@@ -45,6 +58,7 @@ export const DEFAULT_SESSION_STATE: SessionState = {
   lastNotificationTime: 0,
   codeReviewIndex: 0,
   lastCodeReviewDate: null,
+  recentWhatsApp: [],
   updatedAt: new Date().toISOString(),
   version: 1,
 };
@@ -162,4 +176,19 @@ export function detectTopic(userMsg: string, responseText: string): string | nul
     }
   }
   return null;
+}
+
+// ============ WHATSAPP CONTEXT ============
+
+/** Son WA mesajını session state'e ekle (max 10, 24 saat TTL) */
+export function addWhatsAppNotification(userId: number, notif: WhatsAppNotification): void {
+  const state = getSessionState(userId);
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+
+  const fresh = state.recentWhatsApp
+    .filter(n => n.timestamp > cutoff)
+    .concat(notif)
+    .slice(-10);
+
+  updateSessionState(userId, { recentWhatsApp: fresh });
 }
