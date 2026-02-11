@@ -30,9 +30,17 @@ export interface WebSocketData {
 }
 
 // Client -> Server messages
+interface ChatAttachment {
+  id: string;
+  type: "image" | "audio" | "document";
+}
+
 interface ChatMessage {
   type: "chat";
-  payload: { message: string };
+  payload: {
+    message: string;
+    attachments?: ChatAttachment[];
+  };
 }
 
 interface CancelMessage {
@@ -57,6 +65,7 @@ interface SaveMessageMessage {
       role: "user" | "assistant";
       content: string;
       toolUses?: unknown[];
+      attachments?: unknown[];
       timestamp: number;
     };
   };
@@ -142,6 +151,7 @@ interface SyncResponseMessage {
         role: "user" | "assistant";
         content: string;
         toolUses: unknown[];
+        attachments?: unknown[];
         timestamp: number;
       }>;
     }>;
@@ -321,7 +331,7 @@ export async function handleMessage(
 
     switch (message.type) {
       case "chat":
-        await handleChat(ws, message.payload.message);
+        await handleChat(ws, message.payload.message, message.payload.attachments);
         break;
 
       case "cancel":
@@ -370,7 +380,7 @@ function handleCancel(userId: number): void {
   }
 }
 
-async function handleChat(ws: ServerWebSocket<WebSocketData>, message: string): Promise<void> {
+async function handleChat(ws: ServerWebSocket<WebSocketData>, message: string, attachments?: ChatAttachment[]): Promise<void> {
   const { userId } = ws.data;
 
   // Cancel any existing chat
@@ -381,7 +391,26 @@ async function handleChat(ws: ServerWebSocket<WebSocketData>, message: string): 
   activeChatAborts.set(userId, abortController);
 
   try {
-    await streamChat(ws, userId, message, abortController.signal);
+    // If there are image attachments, build multimodal prompt
+    let finalMessage = message;
+    if (attachments?.length) {
+      const imageAttachments = attachments.filter((a) => a.type === "image");
+      if (imageAttachments.length > 0) {
+        // Prepend image context info so the agent knows images were attached
+        const imageNote = imageAttachments.length === 1
+          ? "[Kullanıcı bir görsel ekledi. Görseli analiz et.]"
+          : `[Kullanıcı ${imageAttachments.length} görsel ekledi. Görselleri analiz et.]`;
+        finalMessage = `${imageNote}\n\n${message || "Bu görseli analiz et."}`;
+      }
+
+      const audioAttachments = attachments.filter((a) => a.type === "audio");
+      if (audioAttachments.length > 0) {
+        const audioNote = "[Kullanıcı sesli mesaj gönderdi. Mesaj transkribe edildi.]";
+        finalMessage = `${audioNote}\n\n${message}`;
+      }
+    }
+
+    await streamChat(ws, userId, finalMessage, abortController.signal);
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       console.log(`[WS] Chat aborted for user ${userId}`);

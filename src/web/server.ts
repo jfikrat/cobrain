@@ -12,6 +12,7 @@ import {
   handleMessage,
   type WebSocketData,
 } from "./websocket.ts";
+import { handleMediaUpload, handleMediaTranscribe, handleMediaServe } from "./media.ts";
 import { chat } from "../agent/chat.ts";
 import { bot } from "../channels/telegram.ts";
 import { userManager } from "../services/user-manager.ts";
@@ -178,6 +179,22 @@ export function startWebServer(): void {
           const msg = err instanceof Error ? err.message : "Unknown error";
           return Response.json({ error: msg }, { status: 500 });
         }
+      }
+
+      // POST /api/media/upload — Upload media file (image, audio)
+      if (url.pathname === "/api/media/upload" && req.method === "POST") {
+        return handleMediaUpload(req);
+      }
+
+      // POST /api/media/transcribe — Transcribe uploaded audio
+      if (url.pathname === "/api/media/transcribe" && req.method === "POST") {
+        return handleMediaTranscribe(req);
+      }
+
+      // GET /api/media/:id — Serve uploaded file
+      const mediaMatch = url.pathname.match(/^\/api\/media\/([a-f0-9-]+)$/);
+      if (mediaMatch?.[1] && req.method === "GET") {
+        return handleMediaServe(req, mediaMatch[1]);
       }
 
       // 404 for unknown routes

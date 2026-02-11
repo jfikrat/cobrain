@@ -40,6 +40,7 @@ interface ConversationMessageRow {
   role: string;
   content: string;
   tool_uses: string;
+  attachments: string;
   timestamp: number;
 }
 
@@ -111,10 +112,18 @@ export class UserMemory {
         role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
         content TEXT NOT NULL,
         tool_uses TEXT DEFAULT '[]',
+        attachments TEXT DEFAULT '[]',
         timestamp INTEGER NOT NULL,
         FOREIGN KEY (conversation_id) REFERENCES conversations(id)
       )
     `);
+
+    // Add attachments column if it doesn't exist (migration for existing DBs)
+    try {
+      this.db.run(`ALTER TABLE conversation_messages ADD COLUMN attachments TEXT DEFAULT '[]'`);
+    } catch {
+      // Column already exists, ignore
+    }
 
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_conv_messages ON conversation_messages(conversation_id, timestamp)`);
   }
@@ -294,7 +303,7 @@ export class UserMemory {
     return conversations.map((conv) => {
       const messages = this.db
         .query<ConversationMessageRow, [string]>(
-          `SELECT id, conversation_id, role, content, tool_uses, timestamp FROM conversation_messages WHERE conversation_id = ? ORDER BY timestamp ASC`
+          `SELECT id, conversation_id, role, content, tool_uses, attachments, timestamp FROM conversation_messages WHERE conversation_id = ? ORDER BY timestamp ASC`
         )
         .all(conv.id);
 
@@ -308,6 +317,7 @@ export class UserMemory {
           role: msg.role as "user" | "assistant",
           content: msg.content,
           toolUses: JSON.parse(msg.tool_uses || "[]"),
+          attachments: JSON.parse(msg.attachments || "[]"),
           timestamp: msg.timestamp,
         })),
       };
@@ -362,6 +372,7 @@ export class UserMemory {
       role: "user" | "assistant";
       content: string;
       toolUses?: unknown[];
+      attachments?: unknown[];
       timestamp: number;
     }
   ): void {
@@ -377,15 +388,16 @@ export class UserMemory {
 
     // Insert or update message
     this.db.run(
-      `INSERT INTO conversation_messages (id, conversation_id, role, content, tool_uses, timestamp)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET content = excluded.content, tool_uses = excluded.tool_uses`,
+      `INSERT INTO conversation_messages (id, conversation_id, role, content, tool_uses, attachments, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET content = excluded.content, tool_uses = excluded.tool_uses, attachments = excluded.attachments`,
       [
         message.id,
         conversationId,
         message.role,
         message.content,
         JSON.stringify(message.toolUses || []),
+        JSON.stringify(message.attachments || []),
         message.timestamp,
       ]
     );
