@@ -16,6 +16,9 @@ import {
   stopHeartbeatMonitor,
 } from "./services/heartbeat.ts";
 import { startWebServer, stopWebServer } from "./web/server.ts";
+import { initEventStore } from "./brain/event-store.ts";
+import { startProjectionScheduler, stopProjectionScheduler } from "./brain/projections.ts";
+import { userManager } from "./services/user-manager.ts";
 
 console.log(`
    ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗███╗   ██╗
@@ -31,6 +34,13 @@ console.log(`
   Autonomous: ${config.ENABLE_AUTONOMOUS ? "Enabled" : "Disabled"}
   Web UI: ${config.ENABLE_WEB_UI ? `Enabled (port ${config.WEB_PORT})` : "Disabled"}
 `);
+
+// Phase 1: Event Brain — initialize event store on global DB
+if (config.FF_BRAIN_EVENTS) {
+  const globalDb = userManager.getGlobalDb();
+  initEventStore(globalDb);
+  startProjectionScheduler();
+}
 
 // Initialize services
 registerHeartbeatComponent("app", { required: true });
@@ -72,6 +82,8 @@ if (config.ENABLE_AUTONOMOUS) {
 
 const shutdown = async () => {
   console.log("\nKapatılıyor...");
+
+  stopProjectionScheduler();
 
   if (config.ENABLE_AUTONOMOUS) {
     stopProactive();

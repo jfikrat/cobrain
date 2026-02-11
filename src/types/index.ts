@@ -6,3 +6,4 @@ export * from "./user.ts";
 export * from "./memory.ts";
 export * from "./autonomous.ts";
 export * from "./persona.ts";
+export * from "./brain-events.ts";

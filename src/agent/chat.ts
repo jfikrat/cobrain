@@ -28,6 +28,7 @@ import { SmartMemory } from "../memory/smart-memory.ts";
 import { needsPermission, askToolPermission, type PermissionMode } from "./permissions.ts";
 import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
+import { getEventStore } from "../brain/event-store.ts";
 
 export interface ChatResponse {
   content: string;
@@ -37,6 +38,7 @@ export interface ChatResponse {
   outputTokens: number;
   numTurns: number;
   toolsUsed: string[];
+  model: string;
 }
 
 // Multimodal content types for images
@@ -232,7 +234,12 @@ function buildMessageContent(message: string | MultimodalMessage): MessageConten
  * Main chat function using Agent SDK
  * Supports both text-only and multimodal (with images) messages
  */
-export async function chat(userId: number, message: string | MultimodalMessage): Promise<ChatResponse> {
+export async function chat(
+  userId: number,
+  message: string | MultimodalMessage,
+  traceId?: string,
+  modelOverride?: string,
+): Promise<ChatResponse> {
   // Ensure user exists and get settings
   await userManager.ensureUser(userId);
   const settings = await userManager.getUserSettings(userId);
@@ -290,7 +297,9 @@ export async function chat(userId: number, message: string | MultimodalMessage):
   const messagePreview = typeof message === "string" ? message.slice(0, 50) : message.text.slice(0, 50);
   const hasImages = typeof message !== "string" && message.images && message.images.length > 0;
 
-  console.log(`[Agent] Chat started for user ${userId}: "${messagePreview}..."${hasImages ? " (with images)" : ""}`);
+  const actualModel = modelOverride || config.AGENT_MODEL;
+
+  console.log(`[Agent] Chat started for user ${userId}: "${messagePreview}..."${hasImages ? " (with images)" : ""}${modelOverride ? ` (model: ${actualModel})` : ""}`);
 
   try {
     // Create the prompt - use SDKUserMessage for multimodal content
@@ -311,8 +320,8 @@ export async function chat(userId: number, message: string | MultimodalMessage):
     const queryResult = query({
       prompt,
       options: {
-        // Model from config (default: opus)
-        model: config.AGENT_MODEL,
+        // Model: override from router-lite or fallback to config
+        model: actualModel,
 
         // Working directory - user's folder
         cwd: userFolder,
@@ -374,6 +383,20 @@ export async function chat(userId: number, message: string | MultimodalMessage):
 
                   console.log(`[Agent] Tool: ${toolName}`);
                   toolsUsed.push(toolName);
+
+                  // Event: tool called
+                  if (config.FF_BRAIN_EVENTS && traceId) {
+                    const eventStore = getEventStore();
+                    if (eventStore) {
+                      eventStore.append({
+                        userId,
+                        traceId,
+                        eventType: "agent.tool.called",
+                        actor: "agent",
+                        payload: { tool: toolName },
+                      });
+                    }
+                  }
 
                   // Send status message to Telegram
                   try {
@@ -577,6 +600,7 @@ export async function chat(userId: number, message: string | MultimodalMessage):
       outputTokens,
       numTurns,
       toolsUsed: [...new Set(toolsUsed)], // Unique tools
+      model: actualModel,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -591,7 +615,7 @@ export async function chat(userId: number, message: string | MultimodalMessage):
         const mem = new UserMemory(userDb);
         mem.clearSession();
       } catch {}
-      return chat(userId, message);
+      return chat(userId, message, traceId, modelOverride);
     }
 
     console.error("[Agent] Chat error:", error);
@@ -607,6 +631,7 @@ export async function chat(userId: number, message: string | MultimodalMessage):
       outputTokens: 0,
       numTurns: 0,
       toolsUsed: [],
+      model: actualModel,
     };
   }
 }

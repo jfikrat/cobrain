@@ -76,6 +76,31 @@ export class UserManager {
       )
     `);
 
+    // Brain events (Phase 1 — append-only event log)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS brain_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts DATETIME DEFAULT CURRENT_TIMESTAMP,
+        user_id INTEGER NOT NULL,
+        trace_id TEXT NOT NULL,
+        causation_id TEXT,
+        event_type TEXT NOT NULL,
+        channel TEXT,
+        actor TEXT NOT NULL,
+        entity_type TEXT,
+        entity_id TEXT,
+        payload_json TEXT NOT NULL,
+        input_tokens INTEGER DEFAULT 0,
+        output_tokens INTEGER DEFAULT 0,
+        cost_usd REAL DEFAULT 0,
+        latency_ms INTEGER
+      )
+    `);
+
+    db.run(`CREATE INDEX IF NOT EXISTS idx_events_trace ON brain_events(trace_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_events_type_ts ON brain_events(event_type, ts DESC)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_events_user_ts ON brain_events(user_id, ts DESC)`);
+
     db.run(`CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_user ON scheduled_tasks(user_id)`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_task_queue_status ON task_queue(status, priority DESC)`);
 
@@ -333,6 +358,13 @@ export class UserManager {
     this.userMemories.set(userId, memory);
 
     return memory;
+  }
+
+  /**
+   * Get the global database (for shared tables like brain_events)
+   */
+  getGlobalDb(): Database {
+    return this.globalDb;
   }
 
   /**

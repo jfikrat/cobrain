@@ -48,6 +48,15 @@ const envSchema = z.object({
   AGENT_MODEL: z.string().default("claude-opus-4-6"),
   MAX_AGENT_TURNS: z.coerce.number().default(20),
 
+  // v0.9: Brain Events — Phase 1
+  FF_BRAIN_EVENTS: z.coerce.boolean().default(true),
+  FF_ROUTER_LITE: z.coerce.boolean().default(false), // shadow mode — log but don't override
+
+  // Model cascade (router-lite)
+  AGENT_MODEL_FAST: z.string().default("claude-haiku-4-5-20251001"),
+  AGENT_MODEL_DEFAULT: z.string().default("claude-sonnet-4-5-20250929"),
+  // AGENT_MODEL is used as the "deep" path (claude-opus-4-6)
+
   // v0.7: Always-on heartbeat monitoring
   ENABLE_HEARTBEAT_MONITORING: z
     .string()

@@ -14,6 +14,11 @@ import type { MemorySearchResult, MemoryInput } from "../types/memory.ts";
 // Agent SDK imports
 import { chat as agentChat, clearSession as agentClearSession, closeAllMemories, type MultimodalMessage } from "../agent/index.ts";
 
+// Phase 1: Event Brain + Router-lite
+import { generateTraceId } from "../types/brain-events.ts";
+import { getEventStore } from "./event-store.ts";
+import { routeLite } from "./router-lite.ts";
+
 // Initialize Haiku on module load (for fallback CLI mode)
 if (!config.USE_AGENT_SDK) {
   initHaiku();
@@ -105,27 +110,111 @@ async function getMemoryContext(userId: number, message: string): Promise<{ cont
  * Process user message and generate AI response
  * Supports both text-only and multimodal (with images) messages
  */
-export async function think(userId: number, message: string | MultimodalMessage): Promise<ThinkResponse> {
-  // Use Agent SDK if enabled
-  if (config.USE_AGENT_SDK) {
-    return thinkWithAgentSDK(userId, message);
+export async function think(userId: number, message: string | MultimodalMessage, channel: string = "telegram"): Promise<ThinkResponse> {
+  const traceId = generateTraceId();
+  const startMs = Date.now();
+  const textMessage = typeof message === "string" ? message : message.text;
+  const hasImage = typeof message !== "string" && (message.images?.length ?? 0) > 0;
+
+  // Event: user message received
+  const eventStore = config.FF_BRAIN_EVENTS ? getEventStore() : null;
+  if (eventStore) {
+    eventStore.append({
+      userId,
+      traceId,
+      eventType: "message.user.received",
+      channel,
+      actor: "user",
+      payload: { preview: textMessage.slice(0, 100), hasImage },
+    });
   }
 
-  // Fallback to CLI mode (only supports text)
-  const textMessage = typeof message === "string" ? message : message.text;
-  return thinkWithCLI(userId, textMessage);
+  // Route decision
+  const route = routeLite({
+    text: textMessage,
+    hasImage,
+    channel,
+  });
+
+  if (eventStore) {
+    eventStore.append({
+      userId,
+      traceId,
+      eventType: "route.decision",
+      actor: "system",
+      payload: { level: route.level, model: route.model, reason: route.reason },
+    });
+  }
+
+  // Model override only when FF_ROUTER_LITE is enabled and route has a real model
+  const modelOverride =
+    config.FF_ROUTER_LITE && route.model !== "none" ? route.model : undefined;
+
+  try {
+    let response: ThinkResponse;
+
+    // Use Agent SDK if enabled
+    if (config.USE_AGENT_SDK) {
+      response = await thinkWithAgentSDK(userId, message, traceId, modelOverride);
+    } else {
+      // Fallback to CLI mode (only supports text)
+      response = await thinkWithCLI(userId, textMessage);
+    }
+
+    // Event: completed
+    if (eventStore) {
+      eventStore.append({
+        userId,
+        traceId,
+        eventType: "agent.run.completed",
+        actor: "agent",
+        payload: {
+          numTurns: response.historyLength,
+          model: modelOverride || config.AGENT_MODEL,
+          routeLevel: route.level,
+        },
+        inputTokens: response.inputTokens,
+        outputTokens: response.outputTokens,
+        costUsd: response.costUsd,
+        latencyMs: Date.now() - startMs,
+      });
+    }
+
+    return response;
+  } catch (error) {
+    // Event: failed
+    if (eventStore) {
+      eventStore.append({
+        userId,
+        traceId,
+        eventType: "agent.run.failed",
+        actor: "agent",
+        payload: {
+          error: error instanceof Error ? error.message : String(error),
+          routeLevel: route.level,
+        },
+        latencyMs: Date.now() - startMs,
+      });
+    }
+    throw error;
+  }
 }
 
 /**
  * Agent SDK based chat (new)
  * Supports multimodal messages with images
  */
-async function thinkWithAgentSDK(userId: number, message: string | MultimodalMessage): Promise<ThinkResponse> {
+async function thinkWithAgentSDK(
+  userId: number,
+  message: string | MultimodalMessage,
+  traceId?: string,
+  modelOverride?: string,
+): Promise<ThinkResponse> {
   const hasImages = typeof message !== "string" && message.images && message.images.length > 0;
   const textMessage = typeof message === "string" ? message : message.text;
-  console.log(`[Brain] Using Agent SDK for user ${userId}${hasImages ? " (with images)" : ""}`);
+  console.log(`[Brain] Using Agent SDK for user ${userId}${hasImages ? " (with images)" : ""}${modelOverride ? ` (model: ${modelOverride})` : ""}`);
 
-  const response = await agentChat(userId, message);
+  const response = await agentChat(userId, message, traceId, modelOverride);
 
   // Save messages to database (like CLI mode does)
   try {
