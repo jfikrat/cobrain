@@ -5,7 +5,7 @@
 
 import { config } from "../config.ts";
 import { heartbeat } from "../services/heartbeat.ts";
-import { validateToken, startTokenCleanup, stopTokenCleanup } from "./auth.ts";
+import { validateToken, startTokenCleanup, stopTokenCleanup, generateMobileToken } from "./auth.ts";
 import {
   handleOpen,
   handleClose,
@@ -14,6 +14,8 @@ import {
 } from "./websocket.ts";
 import { chat } from "../agent/chat.ts";
 import { bot } from "../channels/telegram.ts";
+import { userManager } from "../services/user-manager.ts";
+import { LocationService } from "../services/location.ts";
 import indexHtml from "./public/index.html";
 
 let server: ReturnType<typeof Bun.serve> | null = null;
@@ -107,6 +109,71 @@ export function startWebServer(): void {
           bot.api.sendMessage(userId, response.content).catch(() => {});
 
           return Response.json(response);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          return Response.json({ error: msg }, { status: 500 });
+        }
+      }
+
+      // POST /api/auth/mobile — Authenticate mobile client, get long-lived token
+      if (url.pathname === "/api/auth/mobile" && req.method === "POST") {
+        try {
+          const body = await req.json();
+          const { apiKey } = body as { apiKey: string };
+          if (!apiKey || apiKey !== config.COBRAIN_API_KEY) {
+            return Response.json({ error: "Invalid API key" }, { status: 401 });
+          }
+
+          const userId = config.MY_TELEGRAM_ID;
+          const { token, expiresAt } = generateMobileToken(userId);
+
+          return Response.json({ token, userId, expiresAt });
+        } catch (err) {
+          return Response.json({ error: "Invalid request" }, { status: 400 });
+        }
+      }
+
+      // POST /api/location — Save location update from mobile client
+      if (url.pathname === "/api/location" && req.method === "POST") {
+        const authHeader = req.headers.get("authorization");
+        if (!authHeader?.startsWith("Bearer ")) {
+          return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const token = authHeader.slice(7);
+        const userId = validateToken(token);
+        if (!userId) {
+          return Response.json({ error: "Invalid or expired token" }, { status: 401 });
+        }
+
+        try {
+          const body = await req.json();
+          const { latitude, longitude, accuracy, altitude, timestamp } = body as {
+            latitude: number;
+            longitude: number;
+            accuracy?: number;
+            altitude?: number;
+            timestamp: number;
+          };
+
+          if (typeof latitude !== "number" || typeof longitude !== "number") {
+            return Response.json({ error: "latitude and longitude required" }, { status: 400 });
+          }
+
+          const db = await userManager.getUserDb(userId);
+          const locationService = new LocationService(db);
+          const now = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+
+          locationService.saveLocation({
+            name: `mobile-${now}`,
+            label: "mevcut",
+            latitude,
+            longitude,
+            notes: accuracy ? `accuracy: ${accuracy}m` : undefined,
+          });
+
+          console.log(`[Web] Location update from user ${userId}: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          return Response.json({ ok: true });
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
           return Response.json({ error: msg }, { status: 500 });

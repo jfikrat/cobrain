@@ -164,6 +164,18 @@ interface ConversationDeletedMessage {
   payload: { id: string };
 }
 
+interface NotificationMessage {
+  type: "notification";
+  payload: {
+    id: string;
+    title: string;
+    body: string;
+    notifType: "summary" | "goal_followup" | "memory_followup" | "mood_check" | "nudge" | "reminder";
+    priority: "low" | "medium" | "high" | "urgent";
+    data?: Record<string, unknown>;
+  };
+}
+
 type ServerMessage =
   | ConnectedMessage
   | TextDeltaMessage
@@ -175,7 +187,8 @@ type ServerMessage =
   | SyncResponseMessage
   | MessageSavedMessage
   | ConversationCreatedMessage
-  | ConversationDeletedMessage;
+  | ConversationDeletedMessage
+  | NotificationMessage;
 
 // ============ MCP Server Cache ============
 
@@ -234,6 +247,9 @@ const userSessions = new Map<number, string>();
 // Active chat promises (for cancellation)
 const activeChatAborts = new Map<number, AbortController>();
 
+// Connected WebSocket clients per user (for notifications)
+const connectedClients = new Map<number, Set<ServerWebSocket<WebSocketData>>>();
+
 // ============ Helper Functions ============
 
 function send(ws: ServerWebSocket<WebSocketData>, message: ServerMessage): void {
@@ -262,6 +278,12 @@ export function handleOpen(ws: ServerWebSocket<WebSocketData>): void {
   const { userId, sessionId } = ws.data;
   console.log(`[WS] Client connected: user ${userId}`);
 
+  // Track connected client
+  if (!connectedClients.has(userId)) {
+    connectedClients.set(userId, new Set());
+  }
+  connectedClients.get(userId)!.add(ws);
+
   send(ws, {
     type: "connected",
     payload: { sessionId },
@@ -271,6 +293,12 @@ export function handleOpen(ws: ServerWebSocket<WebSocketData>): void {
 export function handleClose(ws: ServerWebSocket<WebSocketData>): void {
   const { userId } = ws.data;
   console.log(`[WS] Client disconnected: user ${userId}`);
+
+  // Remove from connected clients
+  connectedClients.get(userId)?.delete(ws);
+  if (connectedClients.get(userId)?.size === 0) {
+    connectedClients.delete(userId);
+  }
 
   // Cancel any active chat
   const abortController = activeChatAborts.get(userId);
@@ -724,4 +752,39 @@ export function setSharedSession(userId: number, sessionId: string): void {
  */
 export function clearSharedSession(userId: number): void {
   userSessions.delete(userId);
+}
+
+/**
+ * Send a notification to all connected clients of a user
+ */
+export function sendNotificationToClients(
+  userId: number,
+  notification: {
+    id: string;
+    title: string;
+    body: string;
+    notifType: "summary" | "goal_followup" | "memory_followup" | "mood_check" | "nudge" | "reminder";
+    priority: "low" | "medium" | "high" | "urgent";
+    data?: Record<string, unknown>;
+  }
+): boolean {
+  const clients = connectedClients.get(userId);
+  if (!clients || clients.size === 0) return false;
+
+  for (const ws of clients) {
+    send(ws, {
+      type: "notification",
+      payload: notification,
+    });
+  }
+
+  console.log(`[WS] Notification sent to ${clients.size} client(s) of user ${userId}: ${notification.title}`);
+  return true;
+}
+
+/**
+ * Check if a user has any connected clients
+ */
+export function hasConnectedClients(userId: number): boolean {
+  return (connectedClients.get(userId)?.size ?? 0) > 0;
 }

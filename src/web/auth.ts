@@ -12,8 +12,9 @@ interface TokenData {
 // Token storage - in production consider Redis/DB
 const tokens = new Map<string, TokenData>();
 
-// Token expiry: 24 hours
+// Token expiry: 24 hours (web), 30 days (mobile)
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+const MOBILE_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 // Cleanup interval: 1 hour
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
@@ -109,6 +110,24 @@ export function stopTokenCleanup(): void {
     cleanupInterval = null;
     console.log("[Web Auth] Token cleanup stopped");
   }
+}
+
+/**
+ * Generate a long-lived token for mobile clients (30 day TTL)
+ */
+export function generateMobileToken(userId: number): { token: string; expiresAt: number } {
+  const token = crypto.randomUUID();
+  const now = Date.now();
+  const expiresAt = now + MOBILE_TOKEN_TTL_MS;
+
+  tokens.set(token, {
+    userId,
+    createdAt: now,
+    expiresAt,
+  });
+
+  console.log(`[Web Auth] Mobile token generated for user ${userId}: ${token.slice(0, 8)}...`);
+  return { token, expiresAt };
 }
 
 /**
