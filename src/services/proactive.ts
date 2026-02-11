@@ -17,6 +17,7 @@ import { classifyWhatsAppMessage, type TierClassification, type GroupClassificat
 import type { ScheduledTask, QueuedTask, TaskResult, TaskType } from "../types/autonomous.ts";
 import { addWhatsAppNotification } from "./session-state.ts";
 import { config as appConfig } from "../config.ts";
+import { SmartMemory } from "../memory/smart-memory.ts";
 
 let bot: Bot | null = null;
 
@@ -535,7 +536,44 @@ async function handleDMMessages(
   try {
     const analysis = await classifyWhatsAppMessage(senderName, msgSummary, "dm") as TierClassification;
 
+    // Check procedural memory — if rules exist for this scenario, escalate to full agent
     if (analysis.tier === 1 && analysis.reply) {
+      try {
+        const userFolder = userManager.getUserFolder(telegramUserId);
+        const memory = new SmartMemory(userFolder, telegramUserId);
+        const procedures = await memory.search(msgSummary, { type: "procedural", limit: 2, minScore: 0.5 });
+        memory.close();
+
+        if (procedures.length > 0) {
+          console.log(`[Proactive] Procedural memory match for DM from ${senderName} (${procedures.length} rules), escalating to full agent`);
+          const fullResponse = await think(telegramUserId, `[WhatsApp DM - ${senderName}] ${msgSummary}`, "whatsapp");
+          const reply = fullResponse.content.slice(0, maxReplyLength);
+          const outboxOk = whatsappDB.addToOutbox(chatJid, reply);
+
+          const notifyMsg = `<b>WhatsApp - ${escapeHtml(senderName)}</b> 🧠\n\n` +
+            messages.map(m => {
+              const typeLabel = m.message_type !== "text" ? `[${m.message_type}] ` : "";
+              return `${typeLabel}${escapeHtml((m.content || "").slice(0, 80))}`;
+            }).join("\n") +
+            `\n\n<i>Akıllı cevap: "${escapeHtml(reply.slice(0, 200))}"</i>` +
+            (!outboxOk ? `\n<b>Outbox hatasi!</b>` : "");
+
+          await bot.api.sendMessage(telegramUserId, notifyMsg, { parse_mode: "HTML" });
+
+          if (appConfig.FF_SESSION_STATE) {
+            addWhatsAppNotification(telegramUserId, {
+              senderName, chatJid,
+              preview: (messages[0]?.content || "").slice(0, 100),
+              tier: 1, autoReply: reply,
+              isGroup: false, timestamp: Date.now(),
+            });
+          }
+          return { model: "claude", tier: 1, outboxSuccess: outboxOk };
+        }
+      } catch (e) {
+        console.error(`[Proactive] Procedural memory check failed:`, e);
+      }
+
       const validation = validateReply(analysis.reply, maxReplyLength);
       if (!validation.valid) {
         console.log(`[Proactive] DM reply validation failed (${validation.reason}), downgrading to tier 3`);

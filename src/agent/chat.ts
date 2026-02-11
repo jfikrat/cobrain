@@ -8,28 +8,24 @@ import {
   query,
   type SDKMessage,
   type SDKResultMessage,
-  type PreToolUseHookInput,
 } from "@anthropic-ai/claude-agent-sdk";
 import { userManager } from "../services/user-manager.ts";
 import { heartbeat } from "../services/heartbeat.ts";
 import { generatePersonaSystemPrompt, type DynamicContext } from "./prompts.ts";
-import { createMemoryServer } from "./tools/memory.ts";
-import { createGoalsServer } from "./tools/goals.ts";
-import { createPersonaServer } from "./tools/persona.ts";
-import { createTelegramServer, getTelegramBot } from "./tools/telegram.ts";
-import { getTimeServer } from "./tools/time.ts";
-import { createMoodServer } from "./tools/mood.ts";
-import { createLocationServer } from "./tools/location.ts";
-
-
 import { getPersonaService } from "../services/persona.ts";
 import { getMoodTrackingService } from "../services/mood-tracking.ts";
 import { SmartMemory } from "../memory/smart-memory.ts";
-import { getSessionState } from "../services/session-state.ts";
-import { needsPermission, askToolPermission, type PermissionMode } from "./permissions.ts";
+import { getSessionState, updateSessionState, detectTopic, detectPhase } from "../services/session-state.ts";
 import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
-import { getEventStore } from "../brain/event-store.ts";
+
+// Split modules
+import { getMemoryServer, getTelegramMcpServer, getGoalsServer, getPersonaServer, getMoodServer, getLocationServer, getTimeServer } from "./mcp-servers.ts";
+import { extractTextContent, buildMessageContent, type MultimodalMessage } from "./message-builder.ts";
+import { createPreToolUseHooks } from "./hooks.ts";
+
+// Re-export types from message-builder for backwards compatibility
+export type { MultimodalMessage, ImageContent, TextContent, MessageContent } from "./message-builder.ts";
 
 export interface ChatResponse {
   content: string;
@@ -40,31 +36,6 @@ export interface ChatResponse {
   numTurns: number;
   toolsUsed: string[];
   model: string;
-}
-
-// Multimodal content types for images
-export interface ImageContent {
-  type: "image";
-  source: {
-    type: "base64";
-    media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
-    data: string; // base64 encoded image
-  };
-}
-
-export interface TextContent {
-  type: "text";
-  text: string;
-}
-
-export type MessageContent = TextContent | ImageContent;
-
-export interface MultimodalMessage {
-  text: string;
-  images?: Array<{
-    data: string; // base64
-    mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
-  }>;
 }
 
 // Session ID cache per user
@@ -85,9 +56,11 @@ async function getOrResumeSession(userId: number): Promise<string | undefined> {
     const session = memory.getSession();
     if (!session?.lastUsedAt) return undefined;
 
-    // 3. TTL kontrolü
+    // 3. TTL kontrolü (gece 00-08 arası 2x tolerans)
     const age = Date.now() - new Date(session.lastUsedAt).getTime();
-    if (age > SESSION_TTL_MS) {
+    const hour = new Date().getHours();
+    const effectiveTTL = hour >= 0 && hour < 8 ? SESSION_TTL_MS * 3 : SESSION_TTL_MS;
+    if (age > effectiveTTL) {
       console.log(`[Agent] Session expired (${Math.round(age / 60000)}min), starting fresh`);
       return undefined;
     }
@@ -98,137 +71,6 @@ async function getOrResumeSession(userId: number): Promise<string | undefined> {
   } catch {
     return undefined;
   }
-}
-
-// MCP Server cache per user
-const userMemoryServers = new Map<number, ReturnType<typeof createMemoryServer>>();
-const userGoalsServers = new Map<number, ReturnType<typeof createGoalsServer>>();
-const userPersonaServers = new Map<number, ReturnType<typeof createPersonaServer>>();
-const userMoodServers = new Map<number, ReturnType<typeof createMoodServer>>();
-const userLocationServers = new Map<number, ReturnType<typeof createLocationServer>>();
-
-
-// Shared servers (same for all users)
-let telegramServer: ReturnType<typeof createTelegramServer> | null = null;
-
-
-/**
- * Get or create memory server for user
- */
-function getMemoryServer(userId: number) {
-  let server = userMemoryServers.get(userId);
-  if (!server) {
-    server = createMemoryServer(userId);
-    userMemoryServers.set(userId, server);
-  }
-  return server;
-}
-
-/**
- * Get or create telegram server (shared)
- */
-function getTelegramServer() {
-  if (!telegramServer) {
-    telegramServer = createTelegramServer();
-  }
-  return telegramServer;
-}
-
-/**
- * Get or create goals server for user
- */
-function getGoalsServer(userId: number) {
-  let server = userGoalsServers.get(userId);
-  if (!server) {
-    server = createGoalsServer(userId);
-    userGoalsServers.set(userId, server);
-  }
-  return server;
-}
-
-/**
- * Get or create persona server for user
- */
-function getPersonaServer(userId: number) {
-  let server = userPersonaServers.get(userId);
-  if (!server) {
-    server = createPersonaServer(userId);
-    userPersonaServers.set(userId, server);
-  }
-  return server;
-}
-
-/**
- * Get or create mood server for user
- */
-function getMoodServer(userId: number) {
-  let server = userMoodServers.get(userId);
-  if (!server) {
-    server = createMoodServer(userId);
-    userMoodServers.set(userId, server);
-  }
-  return server;
-}
-
-/**
- * Get or create location server for user
- */
-function getLocationServer(userId: number) {
-  let server = userLocationServers.get(userId);
-  if (!server) {
-    server = createLocationServer(userId);
-    userLocationServers.set(userId, server);
-  }
-  return server;
-}
-
-
-/**
- * Extract text content from assistant message
- */
-function extractTextContent(message: SDKMessage): string {
-  if (message.type !== "assistant") return "";
-
-  const content = message.message.content;
-  if (typeof content === "string") return content;
-
-  // Content is an array of blocks
-  return (content as Array<{ type: string; text?: string }>)
-    .filter((block) => block.type === "text" && block.text)
-    .map((block) => block.text!)
-    .join("\n");
-}
-
-/**
- * Build multimodal content array for Claude API
- */
-function buildMessageContent(message: string | MultimodalMessage): MessageContent[] {
-  if (typeof message === "string") {
-    return [{ type: "text", text: message }];
-  }
-
-  const content: MessageContent[] = [];
-
-  // Add text first
-  if (message.text) {
-    content.push({ type: "text", text: message.text });
-  }
-
-  // Add images
-  if (message.images && message.images.length > 0) {
-    for (const img of message.images) {
-      content.push({
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: img.mediaType,
-          data: img.data,
-        },
-      });
-    }
-  }
-
-  return content;
 }
 
 /**
@@ -377,7 +219,7 @@ export async function chat(
           memory: getMemoryServer(userId),
           goals: getGoalsServer(userId),
           persona: getPersonaServer(userId),
-          telegram: getTelegramServer(),
+          telegram: getTelegramMcpServer(),
           time: getTimeServer(),
           mood: getMoodServer(userId),
           location: getLocationServer(userId),
@@ -409,165 +251,12 @@ export async function chat(
 
         // Hooks for logging and permission control
         hooks: {
-          PreToolUse: [
-            {
-              hooks: [
-                async (hookInput) => {
-                  const input = hookInput as PreToolUseHookInput;
-                  const toolName = input.tool_name;
-                  const toolInput = input.tool_input as Record<string, unknown>;
-
-                  console.log(`[Agent] Tool: ${toolName}`);
-                  toolsUsed.push(toolName);
-
-                  // Event: tool called
-                  if (config.FF_BRAIN_EVENTS && traceId) {
-                    const eventStore = getEventStore();
-                    if (eventStore) {
-                      eventStore.append({
-                        userId,
-                        traceId,
-                        eventType: "agent.tool.called",
-                        actor: "agent",
-                        payload: { tool: toolName },
-                      });
-                    }
-                  }
-
-                  // Send status message to Telegram
-                  try {
-                    let statusMessage = "";
-
-                    // Customize status message based on tool
-                    // Uses includes() to support both direct and gateway-prefixed tool names
-                    if (toolName === "WebSearch") {
-                      statusMessage = `🔍 Web'de araştırma yapıyorum: "${toolInput.query || ""}"`;
-                    } else if (toolName === "WebFetch") {
-                      statusMessage = `🌐 Web sayfasını okuyorum...`;
-                    } else if (toolName === "Read") {
-                      statusMessage = `📄 Dosya okuyorum: ${(toolInput.file_path as string || "").split("/").pop()}`;
-                    } else if (toolName === "Write") {
-                      statusMessage = `✍️ Dosya yazıyorum: ${(toolInput.file_path as string || "").split("/").pop()}`;
-                    } else if (toolName === "Edit") {
-                      statusMessage = `📝 Dosya düzenliyorum: ${(toolInput.file_path as string || "").split("/").pop()}`;
-                    } else if (toolName === "Bash") {
-                      statusMessage = `⚡ Komut çalıştırıyorum: ${(toolInput.command as string || "").slice(0, 50)}...`;
-                    } else if (toolName === "Glob") {
-                      statusMessage = `🔎 Dosya arıyorum: ${toolInput.pattern}`;
-                    } else if (toolName === "Grep") {
-                      statusMessage = `🔍 İçerik arıyorum: "${(toolInput.pattern as string || "").slice(0, 30)}..."`;
-                    } else if (toolName === "mcp__memory__remember") {
-                      statusMessage = `🧠 Hafızaya kaydediyorum...`;
-                    } else if (toolName === "mcp__memory__recall") {
-                      statusMessage = `🧠 Hafızamı tarıyorum: "${toolInput.query}"`;
-                    } else if (toolName === "mcp__goals__create_goal") {
-                      statusMessage = `🎯 Hedef oluşturuyorum...`;
-                    } else if (toolName === "mcp__goals__create_reminder") {
-                      statusMessage = `⏰ Hatırlatıcı kuruyorum...`;
-                    } else if (toolName === "mcp__location__save_location") {
-                      statusMessage = `📍 Konum kaydediyorum: "${toolInput.name}"`;
-                    } else if (toolName === "mcp__location__get_distance") {
-                      statusMessage = `🗺️ Mesafe hesaplıyorum: ${toolInput.origin} → ${toolInput.destination}`;
-                    } else if (toolName === "mcp__location__geocode") {
-                      statusMessage = `🗺️ Adres çözümlüyorum...`;
-                    } else if (toolName === "mcp__location__list_locations") {
-                      statusMessage = `📍 Kayıtlı konumları listeliyorum...`;
-                    } else if (toolName.includes("gdrive_list") || toolName.includes("gdrive_search") || toolName.includes("gdrive_dirs")) {
-                      statusMessage = `📁 Google Drive'ı tarıyorum...`;
-                    } else if (toolName.includes("gdrive_link") || toolName.includes("gdrive_info")) {
-                      statusMessage = `📁 Google Drive dosya bilgisi alıyorum...`;
-                    } else if (toolName.includes("squad_codex")) {
-                      statusMessage = `🤖 Codex ile analiz yapıyorum...`;
-                    } else if (toolName.includes("squad_gemini")) {
-                      statusMessage = `🤖 Gemini ile kod üretiyorum...`;
-                    } else if (toolName.includes("squad_claude")) {
-                      statusMessage = `🤖 Claude Code ile görüşüyorum...`;
-                    } else if (toolName.includes("helm_browser_navigate")) {
-                      statusMessage = `🌐 Sayfaya gidiyorum...`;
-                    } else if (toolName.includes("helm_browser_screenshot")) {
-                      statusMessage = `📸 Ekran görüntüsü alıyorum...`;
-                    } else if (toolName.includes("helm_browser_click")) {
-                      statusMessage = `👆 Elemente tıklıyorum...`;
-                    } else if (toolName.includes("helm_browser_type")) {
-                      statusMessage = `⌨️ Metin yazıyorum...`;
-                    } else if (toolName.includes("whatsapp_send_message")) {
-                      statusMessage = `💬 WhatsApp mesajı gönderiyorum...`;
-                    } else if (toolName.includes("whatsapp_get_messages")) {
-                      statusMessage = `💬 WhatsApp mesajlarını okuyorum...`;
-                    } else if (toolName.includes("whatsapp_get_chats")) {
-                      statusMessage = `💬 WhatsApp sohbetlerini listeliyorum...`;
-                    } else if (toolName.includes("whatsapp_get_contacts")) {
-                      statusMessage = `📇 WhatsApp kişilerini arıyorum...`;
-                    } else if (toolName.includes("gateway__services") || toolName.includes("gateway__health") || toolName.includes("gateway__activate") || toolName.includes("gateway__deactivate") || toolName.includes("gateway__restart")) {
-                      // Gateway management — skip notification
-                    } else if (toolName === "Task") {
-                      statusMessage = `🚀 Yardımcı agent başlatıyorum: ${toolInput.description}`;
-                    } else if (toolName === "TodoWrite") {
-                      statusMessage = `📋 Görev listesini güncelliyorum...`;
-                    } else if (
-                      !toolName.startsWith("telegram_") &&
-                      !toolName.startsWith("mcp__telegram_") &&
-                      toolName !== "AskUserQuestion" &&
-                      toolName !== "EnterPlanMode" &&
-                      toolName !== "ExitPlanMode"
-                    ) {
-                      // Skip telegram tools (avoid loops) and internal SDK tools
-                      statusMessage = `🔧 ${toolName} kullanıyorum...`;
-                    }
-
-                    // Send via telegram bot if available
-                    if (statusMessage) {
-                      const bot = getTelegramBot();
-                      if (bot && bot.api) {
-                        await bot.api.sendMessage(userId, statusMessage);
-                      }
-                    }
-                  } catch (error) {
-                    // Silently fail - don't interrupt main flow
-                    console.error("[Agent] Failed to send status message:", error);
-                  }
-
-                  // User's permission mode or fallback to global config
-                  const mode = (settings.permissionMode || config.PERMISSION_MODE) as PermissionMode;
-
-                  // Check if permission is needed
-                  if (needsPermission(mode, toolName, toolInput)) {
-                    console.log(`[Agent] Asking permission for ${toolName}...`);
-
-                    // Create an AbortController for the permission request
-                    const abortController = new AbortController();
-
-                    const result = await askToolPermission(
-                      userId,
-                      toolName,
-                      toolInput,
-                      abortController.signal
-                    );
-
-                    if (result.behavior === "deny") {
-                      console.log(`[Agent] Permission denied for ${toolName}`);
-                      return {
-                        hookSpecificOutput: {
-                          hookEventName: "PreToolUse" as const,
-                          permissionDecision: "deny" as const,
-                          permissionDecisionReason: result.message || "Kullanıcı tarafından reddedildi",
-                        },
-                      };
-                    }
-
-                    console.log(`[Agent] Permission granted for ${toolName}`);
-                  }
-
-                  return {
-                    hookSpecificOutput: {
-                      hookEventName: "PreToolUse" as const,
-                      permissionDecision: "allow" as const,
-                    },
-                  };
-                },
-              ],
-            },
-          ],
+          PreToolUse: createPreToolUseHooks({
+            userId,
+            toolsUsed,
+            traceId,
+            permissionMode: settings.permissionMode || config.PERMISSION_MODE,
+          }),
         },
 
         // Limit turns to prevent runaway
@@ -627,6 +316,25 @@ export async function chat(
 
     // Heartbeat: agent completed successfully
     heartbeat("ai_agent", { event: "completed", turns: numTurns, tools: toolsUsed.length, cost: totalCost });
+
+    // Session state: write conversation context
+    if (config.FF_SESSION_STATE) {
+      try {
+        const userMsg = typeof message === "string" ? message : message.text || "";
+        const detected = detectTopic(userMsg, lastAssistantContent);
+        const phaseDetected = detectPhase(lastAssistantContent);
+
+        updateSessionState(userId, {
+          lastUserMessage: userMsg.slice(0, 500),
+          lastInteractionTime: Date.now(),
+          ...(detected && { lastTopic: detected }),
+          ...(phaseDetected && phaseDetected.confidence > 0.7 && {
+            conversationPhase: phaseDetected.phase,
+            confidence: phaseDetected.confidence,
+          }),
+        });
+      } catch {}
+    }
 
     return {
       content: lastAssistantContent || "Yanıt alınamadı.",

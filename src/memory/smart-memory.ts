@@ -565,6 +565,35 @@ export class SmartMemory {
   }
 
   /**
+   * Update metadata on an existing memory (merge by default)
+   */
+  updateMetadata(
+    memoryId: number,
+    metadata: Record<string, unknown>,
+    merge: boolean = true,
+  ): boolean {
+    if (merge) {
+      const row = this.db
+        .query<{ metadata: string }, [number]>(
+          "SELECT metadata FROM memories WHERE id = ?",
+        )
+        .get(memoryId);
+      if (!row) return false;
+      const merged = { ...JSON.parse(row.metadata || "{}"), ...metadata };
+      const result = this.db.run(
+        "UPDATE memories SET metadata = ? WHERE id = ?",
+        [JSON.stringify(merged), memoryId],
+      );
+      return result.changes > 0;
+    }
+    const result = this.db.run(
+      "UPDATE memories SET metadata = ? WHERE id = ?",
+      [JSON.stringify(metadata), memoryId],
+    );
+    return result.changes > 0;
+  }
+
+  /**
    * Find follow-up opportunities based on recent memories
    * Looks for topics that might warrant a check-in
    */
