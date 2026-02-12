@@ -236,6 +236,158 @@ Format: NUMARA:PUAN (her satırda bir tane)`;
   return results.sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
+// ========== Memory Consolidation ==========
+
+export interface PromotionResult {
+  id: number;
+  promote: boolean;
+  reason: string;
+}
+
+/**
+ * Classify episodic memories for promotion to semantic (batch)
+ * Returns which memories should be promoted (permanently valuable)
+ */
+export async function classifyForPromotion(
+  memories: { id: number; content: string; summary?: string }[]
+): Promise<PromotionResult[]> {
+  if (memories.length === 0) return [];
+
+  const memoriesText = memories
+    .map((m, i) => `${i + 1}. ${m.summary || m.content.slice(0, 150)}`)
+    .join("\n");
+
+  const systemPrompt = "Hafıza değerlendirme asistanısın. Her satırda NUMARA:EVET/HAYIR:sebep formatında yaz.";
+
+  const prompt = `Bu episodic hafızalar kalıcı değerli mi? Kişisel bilgi, tercih, öğrenilmiş bilgi, prosedür → EVET.
+Geçici konuşma, selamlama, tek seferlik soru → HAYIR.
+
+Hafızalar:
+${memoriesText}
+
+Her hafıza için karar ver.
+Format: NUMARA:EVET/HAYIR:kısa sebep`;
+
+  const response = await complete(prompt, systemPrompt, 500);
+  const results: PromotionResult[] = [];
+
+  for (const line of response.split("\n")) {
+    const match = line.match(/(\d+)\s*:\s*(EVET|HAYIR)\s*:\s*(.+)/i);
+    if (match && match[1] && match[2] && match[3]) {
+      const index = parseInt(match[1], 10) - 1;
+      if (index >= 0 && index < memories.length && memories[index]) {
+        results.push({
+          id: memories[index]!.id,
+          promote: match[2].toUpperCase() === "EVET",
+          reason: match[3].trim(),
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
+export interface DuplicateGroup {
+  ids: number[];
+  keepId: number;
+}
+
+/**
+ * Find duplicate memories in a batch
+ * Returns groups of duplicate IDs with the one to keep
+ */
+export async function findDuplicates(
+  memories: { id: number; content: string; summary?: string; tags?: string }[]
+): Promise<DuplicateGroup[]> {
+  if (memories.length < 2) return [];
+
+  const memoriesText = memories
+    .map((m, i) => `${i + 1}. [tags: ${m.tags || "yok"}] ${m.summary || m.content.slice(0, 150)}`)
+    .join("\n");
+
+  const systemPrompt = "Duplicate hafıza tespit asistanısın. GRUP:[numaralar] formatında yaz. Duplicate yoksa BOŞ yaz.";
+
+  const prompt = `Bu hafızalar arasında duplicate veya çok benzer olanları grupla.
+Aynı bilgiyi farklı şekilde ifade edenler de duplicate sayılır.
+
+Hafızalar:
+${memoriesText}
+
+Duplicate grupları (her grupta en uzun/detaylı olanı tut):
+Format: GRUP:[1,3,7]:TUT:1`;
+
+  const response = await complete(prompt, systemPrompt, 500);
+  const groups: DuplicateGroup[] = [];
+
+  for (const line of response.split("\n")) {
+    const match = line.match(/GRUP:\[([0-9,\s]+)\]:TUT:(\d+)/i);
+    if (match && match[1] && match[2]) {
+      const indices = match[1].split(",").map((s) => parseInt(s.trim(), 10) - 1);
+      const keepIndex = parseInt(match[2], 10) - 1;
+
+      const ids = indices
+        .filter((i) => i >= 0 && i < memories.length && memories[i])
+        .map((i) => memories[i]!.id);
+      const keepId = keepIndex >= 0 && keepIndex < memories.length && memories[keepIndex]
+        ? memories[keepIndex]!.id
+        : ids[0];
+
+      if (ids.length >= 2 && keepId !== undefined) {
+        groups.push({ ids, keepId });
+      }
+    }
+  }
+
+  return groups;
+}
+
+export interface ConflictResolution {
+  keepId: number;
+  removeId: number;
+  reason: string;
+}
+
+/**
+ * Resolve conflict between two memories with overlapping tags but different content
+ * Returns which one to keep (newer information generally wins)
+ */
+export async function resolveConflict(
+  mem1: { id: number; content: string; createdAt: string },
+  mem2: { id: number; content: string; createdAt: string }
+): Promise<ConflictResolution> {
+  const systemPrompt = "Çelişki çözüm asistanısın. KEEP:1|2:sebep formatında yaz.";
+
+  const prompt = `İki hafıza çelişiyor. Hangisi daha güncel/doğru?
+
+1. (${mem1.createdAt}): ${mem1.content.slice(0, 200)}
+2. (${mem2.createdAt}): ${mem2.content.slice(0, 200)}
+
+Hangisini tutmalı? Yeni bilgi genelde eski bilgiyi geçersiz kılar.
+Format: KEEP:1|2:sebep`;
+
+  const response = await complete(prompt, systemPrompt, 200);
+  const match = response.match(/KEEP\s*:\s*([12])\s*:\s*(.+)/i);
+
+  if (match && match[1] && match[2]) {
+    const keepNum = parseInt(match[1], 10);
+    return {
+      keepId: keepNum === 1 ? mem1.id : mem2.id,
+      removeId: keepNum === 1 ? mem2.id : mem1.id,
+      reason: match[2].trim(),
+    };
+  }
+
+  // Default: keep newer
+  const date1 = new Date(mem1.createdAt).getTime();
+  const date2 = new Date(mem2.createdAt).getTime();
+  return {
+    keepId: date2 >= date1 ? mem2.id : mem1.id,
+    removeId: date2 >= date1 ? mem1.id : mem2.id,
+    reason: "default: newer wins",
+  };
+}
+
 // ========== WhatsApp Tier Classification ==========
 
 export interface TierClassification {

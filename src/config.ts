@@ -52,6 +52,7 @@ const envSchema = z.object({
   FF_BRAIN_EVENTS: z.coerce.boolean().default(true),
   FF_ROUTER_LITE: z.coerce.boolean().default(false), // shadow mode — log but don't override
   FF_SESSION_STATE: z.coerce.boolean().default(true),
+  FF_MEMORY_CONSOLIDATION: z.coerce.boolean().default(true),
 
   // Model cascade (router-lite)
   AGENT_MODEL_FAST: z.string().default("claude-haiku-4-5-20251001"),

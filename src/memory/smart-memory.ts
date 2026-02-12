@@ -272,7 +272,7 @@ export class SmartMemory {
 
     console.log(`[SmartMemory] FTS5 search: ${keywords}`);
 
-    let whereClause = "(expires_at IS NULL OR expires_at > datetime('now'))";
+    let whereClause = "(expires_at IS NULL OR expires_at > datetime('now')) AND json_extract(m.metadata, '$.softDeleted') IS NOT 1";
     const params: (string | number)[] = [];
 
     if (type) {
@@ -317,6 +317,7 @@ export class SmartMemory {
         type: row.type as MemoryType,
         content: row.content,
         summary: row.summary ?? undefined,
+        tags: row.tags ?? undefined,
         importance: row.importance,
         accessCount: row.access_count,
         lastAccessedAt: row.last_accessed_at ?? undefined,
@@ -340,7 +341,7 @@ export class SmartMemory {
     const keywords = query.toLowerCase().split(/\s+/).filter((k) => k.length > 2);
     console.log(`[SmartMemory] Keyword fallback: [${keywords.join(", ")}]`);
 
-    let whereClause = "(expires_at IS NULL OR expires_at > datetime('now'))";
+    let whereClause = "(expires_at IS NULL OR expires_at > datetime('now')) AND json_extract(metadata, '$.softDeleted') IS NOT 1";
     const params: (string | number)[] = [];
 
     if (type) {
@@ -388,6 +389,7 @@ export class SmartMemory {
       type: row.type as MemoryType,
       content: row.content,
       summary: row.summary ?? undefined,
+      tags: row.tags ?? undefined,
       importance: row.importance,
       accessCount: row.access_count,
       lastAccessedAt: row.last_accessed_at ?? undefined,
@@ -489,7 +491,12 @@ export class SmartMemory {
         metadata: string;
         created_at: string;
         expires_at: string | null;
-      }, [number]>("SELECT * FROM memories ORDER BY created_at DESC LIMIT ?")
+      }, [number]>(
+        `SELECT * FROM memories
+         WHERE (expires_at IS NULL OR expires_at > datetime('now'))
+         AND json_extract(metadata, '$.softDeleted') IS NOT 1
+         ORDER BY created_at DESC LIMIT ?`
+      )
       .all(limit);
 
     return rows.map((row) => ({
@@ -498,6 +505,7 @@ export class SmartMemory {
       type: row.type as MemoryType,
       content: row.content,
       summary: row.summary ?? undefined,
+      tags: row.tags ?? undefined,
       importance: row.importance,
       accessCount: row.access_count,
       lastAccessedAt: row.last_accessed_at ?? undefined,
@@ -526,26 +534,28 @@ export class SmartMemory {
    * Get statistics
    */
   getStats(): MemoryStats {
+    const activeFilter = "json_extract(metadata, '$.softDeleted') IS NOT 1";
+
     const total =
-      this.db.query<{ count: number }, []>("SELECT COUNT(*) as count FROM memories").get()?.count ?? 0;
+      this.db.query<{ count: number }, []>(`SELECT COUNT(*) as count FROM memories WHERE ${activeFilter}`).get()?.count ?? 0;
 
     const episodic =
-      this.db.query<{ count: number }, []>("SELECT COUNT(*) as count FROM memories WHERE type = 'episodic'").get()?.count ?? 0;
+      this.db.query<{ count: number }, []>(`SELECT COUNT(*) as count FROM memories WHERE type = 'episodic' AND ${activeFilter}`).get()?.count ?? 0;
 
     const semantic =
-      this.db.query<{ count: number }, []>("SELECT COUNT(*) as count FROM memories WHERE type = 'semantic'").get()?.count ?? 0;
+      this.db.query<{ count: number }, []>(`SELECT COUNT(*) as count FROM memories WHERE type = 'semantic' AND ${activeFilter}`).get()?.count ?? 0;
 
     const procedural =
-      this.db.query<{ count: number }, []>("SELECT COUNT(*) as count FROM memories WHERE type = 'procedural'").get()?.count ?? 0;
+      this.db.query<{ count: number }, []>(`SELECT COUNT(*) as count FROM memories WHERE type = 'procedural' AND ${activeFilter}`).get()?.count ?? 0;
 
     const avgImportance =
-      this.db.query<{ avg: number }, []>("SELECT AVG(importance) as avg FROM memories").get()?.avg ?? 0;
+      this.db.query<{ avg: number }, []>(`SELECT AVG(importance) as avg FROM memories WHERE ${activeFilter}`).get()?.avg ?? 0;
 
     const oldest =
-      this.db.query<{ created_at: string }, []>("SELECT created_at FROM memories ORDER BY created_at ASC LIMIT 1").get()?.created_at ?? null;
+      this.db.query<{ created_at: string }, []>(`SELECT created_at FROM memories WHERE ${activeFilter} ORDER BY created_at ASC LIMIT 1`).get()?.created_at ?? null;
 
     const newest =
-      this.db.query<{ created_at: string }, []>("SELECT created_at FROM memories ORDER BY created_at DESC LIMIT 1").get()?.created_at ?? null;
+      this.db.query<{ created_at: string }, []>(`SELECT created_at FROM memories WHERE ${activeFilter} ORDER BY created_at DESC LIMIT 1`).get()?.created_at ?? null;
 
     return {
       total,
@@ -613,6 +623,7 @@ export class SmartMemory {
          WHERE created_at >= datetime('now', ?)
          AND importance >= 0.5
          AND type IN ('semantic', 'episodic')
+         AND json_extract(metadata, '$.softDeleted') IS NOT 1
          ORDER BY importance DESC, created_at DESC
          LIMIT 20`
       )
@@ -666,6 +677,295 @@ export class SmartMemory {
     return candidates
       .sort((a, b) => (b.importance * b.daysSince) - (a.importance * a.daysSince))
       .slice(0, 5);
+  }
+
+  // ========== CONSOLIDATION METHODS ==========
+
+  /**
+   * Get a single memory by ID
+   */
+  getById(id: number): MemoryEntry | null {
+    const row = this.db
+      .query<{
+        id: number;
+        type: string;
+        content: string;
+        summary: string | null;
+        tags: string | null;
+        importance: number;
+        access_count: number;
+        last_accessed_at: string | null;
+        source: string | null;
+        source_ref: string | null;
+        metadata: string;
+        created_at: string;
+        expires_at: string | null;
+      }, [number]>("SELECT * FROM memories WHERE id = ?")
+      .get(id);
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      type: row.type as MemoryType,
+      content: row.content,
+      summary: row.summary ?? undefined,
+      tags: row.tags ?? undefined,
+      importance: row.importance,
+      accessCount: row.access_count,
+      lastAccessedAt: row.last_accessed_at ?? undefined,
+      source: row.source ?? undefined,
+      sourceRef: row.source_ref ?? undefined,
+      metadata: JSON.parse(row.metadata || "{}"),
+      createdAt: row.created_at,
+      expiresAt: row.expires_at ?? undefined,
+    };
+  }
+
+  /**
+   * Get episodic memories eligible for promotion to semantic
+   */
+  getPromotionCandidates(minAccess: number, minImportance: number, daysBack: number): MemoryEntry[] {
+    const rows = this.db
+      .query<{
+        id: number;
+        type: string;
+        content: string;
+        summary: string | null;
+        tags: string | null;
+        importance: number;
+        access_count: number;
+        last_accessed_at: string | null;
+        source: string | null;
+        source_ref: string | null;
+        metadata: string;
+        created_at: string;
+        expires_at: string | null;
+      }, [number, number, string]>(
+        `SELECT * FROM memories
+         WHERE type = 'episodic'
+         AND access_count >= ?
+         AND importance >= ?
+         AND created_at >= datetime('now', ?)
+         AND (expires_at IS NULL OR expires_at > datetime('now'))
+         AND json_extract(metadata, '$.softDeleted') IS NOT 1
+         ORDER BY access_count DESC, importance DESC
+         LIMIT 50`
+      )
+      .all(minAccess, minImportance, `-${daysBack} days`);
+
+    return rows.map((row) => ({
+      id: row.id,
+      type: row.type as MemoryType,
+      content: row.content,
+      summary: row.summary ?? undefined,
+      tags: row.tags ?? undefined,
+      importance: row.importance,
+      accessCount: row.access_count,
+      lastAccessedAt: row.last_accessed_at ?? undefined,
+      source: row.source ?? undefined,
+      sourceRef: row.source_ref ?? undefined,
+      metadata: JSON.parse(row.metadata || "{}"),
+      createdAt: row.created_at,
+      expiresAt: row.expires_at ?? undefined,
+    }));
+  }
+
+  /**
+   * Get recent memories grouped by tags for duplicate detection
+   */
+  getRecentByTags(daysBack: number, limit: number): MemoryEntry[] {
+    const rows = this.db
+      .query<{
+        id: number;
+        type: string;
+        content: string;
+        summary: string | null;
+        tags: string | null;
+        importance: number;
+        access_count: number;
+        last_accessed_at: string | null;
+        source: string | null;
+        source_ref: string | null;
+        metadata: string;
+        created_at: string;
+        expires_at: string | null;
+      }, [string, number]>(
+        `SELECT * FROM memories
+         WHERE created_at >= datetime('now', ?)
+         AND tags IS NOT NULL AND tags != ''
+         AND type != 'procedural'
+         AND (expires_at IS NULL OR expires_at > datetime('now'))
+         AND json_extract(metadata, '$.softDeleted') IS NOT 1
+         ORDER BY created_at DESC
+         LIMIT ?`
+      )
+      .all(`-${daysBack} days`, limit);
+
+    return rows.map((row) => ({
+      id: row.id,
+      type: row.type as MemoryType,
+      content: row.content,
+      summary: row.summary ?? undefined,
+      tags: row.tags ?? undefined,
+      importance: row.importance,
+      accessCount: row.access_count,
+      lastAccessedAt: row.last_accessed_at ?? undefined,
+      source: row.source ?? undefined,
+      sourceRef: row.source_ref ?? undefined,
+      metadata: JSON.parse(row.metadata || "{}"),
+      createdAt: row.created_at,
+      expiresAt: row.expires_at ?? undefined,
+    }));
+  }
+
+  /**
+   * Get memories with same tags but different content (conflict candidates)
+   */
+  getConflictCandidates(daysBack: number): MemoryEntry[] {
+    // Get semantic memories with overlapping tags from the last N days
+    const rows = this.db
+      .query<{
+        id: number;
+        type: string;
+        content: string;
+        summary: string | null;
+        tags: string | null;
+        importance: number;
+        access_count: number;
+        last_accessed_at: string | null;
+        source: string | null;
+        source_ref: string | null;
+        metadata: string;
+        created_at: string;
+        expires_at: string | null;
+      }, [string]>(
+        `SELECT * FROM memories
+         WHERE type = 'semantic'
+         AND tags IS NOT NULL AND tags != ''
+         AND (expires_at IS NULL OR expires_at > datetime('now'))
+         AND json_extract(metadata, '$.softDeleted') IS NOT 1
+         AND created_at >= datetime('now', ?)
+         ORDER BY tags, created_at DESC
+         LIMIT 100`
+      )
+      .all(`-${daysBack} days`);
+
+    return rows.map((row) => ({
+      id: row.id,
+      type: row.type as MemoryType,
+      content: row.content,
+      summary: row.summary ?? undefined,
+      tags: row.tags ?? undefined,
+      importance: row.importance,
+      accessCount: row.access_count,
+      lastAccessedAt: row.last_accessed_at ?? undefined,
+      source: row.source ?? undefined,
+      sourceRef: row.source_ref ?? undefined,
+      metadata: JSON.parse(row.metadata || "{}"),
+      createdAt: row.created_at,
+      expiresAt: row.expires_at ?? undefined,
+    }));
+  }
+
+  /**
+   * Promote an episodic memory to semantic (permanent)
+   */
+  promoteToSemantic(id: number): boolean {
+    const result = this.db.run(
+      `UPDATE memories
+       SET type = 'semantic', expires_at = NULL,
+           metadata = json_set(metadata, '$.promotedAt', datetime('now'), '$.promotedFrom', 'episodic')
+       WHERE id = ? AND type = 'episodic'`,
+      [id]
+    );
+    return result.changes > 0;
+  }
+
+  /**
+   * Soft-delete a memory (reversible — sets metadata.softDeleted)
+   */
+  softDelete(id: number, reason: string, replacedBy?: number): boolean {
+    const patches: string[] = [
+      `'$.softDeleted', 1`,
+      `'$.softDeletedAt', datetime('now')`,
+      `'$.softDeleteReason', '${reason.replace(/'/g, "''")}'`,
+    ];
+    if (replacedBy !== undefined) {
+      patches.push(`'$.replacedBy', ${replacedBy}`);
+    }
+
+    const result = this.db.run(
+      `UPDATE memories SET metadata = json_set(metadata, ${patches.join(", ")}) WHERE id = ?`,
+      [id]
+    );
+    return result.changes > 0;
+  }
+
+  /**
+   * Merge multiple source memories into a target (soft-delete sources, update target metadata)
+   */
+  mergeMemories(sourceIds: number[], targetId: number): boolean {
+    // Validate target exists and is not soft-deleted
+    const target = this.getById(targetId);
+    if (!target || target.metadata?.softDeleted) {
+      console.warn(`[SmartMemory] Merge target #${targetId} invalid or soft-deleted, skipping`);
+      return false;
+    }
+
+    const tx = this.db.transaction(() => {
+      for (const sourceId of sourceIds) {
+        this.softDelete(sourceId, "merged", targetId);
+      }
+      // Update target metadata with merge info
+      this.db.run(
+        `UPDATE memories SET metadata = json_set(metadata, '$.mergedFrom', ?, '$.mergedAt', datetime('now'))
+         WHERE id = ?`,
+        [JSON.stringify(sourceIds), targetId]
+      );
+    });
+    tx();
+    return true;
+  }
+
+  /**
+   * Update importance score for a memory
+   */
+  updateImportance(id: number, newImportance: number): boolean {
+    const clamped = Math.max(0.1, Math.min(1.0, newImportance));
+    const result = this.db.run(
+      "UPDATE memories SET importance = ? WHERE id = ?",
+      [clamped, id]
+    );
+    return result.changes > 0;
+  }
+
+  /**
+   * Get all memories needing importance rebalance
+   */
+  getRebalanceCandidates(): { upCandidates: { id: number; importance: number }[]; downCandidates: { id: number; importance: number }[] } {
+    const upRows = this.db
+      .query<{ id: number; importance: number }, []>(
+        `SELECT id, importance FROM memories
+         WHERE access_count > 5 AND importance < 1.0
+         AND (expires_at IS NULL OR expires_at > datetime('now'))
+         AND json_extract(metadata, '$.softDeleted') IS NOT 1`
+      )
+      .all();
+
+    const downRows = this.db
+      .query<{ id: number; importance: number }, []>(
+        `SELECT id, importance FROM memories
+         WHERE access_count = 0
+         AND created_at < datetime('now', '-30 days')
+         AND importance > 0.1
+         AND type != 'procedural'
+         AND (expires_at IS NULL OR expires_at > datetime('now'))
+         AND json_extract(metadata, '$.softDeleted') IS NOT 1`
+      )
+      .all();
+
+    return { upCandidates: upRows, downCandidates: downRows };
   }
 
   close(): void {

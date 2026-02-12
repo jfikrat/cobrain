@@ -348,7 +348,26 @@ export class Scheduler {
     // Memory prune weekly on Mondays at 3:00 AM
     this.scheduleTask(userId, "memory_prune", "0 3 * * 1", { enabled: true });
 
+    // Memory consolidation weekly on Sundays at 4:00 AM
+    this.scheduleTask(userId, "memory_consolidation", "0 4 * * 0", { enabled: true });
+
     console.log(`[Scheduler] Default tasks created for user ${userId}`);
+  }
+
+  /**
+   * Ensure a specific task type exists for a user (backfill for new task types)
+   */
+  ensureTask(userId: number, taskType: TaskType, schedule: string, taskConfig?: Record<string, unknown>): void {
+    const existing = this.globalDb
+      .query<{ count: number }, [number, string]>(
+        "SELECT COUNT(*) as count FROM scheduled_tasks WHERE user_id = ? AND task_type = ?"
+      )
+      .get(userId, taskType);
+
+    if (existing && existing.count > 0) return;
+
+    this.scheduleTask(userId, taskType, schedule, taskConfig);
+    console.log(`[Scheduler] Backfilled task ${taskType} for user ${userId}`);
   }
 
   close(): void {

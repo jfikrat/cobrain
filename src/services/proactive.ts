@@ -18,6 +18,7 @@ import type { ScheduledTask, QueuedTask, TaskResult, TaskType } from "../types/a
 import { addWhatsAppNotification } from "./session-state.ts";
 import { config as appConfig } from "../config.ts";
 import { SmartMemory } from "../memory/smart-memory.ts";
+import { consolidateMemories } from "./memory-consolidation.ts";
 
 let bot: Bot | null = null;
 
@@ -84,12 +85,19 @@ export function initProactive(botInstance: Bot): void {
   scheduler.registerHandler("goal_check", handleGoalCheck);
   scheduler.registerHandler("reminder", handleReminder);
   scheduler.registerHandler("memory_prune", handleMemoryPrune);
+  scheduler.registerHandler("memory_consolidation", handleMemoryConsolidation);
 
   // Register queue task handlers
   taskQueue.registerHandler("reminder", handleReminderTask);
   taskQueue.registerHandler("daily_summary", handleDailySummaryTask);
   taskQueue.registerHandler("goal_check", handleGoalCheckTask);
   taskQueue.registerHandler("memory_prune", handleMemoryPruneTask);
+  taskQueue.registerHandler("memory_consolidation", handleMemoryConsolidationTask);
+
+  // Backfill: ensure memory_consolidation task exists for the primary user
+  if (appConfig.FF_MEMORY_CONSOLIDATION) {
+    scheduler.ensureTask(appConfig.MY_TELEGRAM_ID, "memory_consolidation", "0 4 * * 0", { enabled: true });
+  }
 
   // Start services
   scheduler.start();
@@ -156,6 +164,12 @@ async function handleReminder(task: ScheduledTask): Promise<void> {
 async function handleMemoryPrune(task: ScheduledTask): Promise<void> {
   const taskQueue = getTaskQueue();
   taskQueue.enqueue(task.userId, "memory_prune", { scheduledTaskId: task.id }, 0, `scheduled:${task.id}`);
+}
+
+async function handleMemoryConsolidation(task: ScheduledTask): Promise<void> {
+  if (!appConfig.FF_MEMORY_CONSOLIDATION) return;
+  const taskQueue = getTaskQueue();
+  taskQueue.enqueue(task.userId, "memory_consolidation", { scheduledTaskId: task.id }, 0, `scheduled:${task.id}`);
 }
 
 // ========== QUEUE TASK HANDLERS ==========
@@ -313,6 +327,24 @@ async function handleMemoryPruneTask(task: QueuedTask): Promise<TaskResult> {
       success: true,
       message: `Pruned ${prunedCount} expired memories`,
       data: { prunedCount },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+async function handleMemoryConsolidationTask(task: QueuedTask): Promise<TaskResult> {
+  try {
+    const result = await consolidateMemories(task.userId);
+
+    return {
+      success: result.errors.length === 0,
+      message: `Consolidation: promoted=${result.promoted} merged=${result.merged} conflicts=${result.conflictsResolved} rebalance=${result.rebalanced.up}↑/${result.rebalanced.down}↓ (${result.durationMs}ms)`,
+      data: result,
+      error: result.errors.length > 0 ? result.errors.join("; ") : undefined,
     };
   } catch (error) {
     return {

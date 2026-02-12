@@ -10,6 +10,7 @@
     "dev": "bun --hot src/index.ts",
     "dev:css": "bunx tailwindcss -i ./src/web/public/styles/input.css -o ./src/web/public/styles/output.css --watch",
     "build:css": "bunx tailwindcss -i ./src/web/public/styles/input.css -o ./src/web/public/styles/output.css --minify",
+    "test": "bun test",
     "typecheck": "bun x tsc --noEmit",
     "migrate": "bun run scripts/migrate-v02.ts",
     "migrate:execute": "bun run scripts/migrate-v02.ts --execute",

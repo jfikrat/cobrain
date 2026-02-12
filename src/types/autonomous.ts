@@ -57,6 +57,7 @@ export type TaskType =
   | "goal_check"
   | "reminder"
   | "memory_prune"
+  | "memory_consolidation"
   | "custom";
 
 export type TaskStatus = "pending" | "running" | "completed" | "failed";

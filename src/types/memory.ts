@@ -11,6 +11,7 @@ export interface MemoryEntry {
   type: MemoryType;
   content: string;
   summary?: string;
+  tags?: string; // Comma-separated tags from DB column
   importance: number; // 0.0 - 1.0
   accessCount: number;
   lastAccessedAt?: string;
