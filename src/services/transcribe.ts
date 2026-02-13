@@ -262,11 +262,59 @@ export async function transcribeAudio(
 }
 
 /**
- * Transcript çıktısını temizler
- * Gemini bazen yine de prefix ekleyebilir, bunları temizler
+ * Transcript çıktısını temizler ve halüsinasyon tespiti yapar
+ * Gemini kısa seslerde system prompt'u tekrarlayabiliyor veya uydurma içerik üretebiliyor
  */
 function cleanTranscriptOutput(text: string): string {
-  // Yaygın gereksiz prefix'leri kaldır
+  // 1. Halüsinasyon tespiti — system prompt veya user prompt tekrarı
+  const hallucinationMarkers = [
+    "SPEECH-TO-TEXT",
+    "KRİTİK KURALLAR",
+    "İHLAL EDİLEMEZ",
+    "TRANSKRİPSİYON ARACI",
+    "SADECE konuşulan kelimeleri yaz",
+    "Ses kaydını transkript et. SADECE",
+    "ÇIKIŞ FORMATI",
+    "İÇERİK TARAFSIZLIĞI",
+    "DİL TESPİTİ",
+    "camelCase Örnekleri",
+    "snake_case Örnekleri",
+    "PascalCase Örnekleri",
+    "NAMING CONVENTION",
+    "getUserData",
+    "handleClick",
+    "fetchUserProfile",
+    "get_user_data",
+    "SCREAMING_SNAKE_CASE",
+    "API_BASE_URL",
+    "BAĞLAMSAL KELİME",
+    "CONTEXT-BASED CORRECTION",
+    "SON HATIRLATMA",
+    "CEVAP ÜRETME. YORUM YAPMA",
+  ];
+
+  const lowerText = text.toLowerCase();
+  const matchCount = hallucinationMarkers.filter(m => lowerText.includes(m.toLowerCase())).length;
+
+  if (matchCount >= 2) {
+    console.warn(`[Transcribe] Hallucination detected (${matchCount} markers matched), returning empty`);
+    return "[ses kaydı boş veya anlaşılmıyor]";
+  }
+
+  // 2. Çok uzun çıktı tespiti — kısa ses kaydından uzun metin gelmesi şüpheli
+  // (bu fonksiyon audioSize bilmez, ama 500+ karakter transcript genelde halüsinasyon)
+  if (text.length > 500 && (
+    text.includes("function ") ||
+    text.includes("import ") ||
+    text.includes("const ") ||
+    text.includes("class ") ||
+    text.includes("export ")
+  )) {
+    console.warn(`[Transcribe] Suspicious code-like transcript (${text.length} chars), possible hallucination`);
+    // Bunu engelleme, sadece logla — gerçek kod konuşması olabilir
+  }
+
+  // 3. Yaygın gereksiz prefix'leri kaldır
   const unwantedPrefixes = [
     /^(İşte transkript:?\s*)/i,
     /^(Transkript:?\s*)/i,

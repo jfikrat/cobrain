@@ -724,8 +724,8 @@ bot.on("message:voice", async (ctx) => {
     // Transcribe with Gemini
     const transcript = await transcribeAudio(audioBuffer, "audio/ogg");
 
-    if (!transcript.trim()) {
-      await ctx.reply("🔇 Ses anlaşılamadı, tekrar dener misin?");
+    if (!transcript.trim() || transcript.includes("[ses kaydı boş veya anlaşılmıyor]")) {
+      await ctx.reply("Ses anlasilamadi, tekrar dener misin?");
       return;
     }
 
