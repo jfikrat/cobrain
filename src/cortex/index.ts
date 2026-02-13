@@ -12,6 +12,7 @@ import { expectations } from "./expectations.ts";
 import { salienceFilter } from "./salience.ts";
 import { reasoner } from "./reasoner.ts";
 import { actionExecutor, type ActionResult } from "./actions.ts";
+import { wasRecentlyReplied } from "../services/reply-dedup.ts";
 
 // Re-export everything
 export { signalBus, expectations, salienceFilter, reasoner, actionExecutor };
@@ -38,6 +39,7 @@ class Cortex {
   private processingQueue: Signal[] = [];
   private isProcessing = false;
   private expiryInterval: ReturnType<typeof setInterval> | null = null;
+  private readonly MAX_QUEUE_SIZE = 50;
 
   /**
    * Cortex'i başlat
@@ -50,13 +52,16 @@ class Cortex {
     // Expectations'ı yükle
     await expectations.load();
 
-    // Signal Bus'ı başlat
-    signalBus.start();
-
-    // Signal Bus'a abone ol — her sinyal pipeline'dan geçecek
+    // Signal Bus'a abone ol ÖNCE — cleanExpired timeout sinyallerini kaçırmamak için
     signalBus.on("signal", (signal: Signal) => {
       this.enqueue(signal);
     });
+
+    // Signal Bus'ı başlat
+    signalBus.start();
+
+    // İlk temizlik — listener zaten kayıtlı, timeout sinyalleri yakalanacak
+    expectations.cleanExpired();
 
     // Periyodik beklenti temizliği (her 60 saniye)
     this.expiryInterval = setInterval(() => {
@@ -90,6 +95,11 @@ class Cortex {
     // system_event sinyallerini pipeline'a sokma (sonsuz döngü riski)
     if (signal.source === "system_event") return;
 
+    if (this.processingQueue.length >= this.MAX_QUEUE_SIZE) {
+      const dropped = this.processingQueue.shift();
+      console.warn(`[Cortex] Queue full (${this.MAX_QUEUE_SIZE}), dropped oldest: ${dropped?.source}/${dropped?.type}`);
+    }
+
     this.processingQueue.push(signal);
     this.processNext();
   }
@@ -122,6 +132,15 @@ class Cortex {
    * Tam pipeline: Signal → Salience → Reasoner → Actions
    */
   private async processPipeline(signal: Signal): Promise<void> {
+    // Dedup: proactive already replied to this chat — skip pipeline
+    if (signal.type === "whatsapp_message") {
+      const chatJid = (signal.data as Record<string, unknown>)?.chatJid as string;
+      if (chatJid && wasRecentlyReplied(chatJid)) {
+        console.log(`[Cortex] Skipping whatsapp_message for ${chatJid} — proactive already replied`);
+        return;
+      }
+    }
+
     // 1. Salience Filter
     const userContext = this.config.userContextProvider
       ? await this.config.userContextProvider(signal.userId)

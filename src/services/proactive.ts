@@ -18,6 +18,7 @@ import { classifyWhatsAppMessage, type TierClassification, type GroupClassificat
 import type { ScheduledTask, QueuedTask, TaskResult, TaskType } from "../types/autonomous.ts";
 import { addWhatsAppNotification } from "./session-state.ts";
 import { config as appConfig } from "../config.ts";
+import { markReplied } from "./reply-dedup.ts";
 import { SmartMemory } from "../memory/smart-memory.ts";
 import { consolidateMemories } from "./memory-consolidation.ts";
 
@@ -515,7 +516,7 @@ async function checkWhatsAppNotifications(): Promise<void> {
             chatJid,
             senderName,
             messageCount: msgs.length,
-            preview: msgs.map(m => m.message_body?.slice(0, 100)).filter(Boolean).join(" | "),
+            preview: msgs.map(m => m.content?.slice(0, 100)).filter(Boolean).join(" | "),
             conversationHistory, // Son 10 mesaj: ["Ben: ...", "Burak: ...", ...]
           }, { userId, contactId: chatJid });
         }
@@ -606,6 +607,7 @@ async function handleDMMessages(
           const fullResponse = await think(telegramUserId, `[WhatsApp DM - ${senderName}] ${msgSummary}`, "whatsapp");
           const reply = fullResponse.content.slice(0, maxReplyLength);
           const outboxOk = whatsappDB.addToOutbox(chatJid, reply);
+          if (outboxOk) markReplied(chatJid);
 
           const notifyMsg = `<b>WhatsApp - ${escapeHtml(senderName)}</b> 🧠\n\n` +
             messages.map(m => {
@@ -639,6 +641,7 @@ async function handleDMMessages(
       }
 
       const outboxOk = whatsappDB.addToOutbox(chatJid, analysis.reply);
+      if (outboxOk) markReplied(chatJid);
 
       const notifyMsg = `<b>WhatsApp - ${escapeHtml(senderName)}</b>\n\n` +
         messages.map(m => {

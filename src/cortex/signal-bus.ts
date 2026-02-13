@@ -62,16 +62,16 @@ class SignalBus extends EventEmitter {
    * Yeni sinyal yayınla
    * Tüm subscriber'lar bu sinyali alır
    */
-  emit(event: "signal", signal: Signal): boolean;
-  emit(event: string, ...args: unknown[]): boolean {
+  override emit(event: "signal", signal: Signal): boolean;
+  override emit(event: string, ...args: unknown[]): boolean {
     return super.emit(event, ...args);
   }
 
   /**
    * Sinyal dinle
    */
-  on(event: "signal", listener: (signal: Signal) => void): this;
-  on(event: string, listener: (...args: unknown[]) => void): this {
+  override on(event: "signal", listener: (signal: Signal) => void): this;
+  override on(event: string, listener: (...args: any[]) => void): this {
     return super.on(event, listener);
   }
 

@@ -187,8 +187,9 @@ const TRANSCRIPTION_USER_PROMPT = `Ses kaydını transkript et. SADECE konuşula
  */
 async function prependSilence(audioBuffer: Buffer): Promise<Buffer> {
   const silencePath = join(process.cwd(), "data", "silence-3s.ogg");
-  const tmpInput = join("/tmp", `cobrain-audio-${Date.now()}.ogg`);
-  const tmpOutput = join("/tmp", `cobrain-audio-${Date.now()}-out.ogg`);
+  const uid = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+  const tmpInput = join("/tmp", `cobrain-audio-${uid}.ogg`);
+  const tmpOutput = join("/tmp", `cobrain-audio-${uid}-out.ogg`);
 
   console.log(`[Transcribe] prependSilence called, audioSize=${audioBuffer.length}, silencePath=${silencePath}`);
 
@@ -240,13 +241,23 @@ export async function transcribeAudio(
   audioBuffer: Buffer,
   mimeType: string = "audio/ogg"
 ): Promise<string> {
-  // Kısa seslerde halüsinasyonu önlemek için sessizlik prefix'i ekle
-  const processedBuffer = await prependSilence(audioBuffer);
+  const SHORT_AUDIO_THRESHOLD = 50 * 1024; // 50KB (~3s)
+  let processedBuffer: Buffer;
+  let effectiveMime = mimeType;
+
+  if (audioBuffer.length < SHORT_AUDIO_THRESHOLD) {
+    processedBuffer = await prependSilence(audioBuffer);
+    if (processedBuffer !== audioBuffer) {
+      effectiveMime = "audio/ogg";
+    }
+  } else {
+    processedBuffer = audioBuffer;
+  }
 
   const result = await model.generateContent([
     {
       inlineData: {
-        mimeType,
+        mimeType: effectiveMime,
         data: processedBuffer.toString("base64"),
       },
     },

@@ -94,7 +94,11 @@ if (config.ENABLE_AUTONOMOUS) {
       if (!to || !message) {
         return { success: false, action: "send_whatsapp" as ActionType, message: "Missing to or message" };
       }
-      // WhatsApp outbox'a yaz — worker gönderecek
+      const { wasRecentlyReplied } = await import("./services/reply-dedup.ts");
+      if (wasRecentlyReplied(to)) {
+        console.log(`[Cortex:Action] send_whatsapp skipped for ${to} — already replied by proactive`);
+        return { success: true, action: "send_whatsapp" as ActionType, message: "Skipped: proactive already replied" };
+      }
       try {
         const { whatsappDB } = await import("./services/whatsapp-db.ts");
         const outboxId = whatsappDB.sendMessage(to, message);
@@ -116,8 +120,8 @@ if (config.ENABLE_AUTONOMOUS) {
       const chatJid = params.chatJid as string || params.target as string || "";
       try {
         const { whatsappDB } = await import("./services/whatsapp-db.ts");
-        const messages = whatsappDB.getRecentMessages?.(chatJid, 5) || [];
-        const summary = messages.map((m: any) => `${m.sender_name || "?"}: ${m.message_body?.slice(0, 100) || "[media]"}`).join("\n");
+        const messages = whatsappDB.getMessages(chatJid, 5);
+        const summary = messages.map(m => `${m.sender_jid || "?"}: ${m.content?.slice(0, 100) || "[media]"}`).join("\n");
         console.log(`[Cortex:Action] WhatsApp check: ${chatJid} — ${messages.length} messages`);
         return { success: true, action: "check_whatsapp" as ActionType, message: summary || "No messages found", data: { chatJid, count: messages.length } };
       } catch (err) {

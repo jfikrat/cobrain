@@ -54,6 +54,7 @@ const DATA_FILE = join(process.cwd(), "data", "expectations.json");
 class ExpectationsManager {
   private expectations: PendingExpectation[] = [];
   private loaded = false;
+  private saving: Promise<void> = Promise.resolve();
 
   /**
    * Dosyadan yükle
@@ -64,8 +65,6 @@ class ExpectationsManager {
       if (await file.exists()) {
         const data = await file.json();
         this.expectations = data.expectations || [];
-        // Expired olanları temizle
-        this.cleanExpired();
       }
     } catch (err) {
       console.warn("[Cortex:Expectations] Failed to load:", err);
@@ -75,12 +74,14 @@ class ExpectationsManager {
     console.log(`[Cortex:Expectations] Loaded ${this.pending().length} pending expectations`);
   }
 
-  /**
-   * Dosyaya kaydet
-   */
   async save(): Promise<void> {
+    this.saving = this.saving.then(() => this._doSave()).catch(() => {});
+    return this.saving;
+  }
+
+  private async _doSave(): Promise<void> {
     try {
-      const tmpPath = DATA_FILE + ".tmp";
+      const tmpPath = `${DATA_FILE}.tmp.${Date.now()}`;
       await Bun.write(tmpPath, JSON.stringify({ expectations: this.expectations }, null, 2));
       const fs = await import("node:fs/promises");
       await fs.rename(tmpPath, DATA_FILE);
