@@ -11,7 +11,6 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { config } from "../config.ts";
 import { signalBus, type Signal } from "./signal-bus.ts";
 import { expectations } from "./expectations.ts";
 
@@ -54,7 +53,7 @@ class SalienceFilter {
   private passedCount = 0;
 
   constructor(salienceConfig: SalienceConfig = DEFAULT_CONFIG) {
-    this.client = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
+    this.client = new Anthropic(); // ANTHROPIC_API_KEY env'den otomatik alınır
     this.config = salienceConfig;
   }
 
@@ -115,9 +114,10 @@ class SalienceFilter {
       return { score: 0.1, reason: "Periodic time tick", suggestedAction: "ignore" };
     }
 
-    // Kullanıcı mesajı her zaman yüksek
+    // Kullanıcı mesajı — zaten chat pipeline'dan işleniyor, Cortex'in tekrar işlemesine gerek yok
+    // Sadece logla, beklenti eşleşmesi kontrolü yukarıda yapıldı
     if (signal.source === "user_message") {
-      return { score: 1.0, reason: "Direct user message", suggestedAction: "act" };
+      return { score: 0.1, reason: "User message — handled by chat pipeline", suggestedAction: "ignore" };
     }
 
     // Expectation timeout her zaman önemli

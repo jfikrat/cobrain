@@ -9,7 +9,6 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { config } from "../config.ts";
 import { type Signal } from "./signal-bus.ts";
 import { type SalienceResult } from "./salience.ts";
 import { expectations } from "./expectations.ts";
@@ -62,7 +61,7 @@ class Reasoner {
   private decisionsCount = 0;
 
   constructor(reasonerConfig: ReasonerConfig = DEFAULT_CONFIG) {
-    this.client = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
+    this.client = new Anthropic(); // ANTHROPIC_API_KEY env'den otomatik alınır
     this.config = reasonerConfig;
   }
 
@@ -86,10 +85,10 @@ class Reasoner {
     } catch (err) {
       console.warn("[Cortex:Reasoner] Decision failed:", err);
       return {
-        action: "send_message",
-        params: { text: `Bir sinyal aldım ama işleyemedim: ${signal.source}/${signal.type}` },
-        reasoning: "Fallback — AI decision failed",
-        urgency: "soon",
+        action: "none",
+        params: {},
+        reasoning: "AI decision failed, skipping",
+        urgency: "background",
       };
     }
   }
