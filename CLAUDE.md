@@ -146,6 +146,51 @@ WA mesaj → proactive.ts (30s poll, Haiku classify) → session-state.json (rec
 
 **Feature flag:** `FF_SESSION_STATE` — kapalıysa WA context devre dışı
 
+## Cortex — Otonom Sinyal İşleme Sistemi
+
+Cobrain'in "beyni" — gelen sinyalleri (WhatsApp mesajları, Telegram olayları vb.) otonom olarak değerlendirir ve aksiyon alır.
+
+**Mimari (4 katman, biyolojik beyin metaforu):**
+```
+Signal Bus (brain stem)  →  Salience Filter (limbic)  →  Reasoner (cortex)  →  Actions (motor)
+     Layer 0                      Layer 1                    Layer 2              Layer 3
+  pub/sub, ring buffer      "Bu önemli mi?" (0-1)      "Ne yapmalıyım?"       Kararı uygula
+                              Gemini Flash AI             Gemini Flash AI      handler registry
+```
+
+**Dosyalar:**
+- `src/cortex/signal-bus.ts` — EventEmitter pub/sub, ring buffer log, istatistik
+- `src/cortex/salience.ts` — Rule-based short-circuit + AI fallback, önem skorlama (0-1)
+- `src/cortex/reasoner.ts` — Quick rule-based kararlar + AI karar, ActionPlan üretir
+- `src/cortex/actions.ts` — Handler registry, compound action desteği
+- `src/cortex/expectations.ts` — "Cevap bekliyorum" tracking, timeout, JSON persistence
+- `src/cortex/index.ts` — Orchestrator, pipeline: Signal → Salience → Reasoner → Actions
+- `src/cortex/sanitize.ts` — Prompt injection koruması (XML strip, blocked patterns, user-data delimiters)
+
+**Entegrasyon noktaları:**
+- `src/channels/telegram.ts` — user_message sinyali emit eder
+- `src/services/proactive.ts` — whatsapp_message sinyali emit eder
+- `src/startup.ts` — Cortex init + action handler registration
+
+**Mevcut action handler'lar:** `send_message`, `send_whatsapp`, `calculate_route`, `remember`, `create_expectation`, `check_whatsapp`, `none`
+
+**Proactive ↔ Cortex dedupe:**
+- `src/services/reply-dedup.ts` — Shared TTL set (60s cooldown)
+- Proactive cevap gönderirse `markReplied()` çağırır, Cortex aynı chat için pipeline'ı atlar
+- `markReplied` sadece outbox başarılıysa çağrılır
+
+**Güvenlik:**
+- Tüm dış veri (WhatsApp mesaj, kişi bilgisi, expectation metinleri) sanitize edilir
+- `<user-data>` delimiters ile LLM'e veri olarak işaretlenir
+- Injection pattern blocklist (ignore instructions, jailbreak, DAN mode vb.)
+- Queue backpressure (max 50), AI timeout (30s)
+
+**Kurallar:**
+- Cortex single-user, multi-user desteği yok
+- AI çağrıları Gemini Flash kullanır (hızlı, ucuz)
+- Signal Bus'a `system_event` source'u girmez (sonsuz döngü koruması)
+- Yeni action handler eklerken `reasoner.ts`'deki prompt action listesini de güncelle
+
 ## Self-Management
 
 ### Restart
