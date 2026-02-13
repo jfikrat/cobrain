@@ -2,13 +2,14 @@
  * Cortex Layer 2: Reasoner (Korteks)
  *
  * Salience Filter'dan geçen önemli sinyalleri işler.
- * Sonnet ile karar verir: ne yapılmalı?
+ * Gemini Pro ile karar verir: ne yapılmalı?
  *
  * Input: signal + salience result + context
  * Output: action plan (ne yapılacak, hangi araçlarla)
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { config } from "../config.ts";
 import { type Signal } from "./signal-bus.ts";
 import { type SalienceResult } from "./salience.ts";
 import { expectations } from "./expectations.ts";
@@ -42,26 +43,25 @@ export interface ActionPlan {
 }
 
 export interface ReasonerConfig {
-  model: string;
   maxTokens: number;
 }
 
 // ── Default Config ────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG: ReasonerConfig = {
-  model: "claude-sonnet-4-20250514",
   maxTokens: 500,
 };
 
 // ── Reasoner ──────────────────────────────────────────────────────────────
 
 class Reasoner {
-  private client: Anthropic;
+  private model;
   private config: ReasonerConfig;
   private decisionsCount = 0;
 
   constructor(reasonerConfig: ReasonerConfig = DEFAULT_CONFIG) {
-    this.client = new Anthropic(); // ANTHROPIC_API_KEY env'den otomatik alınır
+    const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
+    this.model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     this.config = reasonerConfig;
   }
 
@@ -79,9 +79,9 @@ class Reasoner {
     const quickDecision = this.quickDecide(signal, salience);
     if (quickDecision) return quickDecision;
 
-    // 2. Sonnet ile karar
+    // 2. Gemini ile karar
     try {
-      return await this.decideWithSonnet(signal, salience, userContext);
+      return await this.decideWithAI(signal, salience, userContext);
     } catch (err) {
       console.warn("[Cortex:Reasoner] Decision failed:", err);
       return {
@@ -143,13 +143,13 @@ class Reasoner {
       };
     }
 
-    return null; // Sonnet'e sor
+    return null; // AI'ya sor
   }
 
   /**
-   * Sonnet ile detaylı karar
+   * Gemini ile detaylı karar
    */
-  private async decideWithSonnet(
+  private async decideWithAI(
     signal: Signal,
     salience: SalienceResult,
     userContext: string
@@ -183,16 +183,11 @@ MEVCUT AKSIYON TIPLERI:
 - schedule_reminder: Hatırlatıcı kur
 - none: Aksiyon gerekmiyor
 
-CEVAP (sadece JSON):
+SADECE JSON döndür, başka bir şey yazma:
 {"action": "...", "params": {...}, "reasoning": "kısa açıklama", "urgency": "immediate|soon|background"}`;
 
-    const response = await this.client.messages.create({
-      model: this.config.model,
-      max_tokens: this.config.maxTokens,
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const text = response.content[0]?.type === "text" ? response.content[0].text : "";
+    const result = await this.model.generateContent(prompt);
+    const text = result.response.text().trim();
 
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -203,7 +198,7 @@ CEVAP (sadece JSON):
 
       return plan;
     } catch {
-      console.warn("[Cortex:Reasoner] Failed to parse Sonnet response:", text.slice(0, 100));
+      console.warn("[Cortex:Reasoner] Failed to parse AI response:", text.slice(0, 100));
       return {
         action: "none",
         params: {},

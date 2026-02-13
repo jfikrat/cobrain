@@ -1,7 +1,7 @@
 /**
  * Cortex Layer 1: Salience Filter (Limbik Sistem)
  *
- * Her sinyale 0-1 arası önem skoru verir. Haiku ile hızlı değerlendirme.
+ * Her sinyale 0-1 arası önem skoru verir. Gemini Flash ile hızlı değerlendirme.
  * İnsandaki dopamin = salience signal.
  *
  * Input: signal + pending expectations + user context + zaman
@@ -10,7 +10,8 @@
  * Eşik: 0.3 altını düşür, üstünü Reasoner'a gönder
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { config } from "../config.ts";
 import { signalBus, type Signal } from "./signal-bus.ts";
 import { expectations } from "./expectations.ts";
 
@@ -30,8 +31,6 @@ export interface SalienceResult {
 export interface SalienceConfig {
   /** Minimum eşik — altındakiler düşürülür */
   threshold: number;
-  /** Haiku model */
-  model: string;
   /** Max token for response */
   maxTokens: number;
 }
@@ -40,20 +39,20 @@ export interface SalienceConfig {
 
 const DEFAULT_CONFIG: SalienceConfig = {
   threshold: 0.3,
-  model: "claude-haiku-4-20250514",
   maxTokens: 200,
 };
 
 // ── Salience Filter ───────────────────────────────────────────────────────
 
 class SalienceFilter {
-  private client: Anthropic;
+  private model;
   private config: SalienceConfig;
   private processedCount = 0;
   private passedCount = 0;
 
   constructor(salienceConfig: SalienceConfig = DEFAULT_CONFIG) {
-    this.client = new Anthropic(); // ANTHROPIC_API_KEY env'den otomatik alınır
+    const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
+    this.model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     this.config = salienceConfig;
   }
 
@@ -63,7 +62,7 @@ class SalienceFilter {
   async evaluate(signal: Signal, userContext: string = ""): Promise<SalienceResult> {
     this.processedCount++;
 
-    // 1. Hızlı kural tabanlı kontrol (Haiku'ya sormadan)
+    // 1. Hızlı kural tabanlı kontrol (AI'ya sormadan)
     const quickResult = this.quickCheck(signal);
     if (quickResult) {
       if (quickResult.score >= this.config.threshold) this.passedCount++;
@@ -74,7 +73,7 @@ class SalienceFilter {
     const matchedExpectations = expectations.matchSignal(signal);
     const hasExpectationMatch = matchedExpectations.length > 0;
 
-    // Beklenti eşleşmesi varsa skoru yükselt — Haiku'ya sormaya bile gerek yok
+    // Beklenti eşleşmesi varsa skoru yükselt — AI'ya sormaya bile gerek yok
     if (hasExpectationMatch) {
       this.passedCount++;
       const exp = matchedExpectations[0];
@@ -86,22 +85,22 @@ class SalienceFilter {
       };
     }
 
-    // 3. Haiku ile değerlendirme
+    // 3. Gemini Flash ile değerlendirme
     try {
-      return await this.evaluateWithHaiku(signal, userContext, matchedExpectations);
+      return await this.evaluateWithAI(signal, userContext);
     } catch (err) {
-      console.warn("[Cortex:Salience] Haiku evaluation failed:", err);
+      console.warn("[Cortex:Salience] AI evaluation failed:", err);
       // Fallback: orta skor ver, Reasoner karar versin
       return {
         score: 0.5,
-        reason: "Haiku evaluation failed, default score",
+        reason: "AI evaluation failed, default score",
         suggestedAction: "wait",
       };
     }
   }
 
   /**
-   * Hızlı kural tabanlı kontrol — bazı sinyaller Haiku'ya sorulmadan değerlendirilebilir
+   * Hızlı kural tabanlı kontrol — bazı sinyaller AI'ya sorulmadan değerlendirilebilir
    */
   private quickCheck(signal: Signal): SalienceResult | null {
     // Sistem eventleri genelde düşük öncelik
@@ -125,16 +124,15 @@ class SalienceFilter {
       return { score: 0.7, reason: "Expectation timed out", suggestedAction: "notify" };
     }
 
-    return null; // Haiku'ya sor
+    return null; // AI'ya sor
   }
 
   /**
-   * Haiku ile detaylı değerlendirme
+   * Gemini Flash ile detaylı değerlendirme
    */
-  private async evaluateWithHaiku(
+  private async evaluateWithAI(
     signal: Signal,
     userContext: string,
-    matchedExpectations: unknown[]
   ): Promise<SalienceResult> {
     const pendingExps = expectations.pending();
 
@@ -153,32 +151,26 @@ ${pendingExps.map(e => `- [${e.type}] ${e.target}: "${e.context}" (${Math.round(
 KULLANICI BAĞLAMI:
 ${userContext || "Bilgi yok"}
 
-CEVAP FORMATI (sadece JSON):
+SADECE JSON döndür, başka bir şey yazma:
 {"score": 0.X, "reason": "kısa açıklama", "suggestedAction": "notify|act|wait|ignore"}`;
 
-    const response = await this.client.messages.create({
-      model: this.config.model,
-      max_tokens: this.config.maxTokens,
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    const text = response.content[0]?.type === "text" ? response.content[0].text : "";
+    const result = await this.model.generateContent(prompt);
+    const text = result.response.text().trim();
 
     try {
-      // JSON parse et
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("No JSON in response");
 
-      const result = JSON.parse(jsonMatch[0]) as SalienceResult;
-      result.score = Math.max(0, Math.min(1, result.score)); // Clamp 0-1
+      const parsed = JSON.parse(jsonMatch[0]) as SalienceResult;
+      parsed.score = Math.max(0, Math.min(1, parsed.score)); // Clamp 0-1
 
-      if (result.score >= this.config.threshold) this.passedCount++;
+      if (parsed.score >= this.config.threshold) this.passedCount++;
 
-      console.log(`[Cortex:Salience] ${signal.source}/${signal.type} → score=${result.score} reason="${result.reason}" action=${result.suggestedAction}`);
+      console.log(`[Cortex:Salience] ${signal.source}/${signal.type} → score=${parsed.score} reason="${parsed.reason}" action=${parsed.suggestedAction}`);
 
-      return result;
+      return parsed;
     } catch {
-      console.warn("[Cortex:Salience] Failed to parse Haiku response:", text.slice(0, 100));
+      console.warn("[Cortex:Salience] Failed to parse AI response:", text.slice(0, 100));
       return { score: 0.5, reason: "Parse failed", suggestedAction: "wait" };
     }
   }
