@@ -14,6 +14,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { config } from "../config.ts";
 import { signalBus, type Signal } from "./signal-bus.ts";
 import { expectations } from "./expectations.ts";
+import { userManager } from "../services/user-manager.ts";
+import { SmartMemory } from "../memory/smart-memory.ts";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -128,6 +130,30 @@ class SalienceFilter {
   }
 
   /**
+   * Hafızadan kişi bilgisi çek
+   */
+  private async getContactContext(signal: Signal): Promise<string> {
+    if (!signal.contactId) return "";
+
+    try {
+      const senderName = (signal.data.senderName as string) || signal.contactId.split("@")[0] || "";
+      if (!senderName) return "";
+
+      const userId = signal.userId || config.MY_TELEGRAM_ID;
+      const userFolder = userManager.getUserFolder(userId);
+      const memory = new SmartMemory(userFolder, userId);
+      const memories = await memory.search(senderName, { limit: 3, minScore: 0.3 });
+      memory.close();
+
+      if (memories.length === 0) return "";
+
+      return memories.map(m => `- ${(m.content || "").slice(0, 150)}`).join("\n");
+    } catch {
+      return ""; // Memory unavailable
+    }
+  }
+
+  /**
    * Gemini Flash ile detaylı değerlendirme
    */
   private async evaluateWithAI(
@@ -135,6 +161,19 @@ class SalienceFilter {
     userContext: string,
   ): Promise<SalienceResult> {
     const pendingExps = expectations.pending();
+
+    // Hafızadan kişi bilgisi çek
+    const contactContext = await this.getContactContext(signal);
+
+    // Konuşma geçmişi (WhatsApp sinyalinde varsa)
+    const conversationHistory = (signal.data.conversationHistory as string[]) || [];
+    const historyBlock = conversationHistory.length > 0
+      ? `\nSON KONUŞMA GEÇMİŞİ:\n${conversationHistory.join("\n")}`
+      : "";
+
+    const contactBlock = contactContext
+      ? `\nKİŞİ HAKKINDA HAFIZADAN BİLGİ:\n${contactContext}`
+      : "";
 
     const prompt = `Sen bir sinyal önem değerlendirme sistemisin. Verilen sinyalin kullanıcı için ne kadar önemli olduğunu 0-1 arası skorla.
 
@@ -144,6 +183,8 @@ SINYAL:
 - Veri: ${JSON.stringify(signal.data).slice(0, 300)}
 - Kişi: ${signal.contactId || "yok"}
 - Zaman: ${new Date(signal.timestamp).toLocaleTimeString("tr-TR")}
+${historyBlock}
+${contactBlock}
 
 BEKLEYEN BEKLENTILER (${pendingExps.length} adet):
 ${pendingExps.map(e => `- [${e.type}] ${e.target}: "${e.context}" (${Math.round((Date.now() - e.createdAt) / 60000)}dk önce)`).join("\n") || "- Yok"}

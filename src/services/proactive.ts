@@ -496,14 +496,27 @@ async function checkWhatsAppNotifications(): Promise<void> {
       }
 
       for (const [chatJid, msgs] of bySender) {
-        // Cortex Signal Bus'a WhatsApp DM sinyali gönder
+        // Cortex Signal Bus'a WhatsApp DM sinyali gönder (konuşma bağlamıyla zenginleştirilmiş)
         if (signalBus.isRunning()) {
           const senderName = msgs[0]?.sender_name || chatJid.split("@")[0] || "unknown";
+
+          // Son 10 mesajı getir — Cortex'e konuşma bağlamı sağla
+          let conversationHistory: string[] = [];
+          try {
+            const recentMsgs = whatsappDB.getMessages(chatJid, 10);
+            conversationHistory = recentMsgs.map(m => {
+              const who = m.is_from_me ? "Ben" : senderName;
+              const typeTag = m.message_type !== "text" ? `[${m.message_type}] ` : "";
+              return `${who}: ${typeTag}${(m.content || "").slice(0, 150)}`;
+            });
+          } catch { /* WhatsApp DB unavailable */ }
+
           signalBus.push("whatsapp_message", "dm", {
             chatJid,
             senderName,
             messageCount: msgs.length,
             preview: msgs.map(m => m.message_body?.slice(0, 100)).filter(Boolean).join(" | "),
+            conversationHistory, // Son 10 mesaj: ["Ben: ...", "Burak: ...", ...]
           }, { userId, contactId: chatJid });
         }
 

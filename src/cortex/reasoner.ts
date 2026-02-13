@@ -156,6 +156,12 @@ class Reasoner {
   ): Promise<ActionPlan> {
     const pendingExps = expectations.pending();
 
+    // Konuşma geçmişi (WhatsApp sinyalinde varsa)
+    const conversationHistory = (signal.data.conversationHistory as string[]) || [];
+    const historyBlock = conversationHistory.length > 0
+      ? `\nSON KONUŞMA GEÇMİŞİ:\n${conversationHistory.join("\n")}`
+      : "";
+
     const prompt = `Sen Cobrain AI asistanının karar mekanizmasısın. Gelen sinyal hakkında ne yapılması gerektiğine karar ver.
 
 SINYAL:
@@ -165,6 +171,7 @@ SINYAL:
 - Kişi: ${signal.contactId || "yok"}
 - Önem skoru: ${salience.score}
 - Önem nedeni: ${salience.reason}
+${historyBlock}
 
 BEKLEYEN BEKLENTILER:
 ${pendingExps.map(e => `- [${e.type}] ${e.target}: "${e.context}" → "${e.onResolved}"`).join("\n") || "- Yok"}
@@ -173,15 +180,21 @@ KULLANICI BAĞLAMI:
 ${userContext || "Bilgi yok"}
 
 MEVCUT AKSIYON TIPLERI:
-- send_message: Telegram'dan kullanıcıya bildir
+- send_message: Telegram'dan kullanıcıya bildir (önemli/acil durumlarda)
 - send_whatsapp: WhatsApp mesaj gönder
 - calculate_route: Yol/mesafe hesapla
-- remember: Hafızaya kaydet
-- create_expectation: Yeni beklenti oluştur
+- remember: Hafızaya kaydet (önemli bilgi varsa)
+- create_expectation: Yeni beklenti oluştur (SADECE cevap gerçekten bekleniyorsa — soru sorduysa, buluşma/plan konuşuluyorsa. Basit selamlaşma veya bilgilendirme mesajlarında beklenti OLUŞTURMA)
 - resolve_expectation: Mevcut beklentiyi çöz
 - check_whatsapp: WhatsApp mesajlarını kontrol et
 - schedule_reminder: Hatırlatıcı kur
-- none: Aksiyon gerekmiyor
+- compound: Birden fazla aksiyon sıralı yap (followUp array'i ile)
+- none: Aksiyon gerekmiyor (çoğu bildirim zaten Telegram'dan iletiliyor, tekrar bildirmeye gerek yok)
+
+ÖNEMLİ KURALLAR:
+1. WhatsApp DM bildirimleri zaten ayrı bir sistem tarafından Telegram'a iletiliyor. send_message ile tekrar bildirme yapma, sadece EKSTRA bir aksiyon gerekiyorsa kullan (yol hesapla, hatırla, beklenti oluştur gibi).
+2. create_expectation sadece bağlam gerektirdiğinde: soru sorulan mesaj, plan yapılan mesaj, buluşma konuşması. "Günaydın", "tamam", "ok" gibi mesajlara beklenti oluşturma.
+3. Konuşma geçmişine bak ve bağlamı anla.
 
 SADECE JSON döndür, başka bir şey yazma:
 {"action": "...", "params": {...}, "reasoning": "kısa açıklama", "urgency": "immediate|soon|background"}`;
