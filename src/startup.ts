@@ -112,6 +112,26 @@ if (config.ENABLE_AUTONOMOUS) {
       return { success: true, action: "calculate_route" as ActionType, message: `Route: ${from} → ${to}`, data: { from, to } };
     });
 
+    actionExecutor.register("check_whatsapp" as ActionType, async (params) => {
+      const chatJid = params.chatJid as string || params.target as string || "";
+      try {
+        const { whatsappDB } = await import("./services/whatsapp-db.ts");
+        const messages = whatsappDB.getRecentMessages?.(chatJid, 5) || [];
+        const summary = messages.map((m: any) => `${m.sender_name || "?"}: ${m.message_body?.slice(0, 100) || "[media]"}`).join("\n");
+        console.log(`[Cortex:Action] WhatsApp check: ${chatJid} — ${messages.length} messages`);
+        return { success: true, action: "check_whatsapp" as ActionType, message: summary || "No messages found", data: { chatJid, count: messages.length } };
+      } catch (err) {
+        return { success: false, action: "check_whatsapp" as ActionType, message: `Failed: ${err}` };
+      }
+    });
+
+    actionExecutor.register("remember" as ActionType, async (params) => {
+      const content = params.content as string || params.text as string || "";
+      console.log(`[Cortex:Action] Remember: ${content.slice(0, 100)}`);
+      // Hafızaya kaydetme şimdilik sadece log — MCP memory tool'a bağlanacak
+      return { success: true, action: "remember" as ActionType, message: `Noted: ${content.slice(0, 50)}` };
+    });
+
     // Start Cortex — sinir ağı pipeline
     await cortex.start({
       userContextProvider: async (userId) => {
