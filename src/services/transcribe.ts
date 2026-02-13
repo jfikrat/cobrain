@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { join } from "node:path";
 import { config } from "../config.ts";
 
 /**
@@ -181,17 +182,61 @@ const model = genAI.getGenerativeModel({
 const TRANSCRIPTION_USER_PROMPT = `Ses kaydını transkript et. SADECE konuşulan kelimeleri yaz, başka HİÇBİR ŞEY ekleme.`;
 
 /**
+ * Ses buffer'ının başına 3 saniyelik sessizlik ekler (FFmpeg concat)
+ * Kısa ses kayıtlarında Gemini halüsinasyonunu önlemek için
+ */
+async function prependSilence(audioBuffer: Buffer): Promise<Buffer> {
+  const silencePath = join(process.cwd(), "data", "silence-3s.ogg");
+  const tmpInput = join("/tmp", `cobrain-audio-${Date.now()}.ogg`);
+  const tmpOutput = join("/tmp", `cobrain-audio-${Date.now()}-out.ogg`);
+
+  try {
+    await Bun.write(tmpInput, audioBuffer);
+
+    const proc = Bun.spawn([
+      "ffmpeg", "-y",
+      "-i", silencePath,
+      "-i", tmpInput,
+      "-filter_complex", "concat=n=2:v=0:a=1",
+      "-c:a", "libopus", "-b:a", "32k",
+      tmpOutput,
+    ], { stdout: "ignore", stderr: "ignore" });
+
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) {
+      console.warn("[Transcribe] FFmpeg concat failed, using original audio");
+      return audioBuffer;
+    }
+
+    const outputFile = Bun.file(tmpOutput);
+    return Buffer.from(await outputFile.arrayBuffer());
+  } catch (err) {
+    console.warn("[Transcribe] Silence prepend failed:", err);
+    return audioBuffer;
+  } finally {
+    try {
+      const fs = await import("node:fs/promises");
+      await fs.unlink(tmpInput).catch(() => {});
+      await fs.unlink(tmpOutput).catch(() => {});
+    } catch {}
+  }
+}
+
+/**
  * Ses dosyasını Gemini ile metne çevirir
  */
 export async function transcribeAudio(
   audioBuffer: Buffer,
   mimeType: string = "audio/ogg"
 ): Promise<string> {
+  // Kısa seslerde halüsinasyonu önlemek için sessizlik prefix'i ekle
+  const processedBuffer = await prependSilence(audioBuffer);
+
   const result = await model.generateContent([
     {
       inlineData: {
         mimeType,
-        data: audioBuffer.toString("base64"),
+        data: processedBuffer.toString("base64"),
       },
     },
     {
