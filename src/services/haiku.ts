@@ -1,90 +1,60 @@
 /**
- * Haiku Service - Claude Haiku for memory operations
- * Replaces Cerebras for tag extraction and semantic ranking
+ * Haiku Service - LLM helper for memory operations & WhatsApp classification
+ * Now uses Gemini Flash (was Claude Haiku — no ANTHROPIC_API_KEY available)
  * Cobrain v0.3
  */
 
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const HAIKU_MODEL = "claude-haiku-4-5-20250121";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { config } from "../config.ts";
 
-let apiKey: string | null = null;
+const GEMINI_MODEL = "gemini-2.0-flash";
+
+let genAI: GoogleGenerativeAI | null = null;
 
 /**
- * Initialize Haiku client
+ * Initialize Gemini client
  */
 export function initHaiku(): boolean {
-  apiKey = process.env.ANTHROPIC_API_KEY || null;
+  const key = config.GEMINI_API_KEY || process.env.GEMINI_API_KEY || "";
 
-  if (!apiKey) {
-    console.warn("[Haiku] ANTHROPIC_API_KEY not configured");
+  if (!key) {
+    console.warn("[Haiku] GEMINI_API_KEY not configured");
     return false;
   }
 
-  console.log(`[Haiku] Initialized with model: ${HAIKU_MODEL}`);
+  genAI = new GoogleGenerativeAI(key);
+  console.log(`[Haiku] Initialized with Gemini model: ${GEMINI_MODEL}`);
   return true;
 }
 
 /**
- * Check if Haiku is available
+ * Check if Haiku (Gemini) is available
  */
 export function isHaikuAvailable(): boolean {
-  if (apiKey) return true;
-
-  // Try to initialize on first check
+  if (genAI) return true;
   return initHaiku();
 }
 
-interface AnthropicMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
-interface AnthropicResponse {
-  content: Array<{ type: string; text?: string }>;
-  model: string;
-  usage: {
-    input_tokens: number;
-    output_tokens: number;
-  };
-}
-
 /**
- * Quick completion helper
+ * Quick completion helper (now via Gemini)
  */
 async function complete(
   prompt: string,
   systemPrompt?: string,
   maxTokens: number = 200
 ): Promise<string> {
-  if (!apiKey) {
-    throw new Error("Haiku not initialized. Call initHaiku() first.");
+  if (!genAI && !initHaiku()) {
+    throw new Error("Gemini not initialized. GEMINI_API_KEY missing.");
   }
 
-  const messages: AnthropicMessage[] = [{ role: "user", content: prompt }];
-
-  const response = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: HAIKU_MODEL,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages,
-    }),
+  const model = genAI!.getGenerativeModel({
+    model: GEMINI_MODEL,
+    generationConfig: { maxOutputTokens: maxTokens },
+    ...(systemPrompt ? { systemInstruction: systemPrompt } : {}),
   });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Anthropic API error: ${response.status} - ${error}`);
-  }
-
-  const data = (await response.json()) as AnthropicResponse;
-  const textBlock = data.content.find((block) => block.type === "text");
-  return textBlock?.text || "";
+  const result = await model.generateContent(prompt);
+  return result.response.text() || "";
 }
 
 /**
