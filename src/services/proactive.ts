@@ -13,6 +13,7 @@ import { pruneMemories, think } from "../brain/index.ts";
 import { initLivingAssistant, stopLivingAssistant, recordInteraction, recordUserActivity } from "./living-assistant.ts";
 import { whatsappDB } from "./whatsapp-db.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
+import { signalBus } from "../cortex/index.ts";
 import { classifyWhatsAppMessage, type TierClassification, type GroupClassification } from "./haiku.ts";
 import type { ScheduledTask, QueuedTask, TaskResult, TaskType } from "../types/autonomous.ts";
 import { addWhatsAppNotification } from "./session-state.ts";
@@ -495,6 +496,17 @@ async function checkWhatsAppNotifications(): Promise<void> {
       }
 
       for (const [chatJid, msgs] of bySender) {
+        // Cortex Signal Bus'a WhatsApp DM sinyali gönder
+        if (signalBus.isRunning()) {
+          const senderName = msgs[0]?.sender_name || chatJid.split("@")[0] || "unknown";
+          signalBus.push("whatsapp_message", "dm", {
+            chatJid,
+            senderName,
+            messageCount: msgs.length,
+            preview: msgs.map(m => m.message_body?.slice(0, 100)).filter(Boolean).join(" | "),
+          }, { userId, contactId: chatJid });
+        }
+
         const result = await handleDMMessages(msgs, chatJid, userId, config.WHATSAPP_MAX_REPLY_LENGTH);
         results.push(result);
       }

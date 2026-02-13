@@ -26,6 +26,7 @@ import { generateSessionToken } from "../web/auth.ts";
 import { transcribeAudio, downloadTelegramFile, downloadTelegramFileAsBuffer } from "../services/transcribe.ts";
 import { initTelegramMcp } from "../agent/tools/telegram.ts";
 import { UserMemory } from "../memory/sqlite.ts";
+import { signalBus } from "../cortex/index.ts";
 
 const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
@@ -731,6 +732,14 @@ bot.on("message:voice", async (ctx) => {
 
     console.log(`[Voice] ${userId}: "${transcript.slice(0, 50)}..."`);
 
+    // Cortex Signal Bus'a sesli mesaj sinyali gönder
+    if (signalBus.isRunning()) {
+      signalBus.push("user_message", "voice", {
+        transcript: transcript.slice(0, 200),
+        messageId: ctx.message?.message_id,
+      }, { userId });
+    }
+
     // Process transcribed text as normal message
     await ctx.replyWithChatAction("typing");
     const response = await think(userId, transcript);
@@ -889,6 +898,14 @@ bot.on("message:text", async (ctx) => {
 
   const text = ctx.message.text;
   if (text.startsWith("/")) return;
+
+  // Cortex Signal Bus'a kullanıcı mesajı sinyali gönder
+  if (signalBus.isRunning()) {
+    signalBus.push("user_message", "text", {
+      text: text.slice(0, 200),
+      messageId: ctx.message.message_id,
+    }, { userId });
+  }
 
   // ============ CEVAPLAMA MODU KONTROLÜ ============
   const replyState = replyStates.get(userId);

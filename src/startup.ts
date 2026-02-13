@@ -9,6 +9,8 @@ import { config } from "./config.ts";
 import { initProactive, stopProactive } from "./services/proactive.ts";
 import { initScheduler } from "./services/scheduler.ts";
 import { initTaskQueue } from "./services/task-queue.ts";
+import { cortex, actionExecutor } from "./cortex/index.ts";
+import type { ActionType } from "./cortex/reasoner.ts";
 import {
   heartbeat,
   registerHeartbeatComponent,
@@ -74,7 +76,56 @@ if (config.ENABLE_WEB_UI) {
 // Initialize proactive features after bot starts
 if (config.ENABLE_AUTONOMOUS) {
   // Wait a bit for bot to be ready
-  setTimeout(() => {
+  setTimeout(async () => {
+    // Register Cortex action handlers
+    actionExecutor.register("send_message" as ActionType, async (params) => {
+      const text = params.text as string || params.message as string || "Bildirim";
+      try {
+        await bot.api.sendMessage(config.MY_TELEGRAM_ID, text);
+        return { success: true, action: "send_message" as ActionType, message: `Sent: ${text.slice(0, 50)}` };
+      } catch (err) {
+        return { success: false, action: "send_message" as ActionType, message: `Failed: ${err}` };
+      }
+    });
+
+    actionExecutor.register("send_whatsapp" as ActionType, async (params) => {
+      const to = params.to as string || "";
+      const message = params.message as string || "";
+      if (!to || !message) {
+        return { success: false, action: "send_whatsapp" as ActionType, message: "Missing to or message" };
+      }
+      // WhatsApp outbox'a yaz — worker gönderecek
+      try {
+        const { whatsappDB } = await import("./services/whatsapp-db.ts");
+        const outboxId = whatsappDB.sendMessage(to, message);
+        return { success: true, action: "send_whatsapp" as ActionType, message: `Queued: #${outboxId}` };
+      } catch (err) {
+        return { success: false, action: "send_whatsapp" as ActionType, message: `Failed: ${err}` };
+      }
+    });
+
+    actionExecutor.register("calculate_route" as ActionType, async (params) => {
+      // Route hesaplama — şimdilik sadece log, ileride location MCP'ye bağlanacak
+      const from = params.from as string || params.origin as string || "";
+      const to = params.to as string || params.destination as string || "";
+      console.log(`[Cortex:Action] Route requested: ${from} → ${to}`);
+      return { success: true, action: "calculate_route" as ActionType, message: `Route: ${from} → ${to}`, data: { from, to } };
+    });
+
+    // Start Cortex — sinir ağı pipeline
+    await cortex.start({
+      userContextProvider: async (userId) => {
+        // Basit context: kullanıcı bilgisi
+        return `Kullanıcı: Fekrat (Yazılım Geliştirici). Zaman: ${new Date().toLocaleString("tr-TR")}`;
+      },
+      onActionExecuted: (signal, result) => {
+        console.log(`[Cortex] Action result: ${result.action} success=${result.success} ${result.message || ""}`);
+      },
+      onError: (error, signal) => {
+        console.error(`[Cortex] Error processing ${signal.source}/${signal.type}:`, error.message);
+      },
+    });
+
     initProactive(bot);
     console.log("[Autonomous] Proactive features enabled");
   }, 1000);
@@ -83,6 +134,7 @@ if (config.ENABLE_AUTONOMOUS) {
 const shutdown = async () => {
   console.log("\nKapatılıyor...");
 
+  cortex.stop();
   stopProjectionScheduler();
 
   if (config.ENABLE_AUTONOMOUS) {
