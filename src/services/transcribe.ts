@@ -190,7 +190,16 @@ async function prependSilence(audioBuffer: Buffer): Promise<Buffer> {
   const tmpInput = join("/tmp", `cobrain-audio-${Date.now()}.ogg`);
   const tmpOutput = join("/tmp", `cobrain-audio-${Date.now()}-out.ogg`);
 
+  console.log(`[Transcribe] prependSilence called, audioSize=${audioBuffer.length}, silencePath=${silencePath}`);
+
   try {
+    // Silence dosyasi var mi kontrol et
+    const silenceFile = Bun.file(silencePath);
+    if (!(await silenceFile.exists())) {
+      console.warn(`[Transcribe] Silence file not found: ${silencePath}`);
+      return audioBuffer;
+    }
+
     await Bun.write(tmpInput, audioBuffer);
 
     const proc = Bun.spawn([
@@ -204,12 +213,14 @@ async function prependSilence(audioBuffer: Buffer): Promise<Buffer> {
 
     const exitCode = await proc.exited;
     if (exitCode !== 0) {
-      console.warn("[Transcribe] FFmpeg concat failed, using original audio");
+      console.warn(`[Transcribe] FFmpeg concat failed (exit=${exitCode}), using original audio`);
       return audioBuffer;
     }
 
     const outputFile = Bun.file(tmpOutput);
-    return Buffer.from(await outputFile.arrayBuffer());
+    const result = Buffer.from(await outputFile.arrayBuffer());
+    console.log(`[Transcribe] Silence prepended successfully, outputSize=${result.length}`);
+    return result;
   } catch (err) {
     console.warn("[Transcribe] Silence prepend failed:", err);
     return audioBuffer;
