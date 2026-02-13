@@ -52,7 +52,7 @@ class SalienceFilter {
 
   constructor(salienceConfig: SalienceConfig = DEFAULT_CONFIG) {
     const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
-    this.model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    this.model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
     this.config = salienceConfig;
   }
 
