@@ -9,7 +9,7 @@ import { config } from "./config.ts";
 import { initProactive, stopProactive } from "./services/proactive.ts";
 import { initScheduler } from "./services/scheduler.ts";
 import { initTaskQueue } from "./services/task-queue.ts";
-import { cortex, actionExecutor } from "./cortex/index.ts";
+import { cortex, actionExecutor, cortexBridge } from "./cortex/index.ts";
 import type { ActionType } from "./cortex/reasoner.ts";
 import {
   heartbeat,
@@ -283,6 +283,29 @@ if (config.ENABLE_AUTONOMOUS) {
         console.error(`[Cortex:Action] Remember failed:`, err);
         return { success: false, action: "remember" as ActionType, message: `Failed: ${err}` };
       }
+    });
+
+    // Configure Cortex Bridge — tier-2 questions untuk user feedback
+    cortexBridge.configure({
+      onTier2Question: async (feedback) => {
+        // Tier-2 sorularını sana Telegram'dan sor
+        const { senderName, preview, salience, reasoner } = feedback;
+        const questionText = `
+🤔 <b>WhatsApp - ${senderName}</b> (tier-2 - önem: ${(salience.score * 100).toFixed(0)}%)
+
+Mesaj: ${preview.slice(0, 150)}
+
+<b>Cortex'in önerisi:</b> ${reasoner.reasoning}
+
+<i>Cevap vermemi istersen haber ver.</i>
+        `.trim();
+
+        try {
+          await bot.api.sendMessage(config.MY_TELEGRAM_ID, questionText, { parse_mode: "HTML" });
+        } catch (err) {
+          console.error(`[CortexBridge] Failed to send tier-2 question to user:`, err);
+        }
+      },
     });
 
     // Start Cortex — sinir ağı pipeline

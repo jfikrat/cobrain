@@ -15,14 +15,16 @@ import { reasoner } from "./reasoner.ts";
 import { actionExecutor, type ActionResult } from "./actions.ts";
 import { wasRecentlyReplied } from "../services/reply-dedup.ts";
 import { geminiBreaker } from "./utils.ts";
+import { cortexBridge } from "./cortex-bridge.ts";
 
 // Re-export everything
-export { signalBus, expectations, salienceFilter, reasoner, actionExecutor, geminiBreaker };
+export { signalBus, expectations, salienceFilter, reasoner, actionExecutor, geminiBreaker, cortexBridge };
 export type { Signal } from "./signal-bus.ts";
 export type { PendingExpectation } from "./expectations.ts";
 export type { SalienceResult } from "./salience.ts";
 export type { ActionPlan } from "./reasoner.ts";
 export type { ActionResult } from "./actions.ts";
+export type { Tier2Feedback } from "./cortex-bridge.ts";
 
 // ── No-op Signal Blocklist ────────────────────────────────────────────────
 // Signals that are always ignored by the salience quick-check (score 0.1, below threshold).
@@ -40,6 +42,8 @@ interface CortexConfig {
   onActionExecuted?: (signal: Signal, result: ActionResult) => void;
   /** Hata callback */
   onError?: (error: Error, signal: Signal) => void;
+  /** WhatsApp DM tier-2 feedback callback — karar için bana sor */
+  onWhatsAppTier2?: (signal: Signal, salienceResult: any, reasonerDecision: any) => Promise<void>;
 }
 
 class Cortex {
@@ -190,6 +194,15 @@ class Cortex {
 
     // 2. Reasoner
     const plan = await reasoner.decide(signal, salience, userContext);
+
+    // WhatsApp DM sinyali — bridge'e gönder (tier kontrol için)
+    if (signal.source === "whatsapp_message" && signal.type === "dm") {
+      try {
+        await cortexBridge.handleWhatsAppDM(signal, salience, plan, signal.userId || 0);
+      } catch (err) {
+        console.error(`[Cortex] Bridge error for WhatsApp DM:`, err);
+      }
+    }
 
     // none — aksiyon gerekmiyor
     if (plan.action === "none") {
