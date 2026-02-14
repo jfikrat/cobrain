@@ -129,6 +129,15 @@ class SalienceFilter {
       return { score: 0.7, reason: "Expectation timed out", suggestedAction: "notify" };
     }
 
+    // Stale WhatsApp DM — 2 saatten eski mesajlar artık relevans değil
+    if (signal.source === "whatsapp_message" && signal.type === "dm") {
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+      const signalAge = Date.now() - signal.timestamp;
+      if (signalAge > TWO_HOURS_MS) {
+        return { score: 0.1, reason: `Stale WhatsApp DM (${Math.round(signalAge / 60000)}min old)`, suggestedAction: "ignore" };
+      }
+    }
+
     return null; // AI'ya sor
   }
 

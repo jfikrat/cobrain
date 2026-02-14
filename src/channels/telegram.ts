@@ -26,7 +26,7 @@ import { generateSessionToken } from "../web/auth.ts";
 import { transcribeAudio, downloadTelegramFile, downloadTelegramFileAsBuffer } from "../services/transcribe.ts";
 import { initTelegramMcp } from "../agent/tools/telegram.ts";
 import { UserMemory } from "../memory/sqlite.ts";
-import { signalBus } from "../cortex/index.ts";
+import { signalBus, cortex } from "../cortex/index.ts";
 
 const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
@@ -320,6 +320,49 @@ bot.command("restart", async (ctx) => {
   setTimeout(() => {
     process.exit(0); // systemd otomatik restart yapacak
   }, 500);
+});
+
+bot.command("cortex", async (ctx) => {
+  if (!isAuthorized(ctx.from?.id ?? 0)) return;
+
+  try {
+    const stats = cortex.stats() as Record<string, any>;
+    const cb = stats.circuitBreaker as { state: string; failures: number; totalTrips: number } | undefined;
+    const bus = stats.signalBus as { total: number; bySource?: Record<string, number> } | undefined;
+
+    const cbState = cb?.state ?? "UNKNOWN";
+    const cbEmoji = cbState === "CLOSED" ? "✅" : cbState === "OPEN" ? "🔴" : "🟡";
+
+    let text = `🧠 <b>Cortex Diagnostics</b>\n\n`;
+
+    text += `<b>Pipeline:</b>\n`;
+    text += `<code>  Processed:           ${stats.processed ?? 0}</code>\n`;
+    text += `<code>  Skipped (no-op):     ${stats.skippedNoOp ?? 0}</code>\n`;
+    text += `<code>  Dropped (dedup):     ${stats.droppedDedup ?? 0}</code>\n`;
+    text += `<code>  Dropped (threshold): ${stats.droppedBelowThreshold ?? 0}</code>\n`;
+    text += `<code>  Dropped (queue):     ${stats.droppedQueueFull ?? 0}</code>\n`;
+    text += `<code>  Actioned:            ${stats.actioned ?? 0}</code>\n`;
+    text += `<code>  Errors:              ${stats.errors ?? 0}</code>\n`;
+    text += `<code>  Avg latency:         ${stats.avgLatencyMs ?? 0}ms</code>\n`;
+
+    text += `\n<b>Circuit Breaker:</b> ${cbEmoji} ${cbState}\n`;
+    text += `<code>  Failures: ${cb?.failures ?? 0} | Trips: ${cb?.totalTrips ?? 0}</code>\n`;
+
+    text += `\n<b>Signal Bus:</b> ${bus?.total ?? 0} signals in log\n`;
+    if (bus?.bySource && Object.keys(bus.bySource).length > 0) {
+      for (const [src, count] of Object.entries(bus.bySource)) {
+        text += `<code>  ${src}: ${count}</code>\n`;
+      }
+    }
+
+    text += `\n<b>Queue:</b> ${stats.queueSize ?? 0}/${config.CORTEX_MAX_QUEUE_SIZE}\n`;
+    text += `<b>Expectations:</b> ${(stats.expectations as any)?.pending ?? 0} pending\n`;
+    text += `<b>Status:</b> ${stats.running ? "🟢 Running" : "🔴 Stopped"}`;
+
+    await ctx.reply(text, { parse_mode: "HTML" });
+  } catch (error) {
+    await ctx.reply(`❌ Cortex stats hatası: ${error instanceof Error ? error.message : "Bilinmeyen hata"}`);
+  }
 });
 
 // ===== Web UI Command =====
@@ -1001,6 +1044,9 @@ export async function startBot(): Promise<void> {
 
     // Session
     { command: "phase", description: "Session phase durumu / override" },
+
+    // Diagnostics
+    { command: "cortex", description: "Cortex pipeline diagnostics" },
 
     // WhatsApp
     { command: "scan", description: "WhatsApp mesajlarını tara" },

@@ -19,6 +19,7 @@ import type { ScheduledTask, QueuedTask, TaskResult, TaskType } from "../types/a
 import { addWhatsAppNotification } from "./session-state.ts";
 import { config as appConfig } from "../config.ts";
 import { markReplied, wasRecentlyReplied } from "./reply-dedup.ts";
+import { sanitizeText } from "../cortex/sanitize.ts";
 import { SmartMemory } from "../memory/smart-memory.ts";
 import { consolidateMemories } from "./memory-consolidation.ts";
 import { expectations } from "../cortex/expectations.ts";
@@ -618,7 +619,7 @@ async function handleDMMessages(
   const senderName = firstMsg.sender_name || chatJid.split("@")[0] || "?";
   const msgSummary = messages.map((m) => {
     const typeLabel = m.message_type !== "text" ? `[${m.message_type}] ` : "";
-    return `${typeLabel}${sanitizeForPrompt(m.content || "")}`;
+    return `${typeLabel}${sanitizeText(sanitizeForPrompt(m.content || ""), 500)}`;
   }).join("\n");
 
   try {
@@ -809,7 +810,7 @@ async function handleWatchedGroupMessages(
 
   const msgSummary = messages.map((m) => {
     const sender = (m.sender_name || "").split(" @ ")[0] || "?";
-    return `[${sender}]: ${sanitizeForPrompt(m.content || `[${m.message_type}]`)}`;
+    return `[${sender}]: ${sanitizeText(sanitizeForPrompt(m.content || `[${m.message_type}]`), 500)}`;
   }).join("\n");
 
   try {
