@@ -63,6 +63,10 @@ const appHeartbeatInterval = setInterval(() => {
   heartbeat("app", { event: "tick", uptimeSec: Math.round(process.uptime()) });
 }, Math.max(10_000, Math.floor(config.HEARTBEAT_STALE_AFTER_MS / 3)));
 
+const aiAgentHeartbeatInterval = setInterval(() => {
+  heartbeat("ai_agent", { event: "tick" });
+}, Math.max(10_000, Math.floor(config.HEARTBEAT_STALE_AFTER_MS / 3)));
+
 if (config.ENABLE_AUTONOMOUS) {
   initScheduler({ enabled: true });
   initTaskQueue({ enabled: true });
@@ -406,6 +410,7 @@ const shutdown = async () => {
   }
 
   clearInterval(appHeartbeatInterval);
+  clearInterval(aiAgentHeartbeatInterval);
   stopHeartbeatMonitor();
 
   await stopBot();
