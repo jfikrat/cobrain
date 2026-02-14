@@ -21,6 +21,7 @@ import { config as appConfig } from "../config.ts";
 import { markReplied } from "./reply-dedup.ts";
 import { SmartMemory } from "../memory/smart-memory.ts";
 import { consolidateMemories } from "./memory-consolidation.ts";
+import { expectations } from "../cortex/expectations.ts";
 
 let bot: Bot | null = null;
 
@@ -632,6 +633,22 @@ async function handleDMMessages(
               isGroup: false, timestamp: Date.now(),
             });
           }
+
+          // Create expectation for reply tracking (skip if one already exists for this target)
+          if (outboxOk) {
+            const existing = expectations.pending().find(e => e.target === chatJid && e.type === "whatsapp_reply");
+            if (!existing) {
+              expectations.create({
+                type: "whatsapp_reply",
+                target: chatJid,
+                context: `Auto-reply sent to ${senderName}: "${reply.slice(0, 100)}"`,
+                onResolved: `${senderName} replied to auto-message`,
+                userId: telegramUserId,
+                timeout: appConfig.CORTEX_EXPECTATION_TIMEOUT_MS,
+              });
+            }
+          }
+
           return { model: "claude", tier: 1, outboxSuccess: outboxOk };
         }
       } catch (e) {
@@ -667,6 +684,22 @@ async function handleDMMessages(
           isGroup: false, timestamp: Date.now(),
         });
       }
+
+      // Create expectation for reply tracking (skip if one already exists for this target)
+      if (outboxOk) {
+        const existing = expectations.pending().find(e => e.target === chatJid && e.type === "whatsapp_reply");
+        if (!existing) {
+          expectations.create({
+            type: "whatsapp_reply",
+            target: chatJid,
+            context: `Auto-reply sent to ${senderName}: "${analysis.reply.slice(0, 100)}"`,
+            onResolved: `${senderName} replied to auto-message`,
+            userId: telegramUserId,
+            timeout: appConfig.CORTEX_EXPECTATION_TIMEOUT_MS,
+          });
+        }
+      }
+
       return { model: "haiku", tier: 1, outboxSuccess: outboxOk };
 
     } else if (analysis.tier === 2 && analysis.suggestedReply) {

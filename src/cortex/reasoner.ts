@@ -51,7 +51,7 @@ const DEFAULT_CONFIG: ReasonerConfig = {
   maxTokens: 500,
 };
 
-const AI_TIMEOUT_MS = 30_000;
+const AI_TIMEOUT_MS = config.CORTEX_AI_TIMEOUT_MS;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -71,7 +71,7 @@ class Reasoner {
 
   constructor(reasonerConfig: ReasonerConfig = DEFAULT_CONFIG) {
     const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
-    this.model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+    this.model = genAI.getGenerativeModel({ model: config.CORTEX_MODEL });
     this.config = reasonerConfig;
   }
 
@@ -142,10 +142,20 @@ class Reasoner {
 
     // Expectation timeout — kullanıcıya bildir
     if (signal.source === "expectation_timeout") {
+      const target = signal.data.target as string || "";
+      const context = signal.data.context as string || "";
+      const waitedMinutes = signal.data.waitedMinutes as number || 0;
+      // Target genelde JID formatında (905xx@s.whatsapp.net), kısa isim çıkar
+      const targetName = target.includes("@")
+        ? target.split("@")[0]
+        : target;
+      const minuteStr = waitedMinutes > 0 ? `${waitedMinutes} dakikadır` : "Uzun süredir";
+      const contextStr = context ? ` (${context})` : "";
+
       return {
         action: "send_message",
         params: {
-          text: `Beklenti zaman aşımına uğradı: ${signal.data.context}`,
+          text: `${targetName} ${minuteStr} cevap vermedi${contextStr}`,
           expectationId: signal.data.expectationId,
         },
         reasoning: "Expectation expired, notify user",

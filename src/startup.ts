@@ -52,9 +52,12 @@ registerHeartbeatComponent("web_server", { required: config.ENABLE_WEB_UI });
 registerHeartbeatComponent("scheduler", { required: config.ENABLE_AUTONOMOUS });
 registerHeartbeatComponent("task_queue", { required: config.ENABLE_AUTONOMOUS });
 registerHeartbeatComponent("proactive_service", { required: config.ENABLE_AUTONOMOUS });
+registerHeartbeatComponent("cortex", { required: config.ENABLE_AUTONOMOUS });
 
 heartbeat("app", { event: "startup" });
 startHeartbeatMonitor();
+
+let cortexHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
 const appHeartbeatInterval = setInterval(() => {
   heartbeat("app", { event: "tick", uptimeSec: Math.round(process.uptime()) });
@@ -104,6 +107,21 @@ if (config.ENABLE_AUTONOMOUS) {
         const outboxId = whatsappDB.sendMessage(to, message);
         // Mark as replied AFTER successful outbox write to prevent proactive from also replying
         markReplied(to);
+
+        // Create expectation for reply tracking (skip if one already exists for this target)
+        const { expectations } = await import("./cortex/expectations.ts");
+        const existing = expectations.pending().find(e => e.target === to && e.type === "whatsapp_reply");
+        if (!existing) {
+          expectations.create({
+            type: "whatsapp_reply",
+            target: to,
+            context: `Cortex sent WhatsApp to ${to}: "${message.slice(0, 100)}"`,
+            onResolved: "Reply received to Cortex-initiated message",
+            userId: config.MY_TELEGRAM_ID,
+            timeout: config.CORTEX_EXPECTATION_TIMEOUT_MS,
+          });
+        }
+
         return { success: true, action: "send_whatsapp" as ActionType, message: `Queued: #${outboxId}` };
       } catch (err) {
         return { success: false, action: "send_whatsapp" as ActionType, message: `Failed: ${err}` };
@@ -211,6 +229,14 @@ if (config.ENABLE_AUTONOMOUS) {
       },
     });
 
+    // Cortex heartbeat — periodic stats
+    heartbeat("cortex", { event: "started", ...cortex.stats() });
+    cortexHeartbeatInterval = setInterval(() => {
+      if (cortex.isRunning()) {
+        heartbeat("cortex", cortex.stats());
+      }
+    }, 30_000); // Every 30 seconds
+
     initProactive(bot);
     console.log("[Autonomous] Proactive features enabled");
   }, 1000);
@@ -220,6 +246,7 @@ const shutdown = async () => {
   console.log("\nKapatılıyor...");
 
   cortex.stop();
+  if (cortexHeartbeatInterval) clearInterval(cortexHeartbeatInterval);
   stopProjectionScheduler();
 
   if (config.ENABLE_AUTONOMOUS) {

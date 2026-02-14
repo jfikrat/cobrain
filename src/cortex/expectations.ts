@@ -9,6 +9,7 @@
  */
 
 import { join } from "node:path";
+import { config } from "../config.ts";
 import { signalBus, type Signal } from "./signal-bus.ts";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -108,7 +109,7 @@ class ExpectationsManager {
       context: params.context,
       onResolved: params.onResolved,
       userId: params.userId,
-      timeout: params.timeout ?? 30 * 60 * 1000, // 30 dakika default
+      timeout: params.timeout ?? config.CORTEX_EXPECTATION_TIMEOUT_MS,
       createdAt: Date.now(),
       status: "pending",
     };
@@ -199,6 +200,7 @@ class ExpectationsManager {
             type: exp.type,
             target: exp.target,
             context: exp.context,
+            waitedMinutes: Math.round((now - exp.createdAt) / 60000),
           }, { userId: exp.userId });
         }
       }

@@ -75,6 +75,14 @@ const envSchema = z.object({
   // v1.0: REST API
   COBRAIN_API_KEY: z.string().default(""),
 
+  // v1.1: Cortex tuning
+  CORTEX_SALIENCE_THRESHOLD: z.coerce.number().default(0.3),
+  CORTEX_AI_TIMEOUT_MS: z.coerce.number().default(30_000),
+  CORTEX_MAX_QUEUE_SIZE: z.coerce.number().default(50),
+  CORTEX_EXPECTATION_TIMEOUT_MS: z.coerce.number().default(30 * 60 * 1000),
+  CORTEX_EXPECTATION_CLEANUP_INTERVAL_MS: z.coerce.number().default(60_000),
+  CORTEX_MODEL: z.string().default("gemini-3-flash-preview"),
+
   // Legacy (kept for migration)
   DB_PATH: z.string().default("./data/cobrain.db"),
 });

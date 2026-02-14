@@ -13,6 +13,7 @@ import { SmartMemory, type FollowupCandidate } from "../memory/smart-memory.ts";
 import { config } from "../config.ts";
 import { heartbeat } from "./heartbeat.ts";
 import { getSessionState, updateSessionState } from "./session-state.ts";
+import { signalBus } from "../cortex/signal-bus.ts";
 
 // Haiku API for cheap analysis
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
@@ -78,6 +79,7 @@ const CODE_REVIEW_FILES = [
 
 let lastCodeReviewDate: string | null = null;
 let codeReviewIndex = 0;
+let lastTimeTickPush = 0;
 
 // Cooldown tracking
 interface CooldownEntry {
@@ -184,6 +186,29 @@ function setCooldown(key: string, type: string, targetId?: number): void {
  */
 async function runAwarenessLoop(): Promise<void> {
   heartbeat("proactive_service", { event: "awareness_tick" });
+
+  // Push time_tick signal to Cortex every 5 minutes
+  try {
+    const now = Date.now();
+    if (now - lastTimeTickPush >= 5 * 60 * 1000) {
+      lastTimeTickPush = now;
+      const d = new Date();
+      const lastInteraction = lastInteractionTime.get(config.MY_TELEGRAM_ID) || 0;
+      const lastInteractionMinutesAgo = lastInteraction > 0
+        ? Math.floor((now - lastInteraction) / (1000 * 60))
+        : -1;
+
+      signalBus.push("time_tick", "periodic", {
+        hour: d.getHours(),
+        minute: d.getMinutes(),
+        day: d.toLocaleDateString("tr-TR", { weekday: "long" }),
+        isWeekend: [0, 6].includes(d.getDay()),
+        lastInteractionMinutesAgo,
+      }, { userId: config.MY_TELEGRAM_ID });
+    }
+  } catch (err) {
+    console.warn("[LivingAssistant] time_tick signal failed:", err);
+  }
 
   // Single-user mode: only check the owner
   const userId = config.MY_TELEGRAM_ID;

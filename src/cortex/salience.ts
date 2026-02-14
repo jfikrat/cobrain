@@ -41,11 +41,11 @@ export interface SalienceConfig {
 // ── Default Config ────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG: SalienceConfig = {
-  threshold: 0.3,
+  threshold: config.CORTEX_SALIENCE_THRESHOLD,
   maxTokens: 200,
 };
 
-const AI_TIMEOUT_MS = 30_000;
+const AI_TIMEOUT_MS = config.CORTEX_AI_TIMEOUT_MS;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -66,7 +66,7 @@ class SalienceFilter {
 
   constructor(salienceConfig: SalienceConfig = DEFAULT_CONFIG) {
     const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
-    this.model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+    this.model = genAI.getGenerativeModel({ model: config.CORTEX_MODEL });
     this.config = salienceConfig;
   }
 
