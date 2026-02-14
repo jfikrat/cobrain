@@ -149,9 +149,12 @@ export async function think(userId: number, message: string | MultimodalMessage,
     });
   }
 
-  // Model override only when FF_ROUTER_LITE is enabled and route has a real model
+  // Model override only when FF_ROUTER_LITE is enabled, route has a real model,
+  // and query is "fast" (simple). Medium/complex stay on AGENT_MODEL.
   const modelOverride =
-    config.FF_ROUTER_LITE && route.model !== "none" ? route.model : undefined;
+    config.FF_ROUTER_LITE && route.model !== "none" && route.level === "fast"
+      ? route.model
+      : undefined;
 
   try {
     let response: ThinkResponse;

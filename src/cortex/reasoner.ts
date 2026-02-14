@@ -198,7 +198,7 @@ ${userContext || "Bilgi yok"}
 MEVCUT AKSIYON TIPLERI:
 - send_message: Telegram'dan kullanıcıya bildir (önemli/acil durumlarda)
 - send_whatsapp: WhatsApp mesaj gönder
-- calculate_route: Yol/mesafe hesapla
+- calculate_route: Yol/mesafe hesapla. Params: {from: "başlangıç (kayıtlı konum adı veya adres)", to: "varış (kayıtlı konum adı veya adres)", mode?: "DRIVE|WALK|BICYCLE|TRANSIT"}
 - remember: Hafızaya kaydet (önemli bilgi varsa). Params: {content: "kaydedilecek bilgi", context?: "bağlam", importance?: 0.0-1.0, type?: "episodic|semantic|procedural"}
 - create_expectation: Yeni beklenti oluştur (SADECE cevap gerçekten bekleniyorsa — soru sorduysa, buluşma/plan konuşuluyorsa. Basit selamlaşma veya bilgilendirme mesajlarında beklenti OLUŞTURMA)
 - check_whatsapp: WhatsApp mesajlarını kontrol et. Params: {chatJid: "numara@s.whatsapp.net", limit?: 5, notify?: true/false}

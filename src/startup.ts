@@ -129,11 +129,77 @@ if (config.ENABLE_AUTONOMOUS) {
     });
 
     actionExecutor.register("calculate_route" as ActionType, async (params) => {
-      // Route hesaplama — şimdilik sadece log, ileride location MCP'ye bağlanacak
       const from = params.from as string || params.origin as string || "";
       const to = params.to as string || params.destination as string || "";
-      console.log(`[Cortex:Action] Route requested: ${from} → ${to}`);
-      return { success: true, action: "calculate_route" as ActionType, message: `Route: ${from} → ${to}`, data: { from, to } };
+      const mode = (params.mode as string || "DRIVE").toUpperCase() as "DRIVE" | "WALK" | "BICYCLE" | "TRANSIT";
+
+      if (!from || !to) {
+        return { success: false, action: "calculate_route" as ActionType, message: "Missing from/origin or to/destination" };
+      }
+
+      console.log(`[Cortex:Action] Route requested: ${from} → ${to} (${mode})`);
+
+      try {
+        const { LocationService } = await import("./services/location.ts");
+        const userId = config.MY_TELEGRAM_ID;
+        const userDb = await userManager.getUserDb(userId);
+        const locService = new LocationService(userDb);
+
+        // Resolve origin: saved location name, coordinates, or address (geocode)
+        const originCoords = await resolveLocationForCortex(locService, from);
+        if (!originCoords) {
+          const msg = `Baslangic bulunamadi: "${from}"`;
+          await bot.api.sendMessage(config.MY_TELEGRAM_ID, msg);
+          return { success: false, action: "calculate_route" as ActionType, message: msg };
+        }
+
+        // Resolve destination
+        const destCoords = await resolveLocationForCortex(locService, to);
+        if (!destCoords) {
+          const msg = `Varis bulunamadi: "${to}"`;
+          await bot.api.sendMessage(config.MY_TELEGRAM_ID, msg);
+          return { success: false, action: "calculate_route" as ActionType, message: msg };
+        }
+
+        const result = await locService.getDistance(
+          originCoords.lat, originCoords.lng,
+          destCoords.lat, destCoords.lng,
+          mode
+        );
+
+        if (!result) {
+          const msg = `Rota bulunamadi: ${originCoords.name} → ${destCoords.name}`;
+          await bot.api.sendMessage(config.MY_TELEGRAM_ID, msg);
+          return { success: false, action: "calculate_route" as ActionType, message: msg };
+        }
+
+        const modeText: Record<string, string> = {
+          DRIVE: "Arabayla", WALK: "Yuruyerek", BICYCLE: "Bisikletle", TRANSIT: "Toplu tasimayla",
+        };
+
+        const lines = [
+          `📍 ${originCoords.name} → ${destCoords.name}`,
+          `${modeText[mode] || mode}: ${result.distanceText}, ${result.durationText}`,
+        ];
+        if (result.durationInTrafficText && mode === "DRIVE") {
+          lines.push(`Trafikle: ${result.durationInTrafficText}`);
+        }
+
+        const msg = lines.join("\n");
+        await bot.api.sendMessage(config.MY_TELEGRAM_ID, msg);
+        console.log(`[Cortex:Action] Route result: ${result.distanceText}, ${result.durationText}`);
+
+        return {
+          success: true,
+          action: "calculate_route" as ActionType,
+          message: msg,
+          data: { from: originCoords.name, to: destCoords.name, distance: result.distanceText, duration: result.durationText },
+        };
+      } catch (err) {
+        const msg = `Rota hesaplanamadi: ${err}`;
+        console.error(`[Cortex:Action] calculate_route error:`, err);
+        return { success: false, action: "calculate_route" as ActionType, message: msg };
+      }
     });
 
     actionExecutor.register("check_whatsapp" as ActionType, async (params) => {
@@ -152,7 +218,7 @@ if (config.ENABLE_AUTONOMOUS) {
         const messages = whatsappDB.getMessages(chatJid, limit);
 
         if (messages.length === 0) {
-          return { success: true, action: "check_whatsapp" as ActionType, message: "No messages found", data: { chatJid, count: 0 } };
+          return { success: true, action: "check_whatsapp" as ActionType, message: "No messages found", data: { chatJid, count: 0, notified: false } };
         }
 
         const summary = messages.map(m => {
@@ -169,7 +235,7 @@ if (config.ENABLE_AUTONOMOUS) {
           await bot.api.sendMessage(config.MY_TELEGRAM_ID, `📱 WhatsApp (${chatName}):\n${summary.slice(0, 500)}`);
         }
 
-        return { success: true, action: "check_whatsapp" as ActionType, message: summary, data: { chatJid, count: messages.length } };
+        return { success: true, action: "check_whatsapp" as ActionType, message: summary, data: { chatJid, count: messages.length, notified: !!params.notify } };
       } catch (err) {
         return { success: false, action: "check_whatsapp" as ActionType, message: `Failed: ${err}` };
       }
@@ -221,8 +287,60 @@ if (config.ENABLE_AUTONOMOUS) {
         // Basit context: kullanıcı bilgisi
         return `Kullanıcı: Fekrat (Yazılım Geliştirici). Zaman: ${new Date().toLocaleString("tr-TR")}`;
       },
-      onActionExecuted: (signal, result) => {
+      onActionExecuted: async (signal, result) => {
         console.log(`[Cortex] Action result: ${result.action} success=${result.success} ${result.message || ""}`);
+
+        // Skip actions that already communicate with the user or need no notification
+        const SILENT_ACTIONS: ActionType[] = ["send_message", "send_whatsapp", "none", "compound"];
+        if (SILENT_ACTIONS.includes(result.action) || !result.success) return;
+
+        let notification: string | null = null;
+
+        switch (result.action) {
+          case "check_whatsapp": {
+            // Handler already sends Telegram if params.notify was set — skip to avoid duplicates
+            const resultData = result.data as Record<string, unknown> | undefined;
+            if (!resultData?.notified) {
+              const count = resultData?.count ?? 0;
+              const chatJid = (resultData?.chatJid as string) || "";
+              const chatName = chatJid.split("@")[0] || "?";
+              notification = `WhatsApp kontrol (${chatName}): ${count} mesaj bulundu.`;
+            }
+            break;
+          }
+          case "remember": {
+            const preview = (result.message || "").replace(/^Stored memory #\d+:\s*/, "").slice(0, 80);
+            notification = `Hafizama kaydettim: ${preview}`;
+            break;
+          }
+          case "calculate_route": {
+            const data = result.data as Record<string, unknown> | undefined;
+            const from = data?.from || "?";
+            const to = data?.to || "?";
+            notification = `Rota: ${from} \u2192 ${to}`;
+            break;
+          }
+          case "create_expectation": {
+            const ctx = (result.data as Record<string, unknown>)?.expectation as Record<string, unknown> | undefined;
+            const desc = (ctx?.context as string) || result.message || "";
+            notification = `Beklenti olusturdum: ${desc.slice(0, 100)}`;
+            break;
+          }
+          case "resolve_expectation": {
+            const ctx = (result.data as Record<string, unknown>)?.expectation as Record<string, unknown> | undefined;
+            const desc = (ctx?.context as string) || result.message || "";
+            notification = `Beklenti cozuldu: ${desc.slice(0, 100)}`;
+            break;
+          }
+        }
+
+        if (notification) {
+          try {
+            await bot.api.sendMessage(config.MY_TELEGRAM_ID, notification);
+          } catch (err) {
+            console.error(`[Cortex] Action notification failed:`, err);
+          }
+        }
       },
       onError: (error, signal) => {
         console.error(`[Cortex] Error processing ${signal.source}/${signal.type}:`, error.message);
@@ -240,6 +358,36 @@ if (config.ENABLE_AUTONOMOUS) {
     initProactive(bot);
     console.log("[Autonomous] Proactive features enabled");
   }, 1000);
+}
+
+// ── Helper: resolve location for Cortex calculate_route ──────────────────
+async function resolveLocationForCortex(
+  service: import("./services/location.ts").LocationService,
+  input: string
+): Promise<{ name: string; lat: number; lng: number } | null> {
+  // 1. Saved location by name
+  const saved = service.getLocationByName(input);
+  if (saved) return { name: saved.name, lat: saved.latitude, lng: saved.longitude };
+
+  // 2. Coordinate format: "41.0082,28.9784"
+  const coordMatch = input.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+  if (coordMatch) {
+    const lat = parseFloat(coordMatch[1]!);
+    const lng = parseFloat(coordMatch[2]!);
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { name: `${lat.toFixed(4)},${lng.toFixed(4)}`, lat, lng };
+    }
+  }
+
+  // 3. Address geocoding
+  try {
+    const geocoded = await service.geocode(input);
+    if (geocoded) {
+      return { name: geocoded.formattedAddress, lat: geocoded.latitude, lng: geocoded.longitude };
+    }
+  } catch { /* geocode failed, return null */ }
+
+  return null;
 }
 
 const shutdown = async () => {

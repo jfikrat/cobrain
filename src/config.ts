@@ -50,7 +50,7 @@ const envSchema = z.object({
 
   // v0.9: Brain Events — Phase 1
   FF_BRAIN_EVENTS: z.coerce.boolean().default(true),
-  FF_ROUTER_LITE: z.coerce.boolean().default(false), // shadow mode — log but don't override
+  FF_ROUTER_LITE: z.coerce.boolean().default(true), // active — only downgrades "fast" (simple) queries
   FF_SESSION_STATE: z.coerce.boolean().default(true),
   FF_MEMORY_CONSOLIDATION: z.coerce.boolean().default(true),
 

@@ -24,6 +24,13 @@ export type { SalienceResult } from "./salience.ts";
 export type { ActionPlan } from "./reasoner.ts";
 export type { ActionResult } from "./actions.ts";
 
+// ── No-op Signal Blocklist ────────────────────────────────────────────────
+// Signals that are always ignored by the salience quick-check (score 0.1, below threshold).
+// Skip them at the enqueue stage to avoid wasting pipeline cycles and log noise.
+// - time_tick: periodic heartbeat, always returns "ignore" in salience quickCheck
+// - user_message: already handled by chat pipeline, always returns "ignore" in salience quickCheck
+const SKIP_SOURCES = new Set(["time_tick", "user_message"]);
+
 // ── Cortex Pipeline ───────────────────────────────────────────────────────
 
 interface CortexConfig {
@@ -48,6 +55,7 @@ class Cortex {
   private _droppedQueueFull = 0;
   private _droppedDedup = 0;
   private _droppedBelowThreshold = 0;
+  private _skippedNoOp = 0;
   private _actioned = 0;
   private _errors = 0;
   private _totalLatencyMs = 0;
@@ -105,6 +113,12 @@ class Cortex {
   private enqueue(signal: Signal): void {
     // system_event sinyallerini pipeline'a sokma (sonsuz döngü riski)
     if (signal.source === "system_event") return;
+
+    // Skip known no-op signals — always ignored by salience quickCheck
+    if (SKIP_SOURCES.has(signal.source)) {
+      this._skippedNoOp++;
+      return;
+    }
 
     if (this.processingQueue.length >= this.MAX_QUEUE_SIZE) {
       const dropped = this.processingQueue.shift();
@@ -202,6 +216,7 @@ class Cortex {
       running: this.running,
       queueSize: this.processingQueue.length,
       processed: this._processed,
+      skippedNoOp: this._skippedNoOp,
       dropped: totalDropped,
       droppedQueueFull: this._droppedQueueFull,
       droppedDedup: this._droppedDedup,
