@@ -109,13 +109,33 @@ export async function chat(
     }
   } catch {}
 
-  // Token budget: max 5 memories, each truncated to 200 chars, deduplicated
+  // Token budget: max 5 memories, mixed strategy (importance + recency), deduplicated
   let recentMemories: string[] = [];
   try {
     const memory = new SmartMemory(userFolder, userId);
-    const entries = memory.getRecent(5);
+    const now = Date.now();
+
+    // Top 3 by importance (>=0.6)
+    const important = memory.getByImportance(3, 0.6);
+    // Top 2 most recent (for recency context)
+    const recent = memory.getRecent(2);
+
+    // Merge & deduplicate by id, cap at 5
+    const seenIds = new Set<number>();
+    const merged: typeof important = [];
+    for (const entry of [...important, ...recent]) {
+      if (seenIds.has(entry.id)) continue;
+      seenIds.add(entry.id);
+      merged.push(entry);
+      if (merged.length >= 5) break;
+    }
+
+    // Format with recency & importance labels
     recentMemories = deduplicateMemories(
-      entries.map(e => truncate(e.content, 200))
+      merged.map(e => {
+        const daysAgo = Math.floor((now - new Date(e.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+        return `[${daysAgo}d ago, imp=${e.importance.toFixed(1)}] ${truncate(e.content, 180)}`;
+      })
     );
     memory.close();
   } catch {}

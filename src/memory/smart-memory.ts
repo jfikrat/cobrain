@@ -205,7 +205,7 @@ export class SmartMemory {
     minScore?: number;
   }): Promise<MemorySearchResult[]> {
     const limit = options?.limit ?? 5;
-    const minScore = options?.minScore ?? 0.3;
+    const minScore = options?.minScore ?? 0.5;
 
     // First, get candidates using FTS5
     const candidates = this.fts5Search(query, options?.type, 20);
@@ -219,7 +219,14 @@ export class SmartMemory {
       try {
         const ranked = await rankMemories(
           query,
-          candidates.map((c) => ({ id: c.id, content: c.content, summary: c.summary })),
+          candidates.map((c) => ({
+            id: c.id,
+            content: c.content,
+            summary: c.summary,
+            importance: c.importance,
+            createdAt: c.createdAt,
+            accessCount: c.accessCount,
+          })),
           limit
         );
 
@@ -475,6 +482,53 @@ export class SmartMemory {
       source: "conversation",
       sourceRef: sessionId,
     });
+  }
+
+  /**
+   * Get top memories by importance score (for context injection)
+   */
+  getByImportance(limit: number = 3, minImportance: number = 0.6): MemoryEntry[] {
+    const rows = this.db
+      .query<{
+        id: number;
+        type: string;
+        content: string;
+        summary: string | null;
+        tags: string | null;
+        importance: number;
+        access_count: number;
+        last_accessed_at: string | null;
+        source: string | null;
+        source_ref: string | null;
+        metadata: string;
+        created_at: string;
+        expires_at: string | null;
+      }, [number, number]>(
+        `SELECT * FROM memories
+         WHERE importance >= ?
+         AND (expires_at IS NULL OR expires_at > datetime('now'))
+         AND json_extract(metadata, '$.softDeleted') IS NOT 1
+         ORDER BY importance DESC, access_count DESC
+         LIMIT ?`
+      )
+      .all(minImportance, limit);
+
+    return rows.map((row) => ({
+      id: row.id,
+      vectorRowid: 0,
+      type: row.type as MemoryType,
+      content: row.content,
+      summary: row.summary ?? undefined,
+      tags: row.tags ?? undefined,
+      importance: row.importance,
+      accessCount: row.access_count,
+      lastAccessedAt: row.last_accessed_at ?? undefined,
+      source: row.source ?? undefined,
+      sourceRef: row.source_ref ?? undefined,
+      metadata: JSON.parse(row.metadata || "{}"),
+      createdAt: row.created_at,
+      expiresAt: row.expires_at ?? undefined,
+    }));
   }
 
   /**

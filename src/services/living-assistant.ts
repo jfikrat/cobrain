@@ -29,7 +29,7 @@ interface ContextData {
   goals: {
     active: number;
     approaching: Array<{ title: string; dueDate: string; daysLeft: number }>;
-    needingFollowup: Array<{ id: number; title: string; daysSinceFollowup: number }>;
+    needingFollowup: Array<{ id: number; title: string; progress: number; daysSinceFollowup: number }>;
   };
   reminders: {
     pending: number;
@@ -58,6 +58,7 @@ interface ProactiveDecision {
   type: "summary" | "goal_followup" | "memory_followup" | "nudge" | "mood_check" | "none";
   message: string | null;
   reason: string;
+  goalId?: number; // For goal_followup: which goal was followed up
 }
 
 // Code review cycle — rotate list of core files
@@ -317,6 +318,19 @@ async function checkUserContext(userId: number): Promise<void> {
   const quickDecision = makeQuickDecision(context);
   if (quickDecision.shouldNotify && quickDecision.message) {
     await sendNotification(userId, quickDecision.message, quickDecision.priority, quickDecision.type);
+
+    // Mark goal as followed up after successful notification
+    if (quickDecision.type === "goal_followup" && quickDecision.goalId) {
+      try {
+        const db = await userManager.getUserDb(userId);
+        const goalsService = await getGoalsService(db, userId);
+        goalsService.markFollowupSent(quickDecision.goalId);
+        setCooldown(`goal_${quickDecision.goalId}`, "goal_followup", quickDecision.goalId);
+      } catch (err) {
+        console.warn(`[LivingAssistant] Failed to mark goal #${quickDecision.goalId} followup:`, err);
+      }
+    }
+
     return;
   }
 
@@ -375,6 +389,7 @@ async function gatherContext(userId: number): Promise<ContextData> {
     .map((g) => ({
       id: g.id,
       title: g.title,
+      progress: Math.round(g.progress * 100),
       daysSinceFollowup: goalsService.getDaysSinceFollowup(g.id) ?? 0,
     }));
 
@@ -510,6 +525,19 @@ function makeQuickDecision(context: ContextData): ProactiveDecision {
         reason: "today_deadline",
       };
     }
+  }
+
+  // Medium: Goal follow-up overdue (skip during quiet hours)
+  if (!quiet && context.goals.needingFollowup.length > 0) {
+    const goal = context.goals.needingFollowup[0]!;
+    return {
+      shouldNotify: true,
+      priority: "medium",
+      type: "goal_followup",
+      message: `🎯 Hedef takibi: "${goal.title}" — İlerleme: ${goal.progress}%, son takip ${goal.daysSinceFollowup} gün önce`,
+      reason: "goal_followup_overdue",
+      goalId: goal.id,
+    };
   }
 
   // No urgent action needed

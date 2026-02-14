@@ -101,7 +101,7 @@ Metin: "${text}"
  */
 export async function rankMemories(
   query: string,
-  memories: { id: number; content: string; summary?: string }[],
+  memories: { id: number; content: string; summary?: string; importance?: number; createdAt?: string; accessCount?: number }[],
   limit: number = 5
 ): Promise<{ id: number; score: number }[]> {
   if (memories.length === 0) return [];
@@ -120,14 +120,17 @@ export async function rankMemories(
  */
 async function rankIndividually(
   query: string,
-  memories: { id: number; content: string; summary?: string }[],
+  memories: { id: number; content: string; summary?: string; importance?: number; createdAt?: string; accessCount?: number }[],
   limit: number
 ): Promise<{ id: number; score: number }[]> {
   const results: { id: number; score: number }[] = [];
 
   for (const memory of memories) {
     const text = memory.summary || memory.content.slice(0, 200);
-    const score = await scoreRelevance(query, text);
+    const daysAgo = memory.createdAt
+      ? Math.floor((Date.now() - new Date(memory.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+      : undefined;
+    const score = await scoreRelevance(query, text, memory.importance, daysAgo, memory.accessCount);
     results.push({ id: memory.id, score });
   }
 
@@ -142,15 +145,22 @@ async function rankIndividually(
  */
 async function scoreRelevance(
   query: string,
-  memoryContent: string
+  memoryContent: string,
+  importance?: number,
+  daysAgo?: number,
+  accessCount?: number
 ): Promise<number> {
   const systemPrompt =
     "Sen bir ilgi değerlendirme asistanısın. Sadece 0-100 arası bir sayı yaz.";
 
-  const prompt = `Sorgu: "${query}"
-Hafıza: "${memoryContent}"
+  const metaLine = importance !== undefined || daysAgo !== undefined || accessCount !== undefined
+    ? `\nÖnem: ${importance ?? "?"}/1.0 | Yaş: ${daysAgo ?? "?"} gün | Erişim: ${accessCount ?? 0}`
+    : "";
 
-Bu hafızanın sorguyla ne kadar alakalı olduğunu 0-100 arası bir sayı ile değerlendir:`;
+  const prompt = `Sorgu: "${query}"
+Hafıza: "${memoryContent}"${metaLine}
+
+Bu hafızanın sorguyla ne kadar alakalı olduğunu 0-100 arası puanla.${metaLine ? "\nDaha önemli ve sık erişilen hafızalara hafif bonus ver." : ""}`;
 
   const response = await complete(prompt, systemPrompt, 20);
   const match = response.match(/(\d+)/);
@@ -167,12 +177,18 @@ Bu hafızanın sorguyla ne kadar alakalı olduğunu 0-100 arası bir sayı ile d
  */
 async function rankBatch(
   query: string,
-  memories: { id: number; content: string; summary?: string }[],
+  memories: { id: number; content: string; summary?: string; importance?: number; createdAt?: string; accessCount?: number }[],
   limit: number
 ): Promise<{ id: number; score: number }[]> {
   const memoriesText = memories
     .slice(0, 20) // Limit to 20 for batch
-    .map((m, i) => `${i + 1}. ${m.summary || m.content.slice(0, 100)}`)
+    .map((m, i) => {
+      const text = m.summary || m.content.slice(0, 100);
+      const daysAgo = m.createdAt
+        ? Math.floor((Date.now() - new Date(m.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+        : "?";
+      return `${i + 1}. ${text} [önem:${m.importance ?? "?"},yaş:${daysAgo}g,erişim:${m.accessCount ?? 0}]`;
+    })
     .join("\n");
 
   const systemPrompt =
@@ -184,6 +200,7 @@ Hafızalar:
 ${memoriesText}
 
 En alakalı ${limit} hafızanın numaralarını ve puanlarını (0-100) ver.
+Daha önemli ve sık erişilen hafızalara hafif bonus ver.
 Format: NUMARA:PUAN (her satırda bir tane)`;
 
   const response = await complete(prompt, systemPrompt, 200);
