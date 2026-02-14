@@ -149,7 +149,7 @@ class Cortex {
     this._processed++;
 
     // Dedup: proactive already replied to this chat — skip pipeline
-    if (signal.type === "whatsapp_message") {
+    if (signal.source === "whatsapp_message") {
       const chatJid = (signal.data as Record<string, unknown>)?.chatJid as string;
       if (chatJid && wasRecentlyReplied(chatJid)) {
         this._droppedDedup++;

@@ -109,11 +109,14 @@ export async function chat(
     }
   } catch {}
 
+  // Token budget: max 5 memories, each truncated to 200 chars, deduplicated
   let recentMemories: string[] = [];
   try {
     const memory = new SmartMemory(userFolder, userId);
     const entries = memory.getRecent(5);
-    recentMemories = entries.map(e => e.content);
+    recentMemories = deduplicateMemories(
+      entries.map(e => truncate(e.content, 200))
+    );
     memory.close();
   } catch {}
 
@@ -132,16 +135,17 @@ export async function chat(
           lastUserMessage: state.lastUserMessage,
         };
       }
-      // WhatsApp context
+      // WhatsApp context — token budget: max 5 notifications, preview truncated to 150 chars
       if (state.recentWhatsApp.length > 0) {
         const now = Date.now();
         recentWhatsApp = state.recentWhatsApp
           .filter(n => now - n.timestamp < 24 * 60 * 60 * 1000)
+          .slice(-5) // keep only 5 most recent
           .map(n => ({
             senderName: n.senderName,
-            preview: n.preview,
+            preview: truncate(n.preview, 150),
             tier: n.tier,
-            autoReply: n.autoReply,
+            autoReply: n.autoReply ? truncate(n.autoReply, 100) : undefined,
             isGroup: n.isGroup,
             minutesAgo: Math.round((now - n.timestamp) / 60000),
           }));
@@ -395,6 +399,31 @@ export function getSessionInfo(userId: number): { sessionId: string | null } {
   return {
     sessionId: userSessions.get(userId) || null,
   };
+}
+
+// ========== Token Budget Helpers ==========
+
+/** Truncate string to maxLen, appending "..." if trimmed */
+function truncate(str: string, maxLen: number): string {
+  if (str.length <= maxLen) return str;
+  return str.slice(0, maxLen - 3) + "...";
+}
+
+/**
+ * Deduplicate memories with similar content.
+ * Uses a simple prefix-match heuristic: if two memories share
+ * the first 60 characters, keep only the first (most recent).
+ */
+function deduplicateMemories(memories: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const mem of memories) {
+    const key = mem.slice(0, 60).toLowerCase().trim();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(mem);
+  }
+  return result;
 }
 
 /**

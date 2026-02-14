@@ -97,6 +97,22 @@ const cooldowns = new Map<string, CooldownEntry>();
 // Minimum time between proactive notifications (5 minutes)
 const MIN_NOTIFICATION_INTERVAL = 5 * 60 * 1000;
 
+// Per-reminder notification cooldown tracking (reminderKey → lastNotifiedTimestamp)
+const reminderCooldowns = new Map<string, number>();
+
+// Per-reminder cooldown durations
+const REMINDER_COOLDOWN_MS = {
+  overdue: 4 * 60 * 60 * 1000,   // 4 hours for overdue reminders
+  upcoming: 1 * 60 * 60 * 1000,  // 1 hour for upcoming reminders
+};
+
+// Quiet hours: 23:00 - 08:00 (only urgent notifications pass)
+const QUIET_HOURS = { start: 23, end: 8 };
+
+// Cleanup interval for expired reminder cooldowns (every 30 minutes)
+const REMINDER_COOLDOWN_CLEANUP_INTERVAL_MS = 30 * 60 * 1000;
+let lastReminderCooldownCleanup = 0;
+
 // Cooldown rules (in milliseconds)
 const COOLDOWN_RULES = {
   goal_followup: 24 * 60 * 60 * 1000, // 24 hours per goal
@@ -182,10 +198,66 @@ function setCooldown(key: string, type: string, targetId?: number): void {
 }
 
 /**
+ * Check if a reminder was already notified within its cooldown window
+ */
+function isReminderOnCooldown(reminderKey: string, type: "overdue" | "upcoming"): boolean {
+  const lastNotified = reminderCooldowns.get(reminderKey);
+  if (!lastNotified) return false;
+  return Date.now() - lastNotified < REMINDER_COOLDOWN_MS[type];
+}
+
+/**
+ * Mark a reminder as notified (set its cooldown)
+ */
+function markReminderNotified(reminderKey: string): void {
+  reminderCooldowns.set(reminderKey, Date.now());
+}
+
+/**
+ * Check if current time is within quiet hours (23:00 - 08:00)
+ */
+function isQuietHours(): boolean {
+  const hour = new Date().getHours();
+  return hour >= QUIET_HOURS.start || hour < QUIET_HOURS.end;
+}
+
+/**
+ * Check if an overdue reminder is urgent (overdue by more than 24 hours)
+ */
+function isUrgentOverdue(triggerAt: string): boolean {
+  const overdueMs = Date.now() - new Date(triggerAt).getTime();
+  return overdueMs > 24 * 60 * 60 * 1000;
+}
+
+/**
+ * Clean up expired reminder cooldown entries to prevent memory leak
+ */
+function cleanupReminderCooldowns(): void {
+  const now = Date.now();
+  if (now - lastReminderCooldownCleanup < REMINDER_COOLDOWN_CLEANUP_INTERVAL_MS) return;
+  lastReminderCooldownCleanup = now;
+
+  const maxTtl = Math.max(REMINDER_COOLDOWN_MS.overdue, REMINDER_COOLDOWN_MS.upcoming);
+  let cleaned = 0;
+  for (const [key, timestamp] of reminderCooldowns) {
+    if (now - timestamp > maxTtl) {
+      reminderCooldowns.delete(key);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    console.log(`[LivingAssistant] Cleaned ${cleaned} expired reminder cooldown(s), ${reminderCooldowns.size} remaining`);
+  }
+}
+
+/**
  * Main awareness loop - runs every 30 seconds
  */
 async function runAwarenessLoop(): Promise<void> {
   heartbeat("proactive_service", { event: "awareness_tick" });
+
+  // Periodic cleanup of expired reminder cooldowns
+  cleanupReminderCooldowns();
 
   // Push time_tick signal to Cortex every 5 minutes
   try {
@@ -382,40 +454,62 @@ async function gatherContext(userId: number): Promise<ContextData> {
  * Quick rule-based decision (no AI needed)
  */
 function makeQuickDecision(context: ContextData): ProactiveDecision {
-  // Urgent: Overdue reminders
+  const quiet = isQuietHours();
+
+  // Urgent: Overdue reminders (with per-reminder cooldown)
   if (context.reminders.overdue.length > 0) {
-    const overdue = context.reminders.overdue[0]!;
-    return {
-      shouldNotify: true,
-      priority: "urgent",
-      type: "nudge",
-      message: `⏰ Kaçırdığın hatırlatıcı: "${overdue.title}"`,
-      reason: "overdue_reminder",
-    };
+    for (const overdue of context.reminders.overdue) {
+      const key = `overdue:${overdue.title}:${overdue.triggerAt}`;
+
+      // During quiet hours, only allow urgent overdue (>24h)
+      if (quiet && !isUrgentOverdue(overdue.triggerAt)) continue;
+
+      // Skip if this specific reminder was already notified within cooldown
+      if (isReminderOnCooldown(key, "overdue")) continue;
+
+      markReminderNotified(key);
+      return {
+        shouldNotify: true,
+        priority: "urgent",
+        type: "nudge",
+        message: `⏰ Kaçırdığın hatırlatıcı: "${overdue.title}"`,
+        reason: "overdue_reminder",
+      };
+    }
   }
 
-  // High: Reminder in next 5 minutes
-  const imminentReminder = context.reminders.upcoming.find((r) => r.minutesLeft <= 5);
-  if (imminentReminder) {
-    return {
-      shouldNotify: true,
-      priority: "high",
-      type: "nudge",
-      message: `⏰ ${imminentReminder.minutesLeft} dakika içinde: "${imminentReminder.title}"`,
-      reason: "imminent_reminder",
-    };
+  // High: Reminder in next 5 minutes (with per-reminder cooldown)
+  // During quiet hours, skip upcoming reminders entirely
+  if (!quiet) {
+    for (const reminder of context.reminders.upcoming) {
+      if (reminder.minutesLeft > 5) continue;
+
+      const key = `upcoming:${reminder.title}:${reminder.triggerAt}`;
+      if (isReminderOnCooldown(key, "upcoming")) continue;
+
+      markReminderNotified(key);
+      return {
+        shouldNotify: true,
+        priority: "high",
+        type: "nudge",
+        message: `⏰ ${reminder.minutesLeft} dakika içinde: "${reminder.title}"`,
+        reason: "imminent_reminder",
+      };
+    }
   }
 
-  // High: Goal deadline today
-  const todayDeadline = context.goals.approaching.find((g) => g.daysLeft === 0);
-  if (todayDeadline) {
-    return {
-      shouldNotify: true,
-      priority: "high",
-      type: "goal_followup",
-      message: `🎯 Bugün deadline: "${todayDeadline.title}"`,
-      reason: "today_deadline",
-    };
+  // High: Goal deadline today (skip during quiet hours)
+  if (!quiet) {
+    const todayDeadline = context.goals.approaching.find((g) => g.daysLeft === 0);
+    if (todayDeadline) {
+      return {
+        shouldNotify: true,
+        priority: "high",
+        type: "goal_followup",
+        message: `🎯 Bugün deadline: "${todayDeadline.title}"`,
+        reason: "today_deadline",
+      };
+    }
   }
 
   // No urgent action needed

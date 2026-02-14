@@ -1,3 +1,17 @@
+// Global fatal error handlers — must be first, before any imports/initialization
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("[FATAL] Unhandled rejection:", reason);
+  // Don't exit — let systemd restart handle it if needed
+  // Most unhandled rejections are recoverable
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("[FATAL] Uncaught exception:", error);
+  // Give time to flush logs, then exit with error code
+  // systemd will restart the service
+  setTimeout(() => process.exit(1), 1000);
+});
+
 /**
  * Cobrain Entry Point
  * Routes between setup mode and normal mode based on config validity

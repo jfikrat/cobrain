@@ -299,6 +299,12 @@ ${ctx.communicationNotes.map(n => `    <note>${escapeXml(n)}</note>`).join('\n')
 
 /**
  * Build dynamic context XML (time, mood, recent memories)
+ *
+ * Token budget targets (enforced in chat.ts before injection):
+ * - recentMemories: max 5 entries, each ≤200 chars, deduplicated
+ * - recentWhatsApp: max 5 entries, preview ≤150 chars, autoReply ≤100 chars
+ * - sessionState.lastUserMessage: ≤500 chars (truncated in chat.ts)
+ * Total dynamic context target: ~800-1200 tokens
  */
 function buildDynamicContextXml(ctx: DynamicContext): string {
   let xml = `<dynamic-context>
