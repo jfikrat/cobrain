@@ -94,7 +94,7 @@ if (config.ENABLE_AUTONOMOUS) {
       if (!to || !message) {
         return { success: false, action: "send_whatsapp" as ActionType, message: "Missing to or message" };
       }
-      const { wasRecentlyReplied } = await import("./services/reply-dedup.ts");
+      const { wasRecentlyReplied, markReplied } = await import("./services/reply-dedup.ts");
       if (wasRecentlyReplied(to)) {
         console.log(`[Cortex:Action] send_whatsapp skipped for ${to} — already replied by proactive`);
         return { success: true, action: "send_whatsapp" as ActionType, message: "Skipped: proactive already replied" };
@@ -102,6 +102,8 @@ if (config.ENABLE_AUTONOMOUS) {
       try {
         const { whatsappDB } = await import("./services/whatsapp-db.ts");
         const outboxId = whatsappDB.sendMessage(to, message);
+        // Mark as replied AFTER successful outbox write to prevent proactive from also replying
+        markReplied(to);
         return { success: true, action: "send_whatsapp" as ActionType, message: `Queued: #${outboxId}` };
       } catch (err) {
         return { success: false, action: "send_whatsapp" as ActionType, message: `Failed: ${err}` };
@@ -118,12 +120,38 @@ if (config.ENABLE_AUTONOMOUS) {
 
     actionExecutor.register("check_whatsapp" as ActionType, async (params) => {
       const chatJid = params.chatJid as string || params.target as string || "";
+      if (!chatJid) {
+        return { success: false, action: "check_whatsapp" as ActionType, message: "Missing chatJid or target" };
+      }
+
       try {
         const { whatsappDB } = await import("./services/whatsapp-db.ts");
-        const messages = whatsappDB.getMessages(chatJid, 5);
-        const summary = messages.map(m => `${m.sender_jid || "?"}: ${m.content?.slice(0, 100) || "[media]"}`).join("\n");
+        if (!whatsappDB.isAvailable()) {
+          return { success: false, action: "check_whatsapp" as ActionType, message: "WhatsApp DB unavailable" };
+        }
+
+        const limit = typeof params.limit === "number" ? params.limit : 5;
+        const messages = whatsappDB.getMessages(chatJid, limit);
+
+        if (messages.length === 0) {
+          return { success: true, action: "check_whatsapp" as ActionType, message: "No messages found", data: { chatJid, count: 0 } };
+        }
+
+        const summary = messages.map(m => {
+          const sender = m.is_from_me ? "Ben" : (m.sender_jid?.split("@")[0] || "?");
+          const time = m.timestamp ? new Date(m.timestamp * 1000).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }) : "";
+          return `[${time}] ${sender}: ${m.content?.slice(0, 100) || "[media]"}`;
+        }).join("\n");
+
         console.log(`[Cortex:Action] WhatsApp check: ${chatJid} — ${messages.length} messages`);
-        return { success: true, action: "check_whatsapp" as ActionType, message: summary || "No messages found", data: { chatJid, count: messages.length } };
+
+        // Notify via Telegram if requested
+        if (params.notify) {
+          const chatName = chatJid.split("@")[0];
+          await bot.api.sendMessage(config.MY_TELEGRAM_ID, `📱 WhatsApp (${chatName}):\n${summary.slice(0, 500)}`);
+        }
+
+        return { success: true, action: "check_whatsapp" as ActionType, message: summary, data: { chatJid, count: messages.length } };
       } catch (err) {
         return { success: false, action: "check_whatsapp" as ActionType, message: `Failed: ${err}` };
       }
@@ -131,9 +159,42 @@ if (config.ENABLE_AUTONOMOUS) {
 
     actionExecutor.register("remember" as ActionType, async (params) => {
       const content = params.content as string || params.text as string || "";
-      console.log(`[Cortex:Action] Remember: ${content.slice(0, 100)}`);
-      // Hafızaya kaydetme şimdilik sadece log — MCP memory tool'a bağlanacak
-      return { success: true, action: "remember" as ActionType, message: `Noted: ${content.slice(0, 50)}` };
+      if (!content) {
+        return { success: false, action: "remember" as ActionType, message: "Missing content to remember" };
+      }
+
+      const context = params.context as string || "";
+      const importance = typeof params.importance === "number" ? params.importance : 0.6;
+      const memoryType = (params.type as string) === "procedural" ? "procedural"
+        : (params.type as string) === "semantic" ? "semantic"
+        : "episodic";
+
+      try {
+        const { SmartMemory } = await import("./memory/smart-memory.ts");
+        const userId = config.MY_TELEGRAM_ID;
+        const userFolder = userManager.getUserFolder(userId);
+        const memory = new SmartMemory(userFolder, userId);
+
+        const fullContent = context ? `${content}\n\nBağlam: ${context}` : content;
+        const id = await memory.store({
+          type: memoryType,
+          content: fullContent,
+          importance,
+          source: "cortex",
+          sourceRef: params.sourceRef as string || undefined,
+          metadata: {
+            cortexSignal: params.signalSource || undefined,
+            originalContext: context || undefined,
+          },
+        });
+
+        memory.close();
+        console.log(`[Cortex:Action] Remembered #${id}: ${content.slice(0, 80)}`);
+        return { success: true, action: "remember" as ActionType, message: `Stored memory #${id}: ${content.slice(0, 50)}`, data: { memoryId: id } };
+      } catch (err) {
+        console.error(`[Cortex:Action] Remember failed:`, err);
+        return { success: false, action: "remember" as ActionType, message: `Failed: ${err}` };
+      }
     });
 
     // Start Cortex — sinir ağı pipeline

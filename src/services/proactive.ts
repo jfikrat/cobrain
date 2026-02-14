@@ -497,8 +497,16 @@ async function checkWhatsAppNotifications(): Promise<void> {
       }
 
       for (const [chatJid, msgs] of bySender) {
-        // Cortex Signal Bus'a WhatsApp DM sinyali gönder (konuşma bağlamıyla zenginleştirilmiş)
-        if (signalBus.isRunning()) {
+        // Process DM first — markReplied() must happen BEFORE signalBus.push()
+        // to prevent Cortex from racing with the dedup check.
+        const result = await handleDMMessages(msgs, chatJid, userId, config.WHATSAPP_MAX_REPLY_LENGTH);
+        results.push(result);
+
+        // Only push to Cortex Signal Bus if proactive did NOT already auto-reply.
+        // If proactive replied (tier 1 + outboxSuccess), markReplied() is set and
+        // Cortex would skip anyway — but not pushing avoids unnecessary pipeline work.
+        const proactiveReplied = result.tier === 1 && result.outboxSuccess === true;
+        if (!proactiveReplied && signalBus.isRunning()) {
           const senderName = msgs[0]?.sender_name || chatJid.split("@")[0] || "unknown";
 
           // Son 10 mesajı getir — Cortex'e konuşma bağlamı sağla
@@ -520,9 +528,6 @@ async function checkWhatsAppNotifications(): Promise<void> {
             conversationHistory, // Son 10 mesaj: ["Ben: ...", "Burak: ...", ...]
           }, { userId, contactId: chatJid });
         }
-
-        const result = await handleDMMessages(msgs, chatJid, userId, config.WHATSAPP_MAX_REPLY_LENGTH);
-        results.push(result);
       }
     }
 
