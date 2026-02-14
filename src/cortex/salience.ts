@@ -17,7 +17,7 @@ import { expectations } from "./expectations.ts";
 import { userManager } from "../services/user-manager.ts";
 import { SmartMemory } from "../memory/smart-memory.ts";
 import { sanitizeSignalData, sanitizeConversationHistory, sanitizeText, wrapUserData } from "./sanitize.ts";
-import { withTimeout } from "./utils.ts";
+import { withTimeout, geminiBreaker } from "./utils.ts";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -202,10 +202,12 @@ ${userContext || "Bilgi yok"}
 SADECE JSON döndür, başka bir şey yazma:
 {"score": 0.X, "reason": "kısa açıklama", "suggestedAction": "notify|act|wait|ignore"}`;
 
-    const result = await withTimeout(
-      this.model.generateContent(prompt),
-      AI_TIMEOUT_MS,
-      "Salience AI evaluation",
+    const result = await geminiBreaker.execute(() =>
+      withTimeout(
+        this.model.generateContent(prompt),
+        AI_TIMEOUT_MS,
+        "Salience AI evaluation",
+      ),
     );
     const text = result.response.text().trim();
 

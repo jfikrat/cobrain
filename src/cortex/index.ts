@@ -14,9 +14,10 @@ import { salienceFilter } from "./salience.ts";
 import { reasoner } from "./reasoner.ts";
 import { actionExecutor, type ActionResult } from "./actions.ts";
 import { wasRecentlyReplied } from "../services/reply-dedup.ts";
+import { geminiBreaker } from "./utils.ts";
 
 // Re-export everything
-export { signalBus, expectations, salienceFilter, reasoner, actionExecutor };
+export { signalBus, expectations, salienceFilter, reasoner, actionExecutor, geminiBreaker };
 export type { Signal } from "./signal-bus.ts";
 export type { PendingExpectation } from "./expectations.ts";
 export type { SalienceResult } from "./salience.ts";
@@ -216,6 +217,7 @@ class Cortex {
         pending: expectations.pending().length,
         all: expectations.all().length,
       },
+      circuitBreaker: geminiBreaker.stats(),
     };
   }
 

@@ -14,7 +14,7 @@ import { type Signal } from "./signal-bus.ts";
 import { type SalienceResult } from "./salience.ts";
 import { expectations } from "./expectations.ts";
 import { sanitizeSignalData, sanitizeConversationHistory, sanitizeText } from "./sanitize.ts";
-import { withTimeout } from "./utils.ts";
+import { withTimeout, geminiBreaker } from "./utils.ts";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -212,10 +212,12 @@ MEVCUT AKSIYON TIPLERI:
 SADECE JSON döndür, başka bir şey yazma:
 {"action": "...", "params": {...}, "reasoning": "kısa açıklama", "urgency": "immediate|soon|background"}`;
 
-    const result = await withTimeout(
-      this.model.generateContent(prompt),
-      AI_TIMEOUT_MS,
-      "Reasoner AI decision",
+    const result = await geminiBreaker.execute(() =>
+      withTimeout(
+        this.model.generateContent(prompt),
+        AI_TIMEOUT_MS,
+        "Reasoner AI decision",
+      ),
     );
     const text = result.response.text().trim();
 

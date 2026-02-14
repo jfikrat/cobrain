@@ -56,6 +56,12 @@ class WhatsAppDBService {
       this.db.run("PRAGMA journal_mode = WAL");
       this.available = true;
       console.log("[WhatsApp DB] Bağlandı:", WHATSAPP_DB_PATH);
+
+      // Recover any notifications stuck in 'processing' from a previous crash
+      const recovered = this.recoverStuckProcessing(5 * 60 * 1000);
+      if (recovered > 0) {
+        console.log(`[WhatsApp DB] Recovered ${recovered} stuck processing notification(s)`);
+      }
     } catch (error) {
       console.log("[WhatsApp DB] Kullanılamıyor - WhatsApp özellikleri devre dışı");
       this.db = null;
@@ -327,6 +333,26 @@ class WhatsAppDBService {
       );
     } catch {
       // Ignore if table doesn't exist
+    }
+  }
+
+  /**
+   * Recover notifications stuck in 'processing' state (e.g. from a crash).
+   * Resets them back to 'pending' if they've been processing for longer than maxAgeMs.
+   * Returns the number of recovered rows.
+   */
+  recoverStuckProcessing(maxAgeMs: number = 5 * 60 * 1000): number {
+    if (!this.db) return 0;
+    try {
+      const cutoffSec = Math.floor((Date.now() - maxAgeMs) / 1000);
+      const result = this.db.run(
+        `UPDATE notifications SET status = 'pending'
+         WHERE status = 'processing' AND created_at < ?`,
+        [cutoffSec]
+      );
+      return result.changes;
+    } catch {
+      return 0; // Table might not exist yet
     }
   }
 

@@ -18,7 +18,7 @@ import { classifyWhatsAppMessage, type TierClassification, type GroupClassificat
 import type { ScheduledTask, QueuedTask, TaskResult, TaskType } from "../types/autonomous.ts";
 import { addWhatsAppNotification } from "./session-state.ts";
 import { config as appConfig } from "../config.ts";
-import { markReplied } from "./reply-dedup.ts";
+import { markReplied, wasRecentlyReplied } from "./reply-dedup.ts";
 import { SmartMemory } from "../memory/smart-memory.ts";
 import { consolidateMemories } from "./memory-consolidation.ts";
 import { expectations } from "../cortex/expectations.ts";
@@ -428,7 +428,8 @@ async function checkWhatsAppNotifications(): Promise<void> {
   const allNotifications = whatsappDB.getPendingNotifications(10);
   if (allNotifications.length === 0) return;
 
-  const allIds = allNotifications.map((n) => n.id);
+  // Track which IDs have been successfully processed so we only reset unprocessed ones on error
+  const processedIds = new Set<number>();
 
   try {
     const { config } = await import("../config.ts");
@@ -463,6 +464,7 @@ async function checkWhatsAppNotifications(): Promise<void> {
     // Silently mark status updates as read
     if (statusUpdateIds.length > 0) {
       whatsappDB.markNotificationsRead(statusUpdateIds);
+      for (const id of statusUpdateIds) processedIds.add(id);
     }
 
     // Notify about stale DMs
@@ -471,6 +473,7 @@ async function checkWhatsAppNotifications(): Promise<void> {
       .map((n) => n.id);
     if (staleIds.length > 0) {
       whatsappDB.markNotificationsRead(staleIds);
+      for (const id of staleIds) processedIds.add(id);
       console.log(`[Proactive] Skipped ${staleIds.length} stale notifications (>${maxAgeSec}s old)`);
     }
 
@@ -498,36 +501,46 @@ async function checkWhatsAppNotifications(): Promise<void> {
       }
 
       for (const [chatJid, msgs] of bySender) {
-        // Process DM first — markReplied() must happen BEFORE signalBus.push()
-        // to prevent Cortex from racing with the dedup check.
-        const result = await handleDMMessages(msgs, chatJid, userId, config.WHATSAPP_MAX_REPLY_LENGTH);
-        results.push(result);
+        try {
+          // Process DM first — markReplied() must happen BEFORE signalBus.push()
+          // to prevent Cortex from racing with the dedup check.
+          const result = await handleDMMessages(msgs, chatJid, userId, config.WHATSAPP_MAX_REPLY_LENGTH);
+          results.push(result);
 
-        // Only push to Cortex Signal Bus if proactive did NOT already auto-reply.
-        // If proactive replied (tier 1 + outboxSuccess), markReplied() is set and
-        // Cortex would skip anyway — but not pushing avoids unnecessary pipeline work.
-        const proactiveReplied = result.tier === 1 && result.outboxSuccess === true;
-        if (!proactiveReplied && signalBus.isRunning()) {
-          const senderName = msgs[0]?.sender_name || chatJid.split("@")[0] || "unknown";
+          // Mark this chat's notification IDs as processed
+          const chatIds = msgs.map(m => m.id);
+          whatsappDB.markNotificationsRead(chatIds);
+          for (const id of chatIds) processedIds.add(id);
 
-          // Son 10 mesajı getir — Cortex'e konuşma bağlamı sağla
-          let conversationHistory: string[] = [];
-          try {
-            const recentMsgs = whatsappDB.getMessages(chatJid, 10);
-            conversationHistory = recentMsgs.map(m => {
-              const who = m.is_from_me ? "Ben" : senderName;
-              const typeTag = m.message_type !== "text" ? `[${m.message_type}] ` : "";
-              return `${who}: ${typeTag}${(m.content || "").slice(0, 150)}`;
-            });
-          } catch { /* WhatsApp DB unavailable */ }
+          // Only push to Cortex Signal Bus if proactive did NOT already auto-reply.
+          // If proactive replied (tier 1 + outboxSuccess), markReplied() is set and
+          // Cortex would skip anyway — but not pushing avoids unnecessary pipeline work.
+          const proactiveReplied = result.tier === 1 && result.outboxSuccess === true;
+          if (!proactiveReplied && signalBus.isRunning()) {
+            const senderName = msgs[0]?.sender_name || chatJid.split("@")[0] || "unknown";
 
-          signalBus.push("whatsapp_message", "dm", {
-            chatJid,
-            senderName,
-            messageCount: msgs.length,
-            preview: msgs.map(m => m.content?.slice(0, 100)).filter(Boolean).join(" | "),
-            conversationHistory, // Son 10 mesaj: ["Ben: ...", "Burak: ...", ...]
-          }, { userId, contactId: chatJid });
+            // Son 10 mesajı getir — Cortex'e konuşma bağlamı sağla
+            let conversationHistory: string[] = [];
+            try {
+              const recentMsgs = whatsappDB.getMessages(chatJid, 10);
+              conversationHistory = recentMsgs.map(m => {
+                const who = m.is_from_me ? "Ben" : senderName;
+                const typeTag = m.message_type !== "text" ? `[${m.message_type}] ` : "";
+                return `${who}: ${typeTag}${(m.content || "").slice(0, 150)}`;
+              });
+            } catch { /* WhatsApp DB unavailable */ }
+
+            signalBus.push("whatsapp_message", "dm", {
+              chatJid,
+              senderName,
+              messageCount: msgs.length,
+              preview: msgs.map(m => m.content?.slice(0, 100)).filter(Boolean).join(" | "),
+              conversationHistory, // Son 10 mesaj: ["Ben: ...", "Burak: ...", ...]
+            }, { userId, contactId: chatJid });
+          }
+        } catch (chatError) {
+          console.error(`[Proactive] Error processing DM chat ${chatJid}:`, chatError);
+          // This chat's IDs remain in 'processing' — will be recovered on next cycle or startup
         }
       }
     }
@@ -542,15 +555,21 @@ async function checkWhatsAppNotifications(): Promise<void> {
       }
 
       for (const [groupJid, msgs] of byGroup) {
-        const replyAllowed = allowedGroupJids.length > 0 && allowedGroupJids.includes(groupJid);
-        const result = await handleWatchedGroupMessages(msgs, userId, replyAllowed, config.WHATSAPP_MAX_REPLY_LENGTH);
-        results.push(result);
+        try {
+          const replyAllowed = allowedGroupJids.length > 0 && allowedGroupJids.includes(groupJid);
+          const result = await handleWatchedGroupMessages(msgs, userId, replyAllowed, config.WHATSAPP_MAX_REPLY_LENGTH);
+          results.push(result);
+
+          // Mark this group's notification IDs as processed
+          const groupIds = msgs.map(m => m.id);
+          whatsappDB.markNotificationsRead(groupIds);
+          for (const id of groupIds) processedIds.add(id);
+        } catch (groupError) {
+          console.error(`[Proactive] Error processing group ${groupJid}:`, groupError);
+          // This group's IDs remain in 'processing' — will be recovered on next cycle or startup
+        }
       }
     }
-
-    // Mark all as read
-    const ids = notifications.map((n) => n.id);
-    whatsappDB.markNotificationsRead(ids);
 
     // Heartbeat with detailed metrics
     const tierCounts = { tier1: 0, tier2: 0, tier3: 0 };
@@ -573,8 +592,13 @@ async function checkWhatsAppNotifications(): Promise<void> {
     });
   } catch (error) {
     console.error("[Proactive] WhatsApp notification check error:", error);
-    // Roll back processing → pending on failure
-    whatsappDB.markNotificationsFailed(allIds);
+    // Only reset IDs that were NOT already successfully processed
+    const unprocessedIds = allNotifications
+      .map((n) => n.id)
+      .filter((id) => !processedIds.has(id));
+    if (unprocessedIds.length > 0) {
+      whatsappDB.markNotificationsFailed(unprocessedIds);
+    }
   }
 }
 
@@ -602,6 +626,12 @@ async function handleDMMessages(
 
     // Check procedural memory — if rules exist for this scenario, escalate to full agent
     if (analysis.tier === 1 && analysis.reply) {
+      // Idempotency: skip auto-reply if this chat was already replied to recently (e.g. retry after crash)
+      if (wasRecentlyReplied(chatJid)) {
+        console.log(`[Proactive] Skipping auto-reply to ${senderName} — already replied recently (dedup)`);
+        await sendDMNotification(messages, senderName, telegramUserId);
+        return { model: "haiku", tier: 3, error: "dedup_skipped" };
+      }
       try {
         const userFolder = userManager.getUserFolder(telegramUserId);
         const memory = new SmartMemory(userFolder, telegramUserId);
