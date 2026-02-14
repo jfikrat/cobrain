@@ -28,7 +28,7 @@ interface ContextData {
   };
   goals: {
     active: number;
-    approaching: Array<{ title: string; dueDate: string; daysLeft: number }>;
+    approaching: Array<{ id: number; title: string; dueDate: string; daysLeft: number }>;
     needingFollowup: Array<{ id: number; title: string; progress: number; daysSinceFollowup: number }>;
   };
   reminders: {
@@ -317,10 +317,10 @@ async function checkUserContext(userId: number): Promise<void> {
   // Quick checks before using AI
   const quickDecision = makeQuickDecision(context);
   if (quickDecision.shouldNotify && quickDecision.message) {
-    await sendNotification(userId, quickDecision.message, quickDecision.priority, quickDecision.type);
+    const sent = await sendNotification(userId, quickDecision.message, quickDecision.priority, quickDecision.type);
 
-    // Mark goal as followed up after successful notification
-    if (quickDecision.type === "goal_followup" && quickDecision.goalId) {
+    // Mark goal as followed up only after successful notification
+    if (sent && quickDecision.type === "goal_followup" && quickDecision.goalId) {
       try {
         const db = await userManager.getUserDb(userId);
         const goalsService = await getGoalsService(db, userId);
@@ -378,7 +378,7 @@ async function gatherContext(userId: number): Promise<ContextData> {
     .map((g) => {
       const dueDate = new Date(g.dueDate!);
       const daysLeft = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      return { title: g.title, dueDate: g.dueDate!, daysLeft };
+      return { id: g.id, title: g.title, dueDate: g.dueDate!, daysLeft };
     })
     .filter((g) => g.daysLeft >= 0 && g.daysLeft <= 3)
     .sort((a, b) => a.daysLeft - b.daysLeft);
@@ -523,6 +523,7 @@ function makeQuickDecision(context: ContextData): ProactiveDecision {
         type: "goal_followup",
         message: `🎯 Bugün deadline: "${todayDeadline.title}"`,
         reason: "today_deadline",
+        goalId: todayDeadline.id,
       };
     }
   }
@@ -716,8 +717,8 @@ async function sendNotification(
   message: string,
   priority: "low" | "medium" | "high" | "urgent",
   type: ProactiveDecision["type"]
-): Promise<void> {
-  if (!bot) return;
+): Promise<boolean> {
+  if (!bot) return false;
 
   try {
     // Add priority emoji
@@ -771,8 +772,10 @@ async function sendNotification(
     }
 
     console.log(`[LivingAssistant] Sent ${priority}/${type} notification to user ${userId}`);
+    return true;
   } catch (error) {
     console.error(`[LivingAssistant] Failed to send notification:`, error);
+    return false;
   }
 }
 

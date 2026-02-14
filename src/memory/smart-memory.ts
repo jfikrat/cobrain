@@ -21,6 +21,17 @@ import type {
 } from "../types/memory.ts";
 import { config } from "../config.ts";
 
+/** Safe JSON.parse with fallback — prevents crashes on corrupted metadata */
+function safeParseJson(raw: string | null | undefined, fallback: Record<string, unknown> = {}): Record<string, unknown> {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    console.warn(`[SmartMemory] Corrupted JSON metadata, using fallback: ${raw.slice(0, 80)}`);
+    return fallback;
+  }
+}
+
 export class SmartMemory {
   private db: Database;
   private userId: number;
@@ -335,7 +346,7 @@ export class SmartMemory {
         lastAccessedAt: row.last_accessed_at ?? undefined,
         source: row.source ?? undefined,
         sourceRef: row.source_ref ?? undefined,
-        metadata: JSON.parse(row.metadata || "{}"),
+        metadata: safeParseJson(row.metadata),
         createdAt: row.created_at,
         expiresAt: row.expires_at ?? undefined,
       }));
@@ -407,7 +418,7 @@ export class SmartMemory {
       lastAccessedAt: row.last_accessed_at ?? undefined,
       source: row.source ?? undefined,
       sourceRef: row.source_ref ?? undefined,
-      metadata: JSON.parse(row.metadata || "{}"),
+      metadata: safeParseJson(row.metadata),
       createdAt: row.created_at,
       expiresAt: row.expires_at ?? undefined,
     }));
@@ -525,7 +536,7 @@ export class SmartMemory {
       lastAccessedAt: row.last_accessed_at ?? undefined,
       source: row.source ?? undefined,
       sourceRef: row.source_ref ?? undefined,
-      metadata: JSON.parse(row.metadata || "{}"),
+      metadata: safeParseJson(row.metadata),
       createdAt: row.created_at,
       expiresAt: row.expires_at ?? undefined,
     }));
@@ -570,7 +581,7 @@ export class SmartMemory {
       lastAccessedAt: row.last_accessed_at ?? undefined,
       source: row.source ?? undefined,
       sourceRef: row.source_ref ?? undefined,
-      metadata: JSON.parse(row.metadata || "{}"),
+      metadata: safeParseJson(row.metadata),
       createdAt: row.created_at,
       expiresAt: row.expires_at ?? undefined,
     }));
@@ -648,7 +659,7 @@ export class SmartMemory {
         )
         .get(memoryId);
       if (!row) return false;
-      const merged = { ...JSON.parse(row.metadata || "{}"), ...metadata };
+      const merged = { ...safeParseJson(row.metadata), ...metadata };
       const result = this.db.run(
         "UPDATE memories SET metadata = ? WHERE id = ?",
         [JSON.stringify(merged), memoryId],
@@ -775,7 +786,7 @@ export class SmartMemory {
       lastAccessedAt: row.last_accessed_at ?? undefined,
       source: row.source ?? undefined,
       sourceRef: row.source_ref ?? undefined,
-      metadata: JSON.parse(row.metadata || "{}"),
+      metadata: safeParseJson(row.metadata),
       createdAt: row.created_at,
       expiresAt: row.expires_at ?? undefined,
     };
@@ -824,7 +835,7 @@ export class SmartMemory {
       lastAccessedAt: row.last_accessed_at ?? undefined,
       source: row.source ?? undefined,
       sourceRef: row.source_ref ?? undefined,
-      metadata: JSON.parse(row.metadata || "{}"),
+      metadata: safeParseJson(row.metadata),
       createdAt: row.created_at,
       expiresAt: row.expires_at ?? undefined,
     }));
@@ -872,7 +883,7 @@ export class SmartMemory {
       lastAccessedAt: row.last_accessed_at ?? undefined,
       source: row.source ?? undefined,
       sourceRef: row.source_ref ?? undefined,
-      metadata: JSON.parse(row.metadata || "{}"),
+      metadata: safeParseJson(row.metadata),
       createdAt: row.created_at,
       expiresAt: row.expires_at ?? undefined,
     }));
@@ -921,7 +932,7 @@ export class SmartMemory {
       lastAccessedAt: row.last_accessed_at ?? undefined,
       source: row.source ?? undefined,
       sourceRef: row.source_ref ?? undefined,
-      metadata: JSON.parse(row.metadata || "{}"),
+      metadata: safeParseJson(row.metadata),
       createdAt: row.created_at,
       expiresAt: row.expires_at ?? undefined,
     }));
@@ -945,19 +956,24 @@ export class SmartMemory {
    * Soft-delete a memory (reversible — sets metadata.softDeleted)
    */
   softDelete(id: number, reason: string, replacedBy?: number): boolean {
-    const patches: string[] = [
-      `'$.softDeleted', 1`,
-      `'$.softDeletedAt', datetime('now')`,
-      `'$.softDeleteReason', '${reason.replace(/'/g, "''")}'`,
-    ];
-    if (replacedBy !== undefined) {
-      patches.push(`'$.replacedBy', ${replacedBy}`);
-    }
+    const sql = replacedBy !== undefined
+      ? `UPDATE memories SET metadata = json_set(metadata,
+           '$.softDeleted', 1,
+           '$.softDeletedAt', datetime('now'),
+           '$.softDeleteReason', ?,
+           '$.replacedBy', ?
+         ) WHERE id = ?`
+      : `UPDATE memories SET metadata = json_set(metadata,
+           '$.softDeleted', 1,
+           '$.softDeletedAt', datetime('now'),
+           '$.softDeleteReason', ?
+         ) WHERE id = ?`;
 
-    const result = this.db.run(
-      `UPDATE memories SET metadata = json_set(metadata, ${patches.join(", ")}) WHERE id = ?`,
-      [id]
-    );
+    const params = replacedBy !== undefined
+      ? [reason, replacedBy, id]
+      : [reason, id];
+
+    const result = this.db.run(sql, params);
     return result.changes > 0;
   }
 

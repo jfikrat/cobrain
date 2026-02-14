@@ -53,7 +53,15 @@ async function complete(
     ...(systemPrompt ? { systemInstruction: systemPrompt } : {}),
   });
 
-  const result = await model.generateContent(prompt);
+  const HAIKU_TIMEOUT_MS = 15_000; // 15s timeout for Gemini calls
+  const resultPromise = model.generateContent(prompt);
+
+  let timeoutId: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`[Haiku] Gemini call timed out after ${HAIKU_TIMEOUT_MS}ms`)), HAIKU_TIMEOUT_MS);
+  });
+
+  const result = await Promise.race([resultPromise, timeoutPromise]).finally(() => clearTimeout(timeoutId!));
   return result.response.text() || "";
 }
 
