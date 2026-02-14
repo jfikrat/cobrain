@@ -19,7 +19,8 @@ import { signalBus } from "../cortex/signal-bus.ts";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const HAIKU_MODEL = "claude-haiku-4-5-20250121";
 
-interface ContextData {
+/** @internal Exported for testing */
+export interface ContextData {
   time: {
     hour: number;
     dayOfWeek: number;
@@ -468,7 +469,8 @@ async function gatherContext(userId: number): Promise<ContextData> {
 /**
  * Quick rule-based decision (no AI needed)
  */
-function makeQuickDecision(context: ContextData): ProactiveDecision {
+/** @internal Exported for testing */
+export function makeQuickDecision(context: ContextData): ProactiveDecision {
   const quiet = isQuietHours();
 
   // Urgent: Overdue reminders (with per-reminder cooldown)

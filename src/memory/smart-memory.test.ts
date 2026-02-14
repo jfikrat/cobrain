@@ -462,6 +462,42 @@ describe("corrupted metadata resilience", () => {
     expect(entry).not.toBeNull();
     expect(entry!.metadata).toEqual({});
   });
+
+  test("getRecent survives corrupted metadata (json_valid guard)", () => {
+    insertMemory({ content: "Valid memory one" });
+    const corruptId = insertMemory({ content: "Corrupted memory two" });
+
+    const db = (memory as any).db;
+    db.run("UPDATE memories SET metadata = '{broken' WHERE id = ?", [corruptId]);
+
+    // Should NOT throw SQLiteError — json_valid guard skips json_extract
+    const recent = memory.getRecent(10);
+    expect(recent).toHaveLength(2);
+  });
+
+  test("getByImportance survives corrupted metadata (json_valid guard)", () => {
+    insertMemory({ content: "Valid high importance", importance: 0.9 });
+    const corruptId = insertMemory({ content: "Corrupted high importance", importance: 0.8 });
+
+    const db = (memory as any).db;
+    db.run("UPDATE memories SET metadata = 'not-json' WHERE id = ?", [corruptId]);
+
+    // Should NOT throw — json_valid returns false, skips json_extract
+    const results = memory.getByImportance(10, 0.1);
+    expect(results).toHaveLength(2);
+  });
+
+  test("getStats survives corrupted metadata (json_valid guard)", () => {
+    insertMemory({ content: "Valid memory" });
+    const corruptId = insertMemory({ content: "Corrupted memory" });
+
+    const db = (memory as any).db;
+    db.run("UPDATE memories SET metadata = '<<<>>>' WHERE id = ?", [corruptId]);
+
+    // Should NOT throw
+    const stats = memory.getStats();
+    expect(stats.total).toBe(2);
+  });
 });
 
 // ─── promoteToSemantic ──────────────────────────────────────────────

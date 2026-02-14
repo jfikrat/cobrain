@@ -303,7 +303,7 @@ export class SmartMemory {
 
     console.log(`[SmartMemory] FTS5 search: ${keywords}`);
 
-    let whereClause = "(expires_at IS NULL OR expires_at > datetime('now')) AND json_extract(m.metadata, '$.softDeleted') IS NOT 1";
+    let whereClause = "(expires_at IS NULL OR expires_at > datetime('now')) AND (NOT json_valid(m.metadata) OR json_extract(m.metadata, '$.softDeleted') IS NOT 1)";
     const params: (string | number)[] = [keywords];
 
     if (type) {
@@ -372,7 +372,7 @@ export class SmartMemory {
     const keywords = query.toLowerCase().split(/\s+/).filter((k) => k.length > 2);
     console.log(`[SmartMemory] Keyword fallback: [${keywords.join(", ")}]`);
 
-    let whereClause = "(expires_at IS NULL OR expires_at > datetime('now')) AND json_extract(metadata, '$.softDeleted') IS NOT 1";
+    let whereClause = "(expires_at IS NULL OR expires_at > datetime('now')) AND (NOT json_valid(metadata) OR json_extract(metadata, '$.softDeleted') IS NOT 1)";
     const params: (string | number)[] = [];
 
     if (type) {
@@ -526,7 +526,7 @@ export class SmartMemory {
         `SELECT * FROM memories
          WHERE importance >= ?
          AND (expires_at IS NULL OR expires_at > datetime('now'))
-         AND json_extract(metadata, '$.softDeleted') IS NOT 1
+         AND (NOT json_valid(metadata) OR json_extract(metadata, '$.softDeleted') IS NOT 1)
          ORDER BY importance DESC, access_count DESC
          LIMIT ?`
       )
@@ -572,7 +572,7 @@ export class SmartMemory {
       }, [number]>(
         `SELECT * FROM memories
          WHERE (expires_at IS NULL OR expires_at > datetime('now'))
-         AND json_extract(metadata, '$.softDeleted') IS NOT 1
+         AND (NOT json_valid(metadata) OR json_extract(metadata, '$.softDeleted') IS NOT 1)
          ORDER BY created_at DESC LIMIT ?`
       )
       .all(limit);
@@ -612,7 +612,7 @@ export class SmartMemory {
    * Get statistics
    */
   getStats(): MemoryStats {
-    const activeFilter = "json_extract(metadata, '$.softDeleted') IS NOT 1";
+    const activeFilter = "(NOT json_valid(metadata) OR json_extract(metadata, '$.softDeleted') IS NOT 1)";
 
     const total =
       this.db.query<{ count: number }, []>(`SELECT COUNT(*) as count FROM memories WHERE ${activeFilter}`).get()?.count ?? 0;
@@ -701,7 +701,7 @@ export class SmartMemory {
          WHERE created_at >= datetime('now', ?)
          AND importance >= 0.5
          AND type IN ('semantic', 'episodic')
-         AND json_extract(metadata, '$.softDeleted') IS NOT 1
+         AND (NOT json_valid(metadata) OR json_extract(metadata, '$.softDeleted') IS NOT 1)
          ORDER BY importance DESC, created_at DESC
          LIMIT 20`
       )
@@ -826,7 +826,7 @@ export class SmartMemory {
          AND importance >= ?
          AND created_at >= datetime('now', ?)
          AND (expires_at IS NULL OR expires_at > datetime('now'))
-         AND json_extract(metadata, '$.softDeleted') IS NOT 1
+         AND (NOT json_valid(metadata) OR json_extract(metadata, '$.softDeleted') IS NOT 1)
          ORDER BY access_count DESC, importance DESC
          LIMIT 50`
       )
@@ -874,7 +874,7 @@ export class SmartMemory {
          AND tags IS NOT NULL AND tags != ''
          AND type != 'procedural'
          AND (expires_at IS NULL OR expires_at > datetime('now'))
-         AND json_extract(metadata, '$.softDeleted') IS NOT 1
+         AND (NOT json_valid(metadata) OR json_extract(metadata, '$.softDeleted') IS NOT 1)
          ORDER BY created_at DESC
          LIMIT ?`
       )
@@ -922,7 +922,7 @@ export class SmartMemory {
          WHERE type = 'semantic'
          AND tags IS NOT NULL AND tags != ''
          AND (expires_at IS NULL OR expires_at > datetime('now'))
-         AND json_extract(metadata, '$.softDeleted') IS NOT 1
+         AND (NOT json_valid(metadata) OR json_extract(metadata, '$.softDeleted') IS NOT 1)
          AND created_at >= datetime('now', ?)
          ORDER BY tags, created_at DESC
          LIMIT 100`
@@ -1032,7 +1032,7 @@ export class SmartMemory {
         `SELECT id, importance FROM memories
          WHERE access_count > 5 AND importance < 1.0
          AND (expires_at IS NULL OR expires_at > datetime('now'))
-         AND json_extract(metadata, '$.softDeleted') IS NOT 1`
+         AND (NOT json_valid(metadata) OR json_extract(metadata, '$.softDeleted') IS NOT 1)`
       )
       .all();
 
@@ -1044,7 +1044,7 @@ export class SmartMemory {
          AND importance > 0.1
          AND type != 'procedural'
          AND (expires_at IS NULL OR expires_at > datetime('now'))
-         AND json_extract(metadata, '$.softDeleted') IS NOT 1`
+         AND (NOT json_valid(metadata) OR json_extract(metadata, '$.softDeleted') IS NOT 1)`
       )
       .all();
 
