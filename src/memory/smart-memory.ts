@@ -257,12 +257,17 @@ export class SmartMemory {
    * FTS5-based full-text search
    */
   private fts5Search(query: string, type?: MemoryType, limit: number = 10): MemoryEntry[] {
-    // Prepare FTS5 query - OR between keywords
+    // Sanitize FTS5 query: strip special chars/operators, escape quotes, wrap in double quotes
+    const fts5SpecialOps = /\b(AND|OR|NOT|NEAR)\b/gi;
+    const fts5SpecialChars = /[*"():^{}[\]~<>|\\+\-!]/g;
+
     const keywords = query
       .toLowerCase()
+      .replace(fts5SpecialOps, " ")      // Remove FTS5 boolean operators
+      .replace(fts5SpecialChars, " ")     // Remove FTS5 special characters
       .split(/\s+/)
       .filter((k) => k.length > 2)
-      .map((k) => `"${k}"*`) // Prefix search with quotes for safety
+      .map((k) => `"${k.replace(/"/g, "")}"*`) // Escape any residual quotes, prefix search
       .join(" OR ");
 
     if (!keywords) {
@@ -273,7 +278,7 @@ export class SmartMemory {
     console.log(`[SmartMemory] FTS5 search: ${keywords}`);
 
     let whereClause = "(expires_at IS NULL OR expires_at > datetime('now')) AND json_extract(m.metadata, '$.softDeleted') IS NOT 1";
-    const params: (string | number)[] = [];
+    const params: (string | number)[] = [keywords];
 
     if (type) {
       whereClause += " AND m.type = ?";
@@ -303,7 +308,7 @@ export class SmartMemory {
           `SELECT m.*, bm25(memories_fts) as rank
            FROM memories m
            JOIN memories_fts ON memories_fts.rowid = m.id
-           WHERE memories_fts MATCH '${keywords}' AND ${whereClause}
+           WHERE memories_fts MATCH ? AND ${whereClause}
            ORDER BY bm25(memories_fts)
            LIMIT ?`
         )

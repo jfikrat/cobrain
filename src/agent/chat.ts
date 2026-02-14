@@ -56,10 +56,10 @@ async function getOrResumeSession(userId: number): Promise<string | undefined> {
     const session = memory.getSession();
     if (!session?.lastUsedAt) return undefined;
 
-    // 3. TTL kontrolü (gece 00-08 arası 2x tolerans)
+    // 3. TTL kontrolü (gece 23-08 arası 3x tolerans)
     const age = Date.now() - new Date(session.lastUsedAt).getTime();
     const hour = new Date().getHours();
-    const effectiveTTL = hour >= 0 && hour < 8 ? SESSION_TTL_MS * 3 : SESSION_TTL_MS;
+    const effectiveTTL = hour >= 23 || hour < 8 ? SESSION_TTL_MS * 3 : SESSION_TTL_MS;
     if (age > effectiveTTL) {
       console.log(`[Agent] Session expired (${Math.round(age / 60000)}min), starting fresh`);
       return undefined;

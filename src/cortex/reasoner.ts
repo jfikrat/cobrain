@@ -14,6 +14,7 @@ import { type Signal } from "./signal-bus.ts";
 import { type SalienceResult } from "./salience.ts";
 import { expectations } from "./expectations.ts";
 import { sanitizeSignalData, sanitizeConversationHistory, sanitizeText } from "./sanitize.ts";
+import { withTimeout } from "./utils.ts";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -52,15 +53,6 @@ const DEFAULT_CONFIG: ReasonerConfig = {
 };
 
 const AI_TIMEOUT_MS = config.CORTEX_AI_TIMEOUT_MS;
-
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
-    ),
-  ]);
-}
 
 // ── Reasoner ──────────────────────────────────────────────────────────────
 
@@ -231,7 +223,34 @@ SADECE JSON döndür, başka bir şey yazma:
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("No JSON in response");
 
-      const plan = JSON.parse(jsonMatch[0]) as ActionPlan;
+      const raw = JSON.parse(jsonMatch[0]);
+
+      // Validate required fields
+      const VALID_ACTIONS: ActionType[] = [
+        "send_message", "send_whatsapp", "calculate_route", "remember",
+        "create_expectation", "resolve_expectation", "check_whatsapp",
+        "compound", "none",
+      ];
+      const VALID_URGENCIES: ActionPlan["urgency"][] = ["immediate", "soon", "background"];
+
+      if (typeof raw.action !== "string" || !VALID_ACTIONS.includes(raw.action)) {
+        console.warn(`[Cortex:Reasoner] Invalid action "${raw.action}", defaulting to none`);
+        return {
+          action: "none",
+          params: {},
+          reasoning: `Invalid action from AI: ${raw.action}`,
+          urgency: "background",
+        };
+      }
+
+      const plan: ActionPlan = {
+        action: raw.action as ActionType,
+        params: raw.params && typeof raw.params === "object" ? raw.params : {},
+        reasoning: typeof raw.reasoning === "string" ? raw.reasoning : "No reasoning provided",
+        urgency: VALID_URGENCIES.includes(raw.urgency) ? raw.urgency : "background",
+        ...(raw.followUp ? { followUp: raw.followUp } : {}),
+      };
+
       console.log(`[Cortex:Reasoner] ${signal.source}/${signal.type} → action=${plan.action} urgency=${plan.urgency} "${plan.reasoning}"`);
 
       return plan;

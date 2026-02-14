@@ -52,21 +52,33 @@ class ActionExecutor {
 
     // Compound action — sıralı çalıştır
     if (plan.action === "compound" && plan.followUp) {
+      const CRITICAL_ACTIONS: ActionType[] = ["send_message", "send_whatsapp"];
       const results: ActionResult[] = [];
+      let aborted = false;
+
       for (const subPlan of plan.followUp) {
         const result = await this.execute(subPlan);
         results.push(result);
         if (!result.success) {
-          console.warn(`[Cortex:Actions] Compound sub-action failed: ${subPlan.action}`);
-          // Devam et, hata durumunda da diğerlerini çalıştır
+          if (CRITICAL_ACTIONS.includes(subPlan.action)) {
+            console.error(`[Cortex:Actions] Critical sub-action failed: ${subPlan.action} — aborting compound`);
+            aborted = true;
+            break;
+          }
+          console.warn(`[Cortex:Actions] Compound sub-action failed: ${subPlan.action}, continuing`);
         }
       }
-      const allSuccess = results.every(r => r.success);
+
+      const succeeded = results.filter(r => r.success).length;
+      const total = plan.followUp.length;
+      const allSuccess = !aborted && results.every(r => r.success);
       return {
         success: allSuccess,
         action: "compound",
-        message: `${results.length} sub-actions executed, ${results.filter(r => r.success).length} succeeded`,
-        data: { results },
+        message: aborted
+          ? `Aborted after ${results.length}/${total} sub-actions (critical failure), ${succeeded} succeeded`
+          : `${results.length} sub-actions executed, ${succeeded} succeeded`,
+        data: { results, aborted },
       };
     }
 

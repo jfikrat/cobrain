@@ -17,6 +17,7 @@ import { expectations } from "./expectations.ts";
 import { userManager } from "../services/user-manager.ts";
 import { SmartMemory } from "../memory/smart-memory.ts";
 import { sanitizeSignalData, sanitizeConversationHistory, sanitizeText, wrapUserData } from "./sanitize.ts";
+import { withTimeout } from "./utils.ts";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -46,15 +47,6 @@ const DEFAULT_CONFIG: SalienceConfig = {
 };
 
 const AI_TIMEOUT_MS = config.CORTEX_AI_TIMEOUT_MS;
-
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
-    ),
-  ]);
-}
 
 // ── Salience Filter ───────────────────────────────────────────────────────
 
