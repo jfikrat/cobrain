@@ -341,26 +341,27 @@ export class PersonaService {
       const snapshotData = JSON.parse(snapshot.snapshot_data) as Persona;
       const currentPersona = await this.getActivePersona();
 
-      // Deactivate current persona
-      db.run("UPDATE personas SET is_active = 0 WHERE is_active = 1");
-
-      // Create new persona from snapshot
       const now = new Date().toISOString();
       const newVersion = currentPersona.version + 1;
 
-      db.run(
-        `INSERT INTO personas (version, identity, voice, behavior, boundaries, user_context, is_active, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
-        [
-          newVersion,
-          JSON.stringify(snapshotData.identity),
-          JSON.stringify(snapshotData.voice),
-          JSON.stringify(snapshotData.behavior),
-          JSON.stringify(snapshotData.boundaries),
-          JSON.stringify(snapshotData.userContext),
-          now,
-        ]
-      );
+      // Atomic: deactivate old + insert new in single transaction
+      const rollbackTx = db.transaction(() => {
+        db.run("UPDATE personas SET is_active = 0 WHERE is_active = 1");
+        db.run(
+          `INSERT INTO personas (version, identity, voice, behavior, boundaries, user_context, is_active, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+          [
+            newVersion,
+            JSON.stringify(snapshotData.identity),
+            JSON.stringify(snapshotData.voice),
+            JSON.stringify(snapshotData.behavior),
+            JSON.stringify(snapshotData.boundaries),
+            JSON.stringify(snapshotData.userContext),
+            now,
+          ]
+        );
+      });
+      rollbackTx();
 
       const id = db.query<{ id: number }, []>("SELECT last_insert_rowid() as id").get()!.id;
 
@@ -462,24 +463,25 @@ export class PersonaService {
     persona.version += 1;
     persona.updatedAt = now;
 
-    // Deactivate old persona
-    db.run("UPDATE personas SET is_active = 0 WHERE is_active = 1");
-
-    // Insert new version
-    db.run(
-      `INSERT INTO personas (version, identity, voice, behavior, boundaries, user_context, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-      [
-        persona.version,
-        JSON.stringify(persona.identity),
-        JSON.stringify(persona.voice),
-        JSON.stringify(persona.behavior),
-        JSON.stringify(persona.boundaries),
-        JSON.stringify(persona.userContext),
-        persona.createdAt,
-        now,
-      ]
-    );
+    // Atomic: deactivate old + insert new in single transaction
+    const saveTx = db.transaction(() => {
+      db.run("UPDATE personas SET is_active = 0 WHERE is_active = 1");
+      db.run(
+        `INSERT INTO personas (version, identity, voice, behavior, boundaries, user_context, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+        [
+          persona.version,
+          JSON.stringify(persona.identity),
+          JSON.stringify(persona.voice),
+          JSON.stringify(persona.behavior),
+          JSON.stringify(persona.boundaries),
+          JSON.stringify(persona.userContext),
+          persona.createdAt,
+          now,
+        ]
+      );
+    });
+    saveTx();
 
     const newId = db.query<{ id: number }, []>("SELECT last_insert_rowid() as id").get()!.id;
     persona.id = newId;

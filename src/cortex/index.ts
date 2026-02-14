@@ -168,7 +168,7 @@ class Cortex {
       if (chatJid && wasRecentlyReplied(chatJid)) {
         this._droppedDedup++;
         this._totalLatencyMs += Date.now() - startTime;
-        console.log(`[Cortex] Skipping whatsapp_message for ${chatJid} — proactive already replied`);
+        console.log(`[Cortex] Skipping whatsapp_message for ...${chatJid.slice(-4)} — proactive already replied`);
         return;
       }
     }

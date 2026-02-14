@@ -229,11 +229,11 @@ SADECE JSON döndür, başka bir şey yazma:
 
       if (parsed.score >= this.config.threshold) this.passedCount++;
 
-      console.log(`[Cortex:Salience] ${signal.source}/${signal.type} → score=${parsed.score} reason="${parsed.reason}" action=${parsed.suggestedAction}`);
+      console.log(`[Cortex:Salience] ${signal.source}/${signal.type} → score=${parsed.score} action=${parsed.suggestedAction}`);
 
       return parsed;
     } catch {
-      console.warn("[Cortex:Salience] Failed to parse AI response:", text.slice(0, 100));
+      console.warn("[Cortex:Salience] Failed to parse AI response, length:", text.length);
       return { score: 0.5, reason: "Parse failed", suggestedAction: "wait" };
     }
   }

@@ -5,7 +5,7 @@
  */
 
 import { join } from "node:path";
-import { renameSync } from "node:fs";
+import { rename } from "node:fs/promises";
 import { userManager } from "./user-manager.ts";
 
 // ============ TYPES ============
@@ -67,6 +67,11 @@ export const DEFAULT_SESSION_STATE: SessionState = {
 
 const stateCache = new Map<number, SessionState>();
 
+// ============ WRITE SERIALIZATION ============
+// Promise chain per-user: writes are queued so they happen sequentially.
+// Same pattern as cortex/expectations.ts save().
+const savingChain = new Map<number, Promise<void>>();
+
 // ============ FILE PATH ============
 
 function getStatePath(userId: number): string {
@@ -103,23 +108,26 @@ export function getSessionState(userId: number): SessionState {
 }
 
 /**
- * Save session state: atomic write (tmp + rename)
+ * Save session state: serialized atomic write (tmp + rename)
+ * Writes are queued per-user so concurrent calls don't race.
  */
-export function saveSessionState(userId: number, state: SessionState): void {
+export async function saveSessionState(userId: number, state: SessionState): Promise<void> {
   state.updatedAt = new Date().toISOString();
   stateCache.set(userId, state);
 
+  const prev = savingChain.get(userId) ?? Promise.resolve();
+  const next = prev.then(() => _doSave(userId, state)).catch(() => {});
+  savingChain.set(userId, next);
+  return next;
+}
+
+async function _doSave(userId: number, state: SessionState): Promise<void> {
   const filePath = getStatePath(userId);
-  const tmpPath = filePath + ".tmp";
+  const tmpPath = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
 
   try {
-    Bun.write(tmpPath, JSON.stringify(state, null, 2)).then(() => {
-      try {
-        renameSync(tmpPath, filePath);
-      } catch (err) {
-        console.warn(`[SessionState] Rename failed:`, err);
-      }
-    });
+    await Bun.write(tmpPath, JSON.stringify(state, null, 2));
+    await rename(tmpPath, filePath);
   } catch (err) {
     console.warn(`[SessionState] Write failed:`, err);
   }
@@ -128,10 +136,10 @@ export function saveSessionState(userId: number, state: SessionState): void {
 /**
  * Partial update: merge + save
  */
-export function updateSessionState(userId: number, partial: Partial<SessionState>): void {
+export async function updateSessionState(userId: number, partial: Partial<SessionState>): Promise<void> {
   const current = getSessionState(userId);
   const updated = { ...current, ...partial };
-  saveSessionState(userId, updated);
+  await saveSessionState(userId, updated);
 }
 
 // ============ PHASE DETECTION ============
@@ -181,7 +189,7 @@ export function detectTopic(userMsg: string, responseText: string): string | nul
 // ============ WHATSAPP CONTEXT ============
 
 /** Son WA mesajını session state'e ekle (max 10, 24 saat TTL) */
-export function addWhatsAppNotification(userId: number, notif: WhatsAppNotification): void {
+export async function addWhatsAppNotification(userId: number, notif: WhatsAppNotification): Promise<void> {
   const state = getSessionState(userId);
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
 
@@ -190,5 +198,5 @@ export function addWhatsAppNotification(userId: number, notif: WhatsAppNotificat
     .concat(notif)
     .slice(-10);
 
-  updateSessionState(userId, { recentWhatsApp: fresh });
+  await updateSessionState(userId, { recentWhatsApp: fresh });
 }

@@ -94,8 +94,11 @@ class SignalBus extends EventEmitter {
       this.signalLog.shift();
     }
 
-    // Debug log
-    console.log(`[Cortex:Signal] ${signal.source}/${signal.type} ${signal.contactId ? `from=${signal.contactId}` : ""} ${JSON.stringify(signal.data).slice(0, 100)}`);
+    // Debug log (PII masked — no message content, contactId truncated)
+    const maskedContact = signal.contactId ? `from=...${signal.contactId.slice(-4)}` : "";
+    const dataKeys = Object.keys(signal.data);
+    const dataSize = JSON.stringify(signal.data).length;
+    console.log(`[Cortex:Signal] ${signal.source}/${signal.type} ${maskedContact} keys=[${dataKeys}] size=${dataSize}`);
 
     // Yayınla
     this.emit("signal", signal);

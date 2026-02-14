@@ -253,11 +253,11 @@ SADECE JSON döndür, başka bir şey yazma:
         ...(raw.followUp ? { followUp: raw.followUp } : {}),
       };
 
-      console.log(`[Cortex:Reasoner] ${signal.source}/${signal.type} → action=${plan.action} urgency=${plan.urgency} "${plan.reasoning}"`);
+      console.log(`[Cortex:Reasoner] ${signal.source}/${signal.type} → action=${plan.action} urgency=${plan.urgency}`);
 
       return plan;
     } catch {
-      console.warn("[Cortex:Reasoner] Failed to parse AI response:", text.slice(0, 100));
+      console.warn("[Cortex:Reasoner] Failed to parse AI response, length:", text.length);
       return {
         action: "none",
         params: {},
