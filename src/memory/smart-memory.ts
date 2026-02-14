@@ -21,6 +21,11 @@ import type {
 } from "../types/memory.ts";
 import { config } from "../config.ts";
 
+/** Format a Date as SQLite-compatible UTC string: YYYY-MM-DD HH:MM:SS */
+function toSqliteDatetime(date: Date): string {
+  return date.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "");
+}
+
 /** Safe JSON.parse with fallback — prevents crashes on corrupted metadata */
 function safeParseJson(raw: string | null | undefined, fallback: Record<string, unknown> = {}): Record<string, unknown> {
   if (!raw) return fallback;
@@ -66,6 +71,7 @@ export class SmartMemory {
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_mem_type ON memories(type)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_mem_tags ON memories(tags)`);
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_mem_expires ON memories(expires_at)`);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_mem_created_at ON memories(created_at DESC)`);
 
     // FTS5 Virtual Table for full-text search
     this.initFTS5();
@@ -177,12 +183,14 @@ export class SmartMemory {
       summary = input.content.slice(0, 100);
     }
 
-    // Calculate expiration
-    let expiresAt: string | null = input.expiresAt ?? null;
+    // Calculate expiration — normalize to SQLite datetime format (YYYY-MM-DD HH:MM:SS)
+    let expiresAt: string | null = input.expiresAt
+      ? toSqliteDatetime(new Date(input.expiresAt))
+      : null;
     if (!expiresAt && input.type === "episodic") {
       const expDate = new Date();
       expDate.setDate(expDate.getDate() + config.MAX_MEMORY_AGE_DAYS);
-      expiresAt = expDate.toISOString();
+      expiresAt = toSqliteDatetime(expDate);
     }
 
     const result = this.db.run(
