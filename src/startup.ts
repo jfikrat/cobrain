@@ -84,6 +84,8 @@ if (config.ENABLE_WEB_UI) {
 if (config.ENABLE_AUTONOMOUS) {
   // Wait a bit for bot to be ready
   setTimeout(async () => {
+    const userId = config.MY_TELEGRAM_ID;
+
     // Register Cortex action handlers
     actionExecutor.register("send_message" as ActionType, async (params) => {
       const text = params.text as string || params.message as string || "Bildirim";
@@ -285,6 +287,98 @@ if (config.ENABLE_AUTONOMOUS) {
       }
     });
 
+    // --- Heartbeat Action Handlers ---
+
+    actionExecutor.register("morning_briefing" as ActionType, async (params) => {
+      const message = params.message as string;
+      if (!message) return { success: false, action: "morning_briefing" as ActionType, message: "No message" };
+      try {
+        await bot.api.sendMessage(userId, message, { parse_mode: "HTML" });
+        return { success: true, action: "morning_briefing" as ActionType, message: "Morning briefing sent" };
+      } catch (err) {
+        console.error("[Heartbeat] morning_briefing send failed:", err);
+        return { success: false, action: "morning_briefing" as ActionType, message: String(err) };
+      }
+    });
+
+    actionExecutor.register("evening_summary" as ActionType, async (params) => {
+      const message = params.message as string;
+      if (!message) return { success: false, action: "evening_summary" as ActionType, message: "No message" };
+      try {
+        await bot.api.sendMessage(userId, message, { parse_mode: "HTML" });
+        return { success: true, action: "evening_summary" as ActionType, message: "Evening summary sent" };
+      } catch (err) {
+        console.error("[Heartbeat] evening_summary send failed:", err);
+        return { success: false, action: "evening_summary" as ActionType, message: String(err) };
+      }
+    });
+
+    actionExecutor.register("goal_nudge" as ActionType, async (params) => {
+      const message = params.message as string;
+      if (!message) return { success: false, action: "goal_nudge" as ActionType, message: "No message" };
+      try {
+        await bot.api.sendMessage(userId, message, { parse_mode: "HTML" });
+        return { success: true, action: "goal_nudge" as ActionType, message: "Goal nudge sent" };
+      } catch (err) {
+        console.error("[Heartbeat] goal_nudge send failed:", err);
+        return { success: false, action: "goal_nudge" as ActionType, message: String(err) };
+      }
+    });
+
+    actionExecutor.register("mood_check" as ActionType, async (params) => {
+      const message = (params.message as string) || "Nasıl hissediyorsun?";
+      try {
+        await bot.api.sendMessage(userId, message, {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "\u{1F60A} İyi", callback_data: "mood_great" },
+              { text: "\u{1F610} Normal", callback_data: "mood_neutral" },
+              { text: "\u{1F614} Düşük", callback_data: "mood_low" },
+            ]]
+          }
+        });
+        return { success: true, action: "mood_check" as ActionType, message: "Mood check sent" };
+      } catch (err) {
+        console.error("[Heartbeat] mood_check send failed:", err);
+        return { success: false, action: "mood_check" as ActionType, message: String(err) };
+      }
+    });
+
+    actionExecutor.register("memory_digest" as ActionType, async (params) => {
+      const message = params.message as string;
+      if (!message) return { success: false, action: "memory_digest" as ActionType, message: "No message" };
+      try {
+        await bot.api.sendMessage(userId, message, { parse_mode: "HTML" });
+        return { success: true, action: "memory_digest" as ActionType, message: "Memory digest sent" };
+      } catch (err) {
+        console.error("[Heartbeat] memory_digest send failed:", err);
+        return { success: false, action: "memory_digest" as ActionType, message: String(err) };
+      }
+    });
+
+    actionExecutor.register("think_and_note" as ActionType, async (params) => {
+      const content = params.content as string;
+      if (!content) return { success: false, action: "think_and_note" as ActionType, message: "No content" };
+      try {
+        const { SmartMemory } = await import("./memory/smart-memory.ts");
+        const userFolder = userManager.getUserFolder(userId);
+        const memory = new SmartMemory(userFolder, userId);
+        await memory.store({
+          type: "semantic",
+          content,
+          importance: 0.5,
+          source: "self-reflection",
+        });
+        memory.close();
+        console.log("[Heartbeat] think_and_note stored:", content.slice(0, 80));
+        return { success: true, action: "think_and_note" as ActionType, message: "Note stored silently" };
+      } catch (err) {
+        console.error("[Heartbeat] think_and_note failed:", err);
+        return { success: false, action: "think_and_note" as ActionType, message: String(err) };
+      }
+    });
+
     // Configure Cortex Bridge — tier-2 questions untuk user feedback
     cortexBridge.configure({
       onTier2Question: async (feedback) => {
@@ -318,7 +412,10 @@ Mesaj: ${preview.slice(0, 150)}
         console.log(`[Cortex] Action result: ${result.action} success=${result.success} ${result.message || ""}`);
 
         // Skip actions that already communicate with the user or need no notification
-        const SILENT_ACTIONS: ActionType[] = ["send_message", "send_whatsapp", "none", "compound"];
+        const SILENT_ACTIONS: ActionType[] = [
+          "send_message", "send_whatsapp", "none", "compound",
+          "morning_briefing", "evening_summary", "goal_nudge", "mood_check", "memory_digest", "think_and_note",
+        ];
         if (SILENT_ACTIONS.includes(result.action) || !result.success) return;
 
         let notification: string | null = null;
@@ -382,6 +479,17 @@ Mesaj: ${preview.slice(0, 150)}
       }
     }, 30_000); // Every 30 seconds
 
+    // Start heartbeat signals (morning briefing, evening summary, goal nudges, etc.)
+    if (config.ENABLE_HEARTBEAT_SIGNALS) {
+      try {
+        const { startHeartbeat } = await import("./cortex/heartbeat.ts");
+        startHeartbeat(userId);
+        console.log("[Startup] Heartbeat signals started");
+      } catch (err) {
+        console.error("[Startup] Heartbeat signals failed to start:", err);
+      }
+    }
+
     initProactive(bot);
     console.log("[Autonomous] Proactive features enabled");
   }, 1000);
@@ -421,6 +529,8 @@ const shutdown = async () => {
   console.log("\nKapatılıyor...");
 
   cortex.stop();
+  // Stop heartbeat signals
+  try { const { stopHeartbeat } = await import("./cortex/heartbeat.ts"); stopHeartbeat(); } catch {}
   if (cortexHeartbeatInterval) clearInterval(cortexHeartbeatInterval);
   stopProjectionScheduler();
 

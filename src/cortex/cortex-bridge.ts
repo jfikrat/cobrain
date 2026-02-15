@@ -103,10 +103,12 @@ class CortexBridge {
       const pattern = isTier2 ? "önemli sorular soruyor" : "bilgi paylaşıyor veya selamlama";
       const content = `${senderName}: ${pattern} - örnek: "${messagePreview.slice(0, 100)}"`;
 
-      await memory.store(content, {
+      await memory.store({
         type: "episodic",
-        context: `WhatsApp interaction - ${senderName}`,
+        content,
         importance: isTier2 ? 0.7 : 0.4,
+        source: "cortex-bridge",
+        metadata: { context: `WhatsApp interaction - ${senderName}` },
       });
 
       memory.close();

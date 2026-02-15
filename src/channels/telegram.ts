@@ -734,6 +734,31 @@ bot.callbackQuery("reply_cancel", async (ctx) => {
   });
 });
 
+// ============ MOOD CALLBACK HANDLER ============
+
+bot.callbackQuery(/^mood_(great|neutral|low)$/, async (ctx) => {
+  const data = ctx.callbackQuery.data;
+  const moodMap: Record<string, string> = { mood_great: "great", mood_neutral: "neutral", mood_low: "low" };
+  const mood = moodMap[data];
+  if (!mood) return;
+
+  const userId = ctx.from?.id ?? 0;
+  try {
+    const { getMoodTrackingService } = await import("../services/mood-tracking.ts");
+    const moodService = await getMoodTrackingService(userId);
+    moodService.recordMood({
+      mood: mood as "great" | "neutral" | "low",
+      energy: mood === "great" ? 4 : mood === "neutral" ? 3 : 2,
+      source: "explicit",
+    });
+    await ctx.answerCallbackQuery({ text: "Kaydedildi!" });
+    await ctx.editMessageReplyMarkup({ reply_markup: undefined });
+  } catch (err) {
+    console.error("[MoodCallback] Failed:", err);
+    await ctx.answerCallbackQuery({ text: "Hata olustu" });
+  }
+});
+
 // ============ SES MESAJI HANDLER ============
 
 bot.on("message:voice", async (ctx) => {

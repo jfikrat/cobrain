@@ -113,8 +113,32 @@ class SalienceFilter {
       return { score: 0.1, reason: "System boot event", suggestedAction: "ignore" };
     }
 
-    // Time tick'ler düşük — ama beklenti kontrolü için kullanılır
+    // Heartbeat signals — periyodik check-in'ler, AI reasoner'a gönderilmeli
     if (signal.source === "time_tick") {
+      if (signal.type === "morning_briefing") {
+        return { score: 0.7, reason: "Morning briefing schedule", suggestedAction: "act" };
+      }
+      if (signal.type === "evening_reflection") {
+        return { score: 0.6, reason: "Evening reflection schedule", suggestedAction: "act" };
+      }
+      if (signal.type === "goal_nudge") {
+        return { score: 0.6, reason: "Goal nudge schedule", suggestedAction: "act" };
+      }
+      if (signal.type === "memory_reflection") {
+        return { score: 0.5, reason: "Weekly memory reflection", suggestedAction: "act" };
+      }
+      if (signal.type === "inactivity_check") {
+        const minutesAgo = (signal.data?.lastInteractionMinutesAgo as number) || 0;
+        if (minutesAgo > 24 * 60) {
+          return { score: 0.8, reason: `No interaction for ${Math.floor(minutesAgo / 60)}h`, suggestedAction: "notify" };
+        }
+        if (minutesAgo > 6 * 60) {
+          return { score: 0.5, reason: `No interaction for ${Math.floor(minutesAgo / 60)}h`, suggestedAction: "act" };
+        }
+        return { score: 0.2, reason: "Recent interaction, skip", suggestedAction: "ignore" };
+      }
+
+      // Generic time tick'ler (periodic vb.) düşük — ama beklenti kontrolü için kullanılır
       return { score: 0.1, reason: "Periodic time tick", suggestedAction: "ignore" };
     }
 

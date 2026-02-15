@@ -26,6 +26,12 @@ export type ActionType =
   | "create_expectation"  // Yeni beklenti oluştur
   | "resolve_expectation" // Beklentiyi çöz
   | "check_whatsapp"      // WhatsApp mesajlarını kontrol et
+  | "morning_briefing"    // Sabah özeti gönder
+  | "evening_summary"     // Akşam özeti gönder
+  | "goal_nudge"          // Hedef hatırlatması gönder
+  | "mood_check"          // Ruh hali kontrolü
+  | "memory_digest"       // Hafıza özeti gönder
+  | "think_and_note"      // Sessiz not al (kullanıcıya göndermeden)
   | "compound"            // Birden fazla aksiyon (sıralı)
   | "none";               // Aksiyon gerekmiyor
 
@@ -202,7 +208,26 @@ MEVCUT AKSIYON TIPLERI:
 - remember: Hafızaya kaydet (önemli bilgi varsa). Params: {content: "kaydedilecek bilgi", context?: "bağlam", importance?: 0.0-1.0, type?: "episodic|semantic|procedural"}
 - create_expectation: Yeni beklenti oluştur (SADECE cevap gerçekten bekleniyorsa — soru sorduysa, buluşma/plan konuşuluyorsa. Basit selamlaşma veya bilgilendirme mesajlarında beklenti OLUŞTURMA)
 - check_whatsapp: WhatsApp mesajlarını kontrol et. Params: {chatJid: "numara@s.whatsapp.net", limit?: 5, notify?: true/false}
+- morning_briefing: Sabah özeti gönder — hedefler, hatırlatıcılar, günün planı. Params: {message: "özet metni"}
+- evening_summary: Akşam özeti gönder — günün değerlendirmesi, yarının planı. Params: {message: "özet metni"}
+- goal_nudge: Hedef hatırlatması gönder — yaklaşan deadline, durmuş hedefler. Params: {message: "hatırlatma metni"}
+- mood_check: Ruh hali kontrolü — nasılsın diye sor. Params: {message: "mesaj metni"}
+- memory_digest: Hafıza özeti gönder — bu hafta öğrenilenler, önemli anılar. Params: {message: "özet metni"}
+- think_and_note: Sessiz not al — kullanıcıya göndermeden hafızaya kaydet. Params: {content: "not içeriği"}
 - none: Aksiyon gerekmiyor (çoğu bildirim zaten Telegram'dan iletiliyor, tekrar bildirmeye gerek yok)
+
+HEARTBEAT SİNYALLERİ:
+Heartbeat sinyalleri (morning_briefing, evening_reflection, inactivity_check, memory_reflection, goal_nudge) periyodik check-in'lerdir.
+Bu sinyaller geldiğinde:
+- Kullanıcının o anki durumunu değerlendir (mood, aktif hedefler, hatırlatıcılar)
+- Her zaman mesaj gönderme — gerçekten değerli bir şey yoksa "none" seç
+- Mesaj göndermek istersen: kısa, doğal, samimi ol — makine gibi özet değil, arkadaş gibi check-in
+- morning_briefing: "Günaydın! Bugün X hedefin var, Y hatırlatıcı bekliyor" tarzında
+- evening_reflection: "Bugün nasıl geçti? X hedefinde ilerleme var mı?" tarzında
+- inactivity_check: "Bir süredir konuşmadık, bir şeye ihtiyacın var mı?" — ama SADECE uzun sessizlikte (6h+)
+- goal_nudge: "X hedefinin deadline'ı yaklaşıyor, bir güncelleme var mı?"
+- memory_reflection: "Bu hafta şunları öğrendim/not aldım: ..." tarzında
+- think_and_note: Kendi gözlemlerini sessizce hafızaya kaydet (kullanıcıya mesaj gönderme)
 
 ÖNEMLİ KURALLAR:
 1. WhatsApp DM bildirimleri zaten ayrı bir sistem tarafından Telegram'a iletiliyor. send_message ile tekrar bildirme yapma, sadece EKSTRA bir aksiyon gerekiyorsa kullan (yol hesapla, hatırla, beklenti oluştur gibi).
@@ -231,6 +256,8 @@ SADECE JSON döndür, başka bir şey yazma:
       const VALID_ACTIONS: ActionType[] = [
         "send_message", "send_whatsapp", "calculate_route", "remember",
         "create_expectation", "resolve_expectation", "check_whatsapp",
+        "morning_briefing", "evening_summary", "goal_nudge",
+        "mood_check", "memory_digest", "think_and_note",
         "compound", "none",
       ];
       const VALID_URGENCIES: ActionPlan["urgency"][] = ["immediate", "soon", "background"];
