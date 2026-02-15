@@ -1,7 +1,8 @@
 /**
- * Smart Memory - Haiku-powered semantic memory with FTS5 search
- * Uses Claude Haiku for tag extraction and SQLite FTS5 for full-text search
- * Cobrain v0.3
+ * Smart Memory - Hybrid search: FTS5 + sqlite-vec vector search
+ * Uses Claude Haiku for tag extraction, FTS5 for full-text search,
+ * and Gemini embeddings for vector similarity (RRF fusion)
+ * Cobrain v1.2
  */
 
 import { Database } from "bun:sqlite";
@@ -40,6 +41,7 @@ function safeParseJson(raw: string | null | undefined, fallback: Record<string, 
 export class SmartMemory {
   private db: Database;
   private userId: number;
+  private vecAvailable = false;
 
   constructor(userFolderPath: string, userId: number) {
     this.userId = userId;
@@ -75,6 +77,49 @@ export class SmartMemory {
 
     // FTS5 Virtual Table for full-text search
     this.initFTS5();
+
+    // Vector search extension (sqlite-vec)
+    this.initVec();
+  }
+
+  /**
+   * Initialize sqlite-vec extension and vector tables
+   */
+  private initVec(): void {
+    try {
+      // sqlite-vec is installed at node_modules/sqlite-vec
+      // load() is synchronous — calls db.loadExtension() internally
+      const sqliteVec = require("sqlite-vec");
+      sqliteVec.load(this.db);
+      this.vecAvailable = true;
+      console.log(`[SmartMemory] sqlite-vec loaded (user: ${this.userId})`);
+    } catch (err) {
+      console.warn("[SmartMemory] sqlite-vec not available, vector search disabled:", err);
+      this.vecAvailable = false;
+      return;
+    }
+
+    // Create chunk storage table
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS memory_chunks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        memory_id INTEGER NOT NULL,
+        chunk_index INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        embedding BLOB,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+      )
+    `);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_chunks_memory ON memory_chunks(memory_id)`);
+
+    // Create vec0 virtual table for cosine similarity search
+    this.db.run(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS memory_vec USING vec0(
+        chunk_id INTEGER PRIMARY KEY,
+        embedding float[768]
+      )
+    `);
   }
 
   /**
@@ -212,11 +257,36 @@ export class SmartMemory {
     const id = Number(result.lastInsertRowid);
     console.log(`[SmartMemory] Stored #${id} (${input.type}) tags: ${tags.join(", ")}`);
 
+    // Vector embedding (non-blocking, best-effort)
+    if (this.vecAvailable && config.FF_VECTOR_SEARCH) {
+      try {
+        const { chunkText, generateEmbeddings } = await import("../services/embedding.ts");
+        const chunks = chunkText(input.content);
+        const embeddings = await generateEmbeddings(chunks);
+
+        for (let i = 0; i < chunks.length; i++) {
+          if (embeddings[i]) {
+            const chunkId = this.db.prepare(
+              "INSERT INTO memory_chunks (memory_id, chunk_index, content, embedding) VALUES (?, ?, ?, ?)"
+            ).run(id, i, chunks[i], Buffer.from(embeddings[i]!.buffer)).lastInsertRowid;
+
+            this.db.prepare(
+              "INSERT INTO memory_vec (chunk_id, embedding) VALUES (?, ?)"
+            ).run(chunkId, Buffer.from(embeddings[i]!.buffer));
+          }
+        }
+        console.log(`[SmartMemory] Embedded #${id}: ${chunks.length} chunks`);
+      } catch (err) {
+        console.warn("[SmartMemory] Embedding failed, FTS5 only:", err);
+      }
+    }
+
     return id;
   }
 
   /**
-   * Search memories using FTS5 + optional Haiku semantic ranking
+   * Search memories using hybrid FTS5 + vector search with RRF fusion
+   * Falls back to FTS5-only + Haiku ranking when vector search is unavailable
    */
   async search(query: string, options?: {
     type?: MemoryType;
@@ -225,20 +295,120 @@ export class SmartMemory {
   }): Promise<MemorySearchResult[]> {
     const limit = options?.limit ?? 5;
     const minScore = options?.minScore ?? 0.5;
+    const useVector = this.vecAvailable && config.FF_VECTOR_SEARCH;
 
-    // First, get candidates using FTS5
-    const candidates = this.fts5Search(query, options?.type, 20);
+    // Step 1: Run FTS5 + vector search (parallel when possible)
+    const ftsCandidates = this.fts5Search(query, options?.type, 20);
+    const vecResults = useVector
+      ? await this.vectorSearch(query, options?.type, 20)
+      : [];
 
-    if (candidates.length === 0) {
+    // If neither search found anything, return empty
+    if (ftsCandidates.length === 0 && vecResults.length === 0) {
       return [];
     }
 
+    // Step 2: If vector is active, do hybrid fusion
+    if (useVector && (ftsCandidates.length > 0 || vecResults.length > 0)) {
+      // Build fusion map: memoryId -> { ftsScore, vectorScore }
+      const fusionMap = new Map<number, { ftsScore: number; vectorScore: number }>();
+
+      // Normalize FTS scores: 1 / (1 + rank) where rank is 0-indexed position
+      for (let rank = 0; rank < ftsCandidates.length; rank++) {
+        const mem = ftsCandidates[rank];
+        fusionMap.set(mem.id, {
+          ftsScore: 1 / (1 + rank),
+          vectorScore: 0,
+        });
+      }
+
+      // Add vector scores (already 0-1 similarity from vectorSearch)
+      for (const vr of vecResults) {
+        const existing = fusionMap.get(vr.memoryId);
+        if (existing) {
+          existing.vectorScore = vr.score;
+        } else {
+          fusionMap.set(vr.memoryId, {
+            ftsScore: 0,
+            vectorScore: vr.score,
+          });
+        }
+      }
+
+      // Calculate fused scores
+      const fusedEntries: Array<{
+        memoryId: number;
+        ftsScore: number;
+        vectorScore: number;
+        fusedScore: number;
+      }> = [];
+
+      for (const [memoryId, scores] of fusionMap) {
+        const fusedScore =
+          config.VECTOR_WEIGHT * scores.vectorScore +
+          config.FTS_WEIGHT * scores.ftsScore;
+        fusedEntries.push({
+          memoryId,
+          ftsScore: scores.ftsScore,
+          vectorScore: scores.vectorScore,
+          fusedScore,
+        });
+      }
+
+      // Sort by fusedScore DESC
+      fusedEntries.sort((a, b) => b.fusedScore - a.fusedScore);
+
+      // Step 3: Fetch full MemoryEntry for top results
+      const results: MemorySearchResult[] = [];
+      const topEntries = fusedEntries.slice(0, limit);
+
+      for (const entry of topEntries) {
+        // Apply importance/access_count bonus
+        let bonusScore = entry.fusedScore;
+
+        // Try to find in FTS candidates first (already loaded)
+        let memEntry = ftsCandidates.find((c) => c.id === entry.memoryId);
+
+        // If only found via vector, fetch from DB
+        if (!memEntry) {
+          memEntry = this.getById(entry.memoryId) ?? undefined;
+        }
+
+        if (!memEntry) continue;
+
+        // Importance bonus: up to +0.1 for high-importance memories
+        bonusScore += memEntry.importance * 0.1;
+        // Access count bonus: up to +0.05 for frequently accessed
+        bonusScore += Math.min(memEntry.accessCount / 100, 0.05);
+
+        if (bonusScore < minScore) continue;
+
+        results.push({
+          ...memEntry,
+          similarity: bonusScore,
+          ftsScore: entry.ftsScore,
+          vectorScore: entry.vectorScore,
+          fusedScore: entry.fusedScore,
+        });
+
+        // Update access count
+        this.db.run(
+          "UPDATE memories SET access_count = access_count + 1, last_accessed_at = CURRENT_TIMESTAMP WHERE id = ?",
+          [memEntry.id]
+        );
+      }
+
+      console.log(`[SmartMemory] Hybrid search: ${ftsCandidates.length} FTS + ${vecResults.length} vec → ${results.length} results`);
+      return results;
+    }
+
+    // Fallback: FTS5-only path (vector disabled or failed)
     // If Haiku is available, rank semantically
     if (isHaikuAvailable()) {
       try {
         const ranked = await rankMemories(
           query,
-          candidates.map((c) => ({
+          ftsCandidates.map((c) => ({
             id: c.id,
             content: c.content,
             summary: c.summary,
@@ -254,14 +424,14 @@ export class SmartMemory {
         for (const r of ranked) {
           if (r.score < minScore) continue;
 
-          const memory = candidates.find((c) => c.id === r.id);
-          if (memory) {
-            results.push({ ...memory, similarity: r.score });
+          const mem = ftsCandidates.find((c) => c.id === r.id);
+          if (mem) {
+            results.push({ ...mem, similarity: r.score });
 
             // Update access count
             this.db.run(
               "UPDATE memories SET access_count = access_count + 1, last_accessed_at = CURRENT_TIMESTAMP WHERE id = ?",
-              [memory.id]
+              [mem.id]
             );
           }
         }
@@ -272,8 +442,8 @@ export class SmartMemory {
       }
     }
 
-    // Fallback: return FTS5 results with estimated scores
-    return candidates.slice(0, limit).map((c) => ({
+    // Final fallback: return FTS5 results with estimated scores
+    return ftsCandidates.slice(0, limit).map((c) => ({
       ...c,
       similarity: 0.5,
     }));
@@ -344,7 +514,6 @@ export class SmartMemory {
 
       return rows.map((row) => ({
         id: row.id,
-        vectorRowid: 0, // Not used in smart memory
         type: row.type as MemoryType,
         content: row.content,
         summary: row.summary ?? undefined,
@@ -416,7 +585,6 @@ export class SmartMemory {
 
     return rows.map((row) => ({
       id: row.id,
-      vectorRowid: 0,
       type: row.type as MemoryType,
       content: row.content,
       summary: row.summary ?? undefined,
@@ -430,6 +598,107 @@ export class SmartMemory {
       createdAt: row.created_at,
       expiresAt: row.expires_at ?? undefined,
     }));
+  }
+
+  /**
+   * Vector similarity search using sqlite-vec
+   */
+  private async vectorSearch(
+    query: string,
+    type?: MemoryType,
+    limit: number = 20,
+  ): Promise<Array<{ memoryId: number; score: number }>> {
+    if (!this.vecAvailable) return [];
+
+    try {
+      const { generateEmbedding } = await import("../services/embedding.ts");
+      const queryEmbedding = await generateEmbedding(query);
+      if (!queryEmbedding) return [];
+
+      const whereClause = this.buildWhereClause(type);
+
+      const rows = this.db
+        .prepare(
+          `SELECT mc.memory_id, MIN(vec_distance_cosine(mv.embedding, ?)) as distance
+           FROM memory_vec mv
+           JOIN memory_chunks mc ON mc.id = mv.chunk_id
+           JOIN memories m ON m.id = mc.memory_id
+           WHERE ${whereClause}
+           GROUP BY mc.memory_id
+           ORDER BY distance ASC
+           LIMIT ?`
+        )
+        .all(Buffer.from(queryEmbedding.buffer), limit);
+
+      return (rows as any[]).map((r) => ({
+        memoryId: r.memory_id,
+        score: 1 - r.distance, // Convert distance to similarity
+      }));
+    } catch (err) {
+      console.warn("[SmartMemory] Vector search failed:", err);
+      return [];
+    }
+  }
+
+  /**
+   * Build WHERE clause for soft-delete + expiry + optional type filter
+   */
+  private buildWhereClause(type?: MemoryType): string {
+    const conditions = [
+      "(m.expires_at IS NULL OR m.expires_at > datetime('now'))",
+      "(NOT json_valid(m.metadata) OR json_extract(m.metadata, '$.softDeleted') IS NOT 1)",
+    ];
+    if (type) conditions.push(`m.type = '${type}'`);
+    return conditions.join(" AND ");
+  }
+
+  /**
+   * Backfill embeddings for memories that don't have chunks yet
+   */
+  async backfillEmbeddings(): Promise<number> {
+    if (!this.vecAvailable || !config.FF_VECTOR_SEARCH) return 0;
+
+    const unindexed = this.db
+      .prepare(
+        `SELECT m.id, m.content FROM memories m
+         LEFT JOIN memory_chunks mc ON mc.memory_id = m.id
+         WHERE mc.id IS NULL
+         AND (NOT json_valid(m.metadata) OR json_extract(m.metadata, '$.softDeleted') IS NOT 1)`
+      )
+      .all() as Array<{ id: number; content: string }>;
+
+    let count = 0;
+    const { chunkText, generateEmbeddings } = await import("../services/embedding.ts");
+
+    for (let i = 0; i < unindexed.length; i += 10) {
+      const batch = unindexed.slice(i, i + 10);
+      for (const mem of batch) {
+        try {
+          const chunks = chunkText(mem.content);
+          const embeddings = await generateEmbeddings(chunks);
+          for (let j = 0; j < chunks.length; j++) {
+            if (embeddings[j]) {
+              const chunkId = this.db
+                .prepare(
+                  "INSERT INTO memory_chunks (memory_id, chunk_index, content, embedding) VALUES (?, ?, ?, ?)"
+                )
+                .run(mem.id, j, chunks[j]!, Buffer.from(embeddings[j]!.buffer)).lastInsertRowid;
+              this.db
+                .prepare(
+                  "INSERT INTO memory_vec (chunk_id, embedding) VALUES (?, ?)"
+                )
+                .run(chunkId, Buffer.from(embeddings[j]!.buffer));
+            }
+          }
+          count++;
+        } catch (err) {
+          console.warn(`[SmartMemory] Backfill failed for memory ${mem.id}:`, err);
+        }
+      }
+    }
+
+    console.log(`[SmartMemory] Backfilled embeddings for ${count}/${unindexed.length} memories`);
+    return count;
   }
 
   /**
@@ -534,7 +803,6 @@ export class SmartMemory {
 
     return rows.map((row) => ({
       id: row.id,
-      vectorRowid: 0,
       type: row.type as MemoryType,
       content: row.content,
       summary: row.summary ?? undefined,
@@ -579,7 +847,6 @@ export class SmartMemory {
 
     return rows.map((row) => ({
       id: row.id,
-      vectorRowid: 0,
       type: row.type as MemoryType,
       content: row.content,
       summary: row.summary ?? undefined,

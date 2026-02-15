@@ -83,6 +83,14 @@ const envSchema = z.object({
   CORTEX_EXPECTATION_CLEANUP_INTERVAL_MS: z.coerce.number().default(60_000),
   CORTEX_MODEL: z.string().default("gemini-3-flash-preview"),
 
+  // v1.2: Vector search
+  FF_VECTOR_SEARCH: z.coerce.boolean().default(true),
+  VECTOR_WEIGHT: z.coerce.number().default(0.7),
+  FTS_WEIGHT: z.coerce.number().default(0.3),
+  EMBEDDING_MODEL: z.string().default("text-embedding-004"),
+  CHUNK_SIZE: z.coerce.number().default(400),
+  CHUNK_OVERLAP: z.coerce.number().default(80),
+
   // Legacy (kept for migration)
   DB_PATH: z.string().default("./data/cobrain.db"),
 });

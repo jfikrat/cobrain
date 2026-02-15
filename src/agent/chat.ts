@@ -18,11 +18,13 @@ import { SmartMemory } from "../memory/smart-memory.ts";
 import { getSessionState, updateSessionState, detectTopic, detectPhase } from "../services/session-state.ts";
 import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
+import type { MemorySearchResult } from "../types/memory.ts";
+import type { MemoryEntry } from "../types/memory.ts";
 
 // Split modules
 import { getMemoryServer, getTelegramMcpServer, getGoalsServer, getPersonaServer, getMoodServer, getLocationServer, getTimeServer } from "./mcp-servers.ts";
 import { extractTextContent, buildMessageContent, type MultimodalMessage } from "./message-builder.ts";
-import { createPreToolUseHooks } from "./hooks.ts";
+import { createPreToolUseHooks, createPreCompactHook } from "./hooks.ts";
 
 // Re-export types from message-builder for backwards compatibility
 export type { MultimodalMessage, ImageContent, TextContent, MessageContent } from "./message-builder.ts";
@@ -109,21 +111,26 @@ export async function chat(
     }
   } catch {}
 
-  // Token budget: max 5 memories, mixed strategy (importance + recency), deduplicated
+  // Token budget: max 5 memories, query-relevant + importance, deduplicated
   let recentMemories: string[] = [];
   try {
     const memory = new SmartMemory(userFolder, userId);
     const now = Date.now();
 
-    // Top 3 by importance (>=0.6)
-    const important = memory.getByImportance(3, 0.6);
-    // Top 2 most recent (for recency context)
-    const recent = memory.getRecent(2);
+    // Query-relevant memories (hybrid search)
+    const queryText = typeof message === 'string' ? message : (message as any).text || '';
+    let queryRelevant: MemorySearchResult[] = [];
+    try {
+      queryRelevant = await memory.search(queryText, { limit: 3, minScore: 0.3 });
+    } catch {}
 
-    // Merge & deduplicate by id, cap at 5
+    // Importance-based (reduced)
+    const important = memory.getByImportance(2, 0.7);
+
+    // Merge + deduplicate by id, cap at 5
     const seenIds = new Set<number>();
-    const merged: typeof important = [];
-    for (const entry of [...important, ...recent]) {
+    const merged: MemoryEntry[] = [];
+    for (const entry of [...queryRelevant, ...important]) {
       if (seenIds.has(entry.id)) continue;
       seenIds.add(entry.id);
       merged.push(entry);
@@ -281,6 +288,7 @@ export async function chat(
             traceId,
             permissionMode: settings.permissionMode || config.PERMISSION_MODE,
           }),
+          PreCompact: createPreCompactHook(userId),
         },
 
         // Limit turns to prevent runaway

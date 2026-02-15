@@ -19,6 +19,7 @@ import { createPersonaServer } from "../agent/tools/persona.ts";
 import { createTelegramServer } from "../agent/tools/telegram.ts";
 import { getPersonaService } from "../services/persona.ts";
 import { needsPermission, type PermissionMode } from "../agent/permissions.ts";
+import { createPreCompactHook } from "../agent/hooks.ts";
 import { config } from "../config.ts";
 
 // ============ Types ============
@@ -545,6 +546,7 @@ async function streamChat(
             ],
           },
         ],
+        PreCompact: createPreCompactHook(userId),
       },
       maxTurns: 10,
     },

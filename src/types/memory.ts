@@ -7,7 +7,6 @@ export type MemoryType = "episodic" | "semantic" | "procedural";
 
 export interface MemoryEntry {
   id: number;
-  vectorRowid?: number; // Legacy, not used in FTS5 mode
   type: MemoryType;
   content: string;
   summary?: string;
@@ -53,6 +52,9 @@ export interface MemoryQuery {
 export interface MemorySearchResult extends MemoryEntry {
   /** Cosine similarity score (0.0 - 1.0) */
   similarity: number;
+  ftsScore?: number;
+  vectorScore?: number;
+  fusedScore?: number;
 }
 
 export interface MemoryStats {
