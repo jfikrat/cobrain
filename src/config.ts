@@ -92,7 +92,7 @@ const envSchema = z.object({
   FF_VECTOR_SEARCH: z.coerce.boolean().default(true),
   VECTOR_WEIGHT: z.coerce.number().default(0.7),
   FTS_WEIGHT: z.coerce.number().default(0.3),
-  EMBEDDING_MODEL: z.string().default("text-embedding-004"),
+  EMBEDDING_MODEL: z.string().default("gemini-embedding-001"),
   CHUNK_SIZE: z.coerce.number().default(400),
   CHUNK_OVERLAP: z.coerce.number().default(80),
 

@@ -108,9 +108,6 @@ export function initProactiveInfra(botInstance: Bot): void {
   scheduler.start();
   taskQueue.start();
 
-  // Heartbeat: proactive service started
-  heartbeat("proactive_service", { event: "started" });
-
   console.log("[Proactive] Infrastructure initialized (scheduler + task-queue)");
 }
 

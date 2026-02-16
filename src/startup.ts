@@ -52,7 +52,7 @@ registerHeartbeatComponent("telegram_bot", { required: true });
 registerHeartbeatComponent("web_server", { required: config.ENABLE_WEB_UI });
 registerHeartbeatComponent("scheduler", { required: config.ENABLE_AUTONOMOUS });
 registerHeartbeatComponent("task_queue", { required: config.ENABLE_AUTONOMOUS });
-registerHeartbeatComponent("proactive_service", { required: config.ENABLE_AUTONOMOUS });
+registerHeartbeatComponent("brain_loop", { required: config.ENABLE_AUTONOMOUS });
 registerHeartbeatComponent("cortex", { required: config.ENABLE_AUTONOMOUS });
 
 heartbeat("app", { event: "startup" });
