@@ -1,15 +1,43 @@
 /**
- * Cortex Layer 3: Actions (Motor Korteks)
+ * Actions — Action executor for BrainLoop decisions
  *
- * Reasoner'dan gelen kararları execute eder.
- * Her aksiyon tipi için bir handler.
+ * Executes action plans from AI reasoning.
+ * Each action type has a registered handler.
  */
 
-import { type ActionPlan, type ActionType } from "./reasoner.ts";
 import { expectations } from "./expectations.ts";
-import { signalBus } from "./signal-bus.ts";
 
-// ── Types ─────────────────────────────────────────────────────────────────
+// ── Types (moved from cortex/reasoner.ts) ─────────────────────────────────
+
+export type ActionType =
+  | "send_message"        // Telegram'dan kullanıcıya mesaj gönder
+  | "send_whatsapp"       // WhatsApp'tan mesaj gönder
+  | "calculate_route"     // Yol hesapla
+  | "remember"            // Hafızaya kaydet
+  | "create_expectation"  // Yeni beklenti oluştur
+  | "resolve_expectation" // Beklentiyi çöz
+  | "check_whatsapp"      // WhatsApp mesajlarını kontrol et
+  | "morning_briefing"    // Sabah özeti gönder
+  | "evening_summary"     // Akşam özeti gönder
+  | "goal_nudge"          // Hedef hatırlatması gönder
+  | "mood_check"          // Ruh hali kontrolü
+  | "memory_digest"       // Hafıza özeti gönder
+  | "think_and_note"      // Sessiz not al (kullanıcıya göndermeden)
+  | "compound"            // Birden fazla aksiyon (sıralı)
+  | "none";               // Aksiyon gerekmiyor
+
+export interface ActionPlan {
+  /** Birincil aksiyon */
+  action: ActionType;
+  /** Aksiyon parametreleri */
+  params: Record<string, unknown>;
+  /** Açıklama — neden bu karar verildi */
+  reasoning: string;
+  /** Opsiyonel: ek aksiyonlar (compound durumunda) */
+  followUp?: ActionPlan[];
+  /** Aciliyet: immediate | soon | background */
+  urgency: "immediate" | "soon" | "background";
+}
 
 export interface ActionResult {
   success: boolean;
@@ -20,7 +48,7 @@ export interface ActionResult {
 
 type ActionHandler = (params: Record<string, unknown>) => Promise<ActionResult>;
 
-// ── Action Executor ───────────────────────────────────────────────────────
+// ── Action Executor ───────────────────────────────────────────────────
 
 class ActionExecutor {
   private handlers: Map<ActionType, ActionHandler> = new Map();
@@ -39,7 +67,7 @@ class ActionExecutor {
    */
   register(action: ActionType, handler: ActionHandler): void {
     this.handlers.set(action, handler);
-    console.log(`[Cortex:Actions] Handler registered: ${action}`);
+    console.log(`[Actions] Handler registered: ${action}`);
   }
 
   /**
@@ -48,7 +76,7 @@ class ActionExecutor {
   async execute(plan: ActionPlan): Promise<ActionResult> {
     this.executedCount++;
 
-    console.log(`[Cortex:Actions] Executing: ${plan.action} urgency=${plan.urgency} "${plan.reasoning}"`);
+    console.log(`[Actions] Executing: ${plan.action} urgency=${plan.urgency} "${plan.reasoning}"`);
 
     // Compound action — sıralı çalıştır
     if (plan.action === "compound" && plan.followUp) {
@@ -61,11 +89,11 @@ class ActionExecutor {
         results.push(result);
         if (!result.success) {
           if (CRITICAL_ACTIONS.includes(subPlan.action)) {
-            console.error(`[Cortex:Actions] Critical sub-action failed: ${subPlan.action} — aborting compound`);
+            console.error(`[Actions] Critical sub-action failed: ${subPlan.action} — aborting compound`);
             aborted = true;
             break;
           }
-          console.warn(`[Cortex:Actions] Compound sub-action failed: ${subPlan.action}, continuing`);
+          console.warn(`[Actions] Compound sub-action failed: ${subPlan.action}, continuing`);
         }
       }
 
@@ -85,7 +113,7 @@ class ActionExecutor {
     // Normal handler
     const handler = this.handlers.get(plan.action);
     if (!handler) {
-      console.warn(`[Cortex:Actions] No handler for action: ${plan.action}`);
+      console.warn(`[Actions] No handler for action: ${plan.action}`);
       this.failedCount++;
       return {
         success: false,
@@ -96,18 +124,10 @@ class ActionExecutor {
 
     try {
       const result = await handler(plan.params);
-
-      // Signal Bus'a bildir
-      signalBus.push("system_event", "action_executed", {
-        action: plan.action,
-        success: result.success,
-        reasoning: plan.reasoning,
-      });
-
       return result;
     } catch (err) {
       this.failedCount++;
-      console.error(`[Cortex:Actions] Handler error for ${plan.action}:`, err);
+      console.error(`[Actions] Handler error for ${plan.action}:`, err);
       return {
         success: false,
         action: plan.action,

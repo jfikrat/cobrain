@@ -10,8 +10,8 @@ import { initProactiveInfra, stopProactiveInfra } from "./services/proactive.ts"
 import { brainLoop } from "./services/brain-loop.ts";
 import { initScheduler } from "./services/scheduler.ts";
 import { initTaskQueue } from "./services/task-queue.ts";
-import { cortex, actionExecutor, cortexBridge } from "./cortex/index.ts";
-import type { ActionType } from "./cortex/reasoner.ts";
+import { actionExecutor, type ActionType } from "./services/actions.ts";
+import { expectations } from "./services/expectations.ts";
 import {
   heartbeat,
   registerHeartbeatComponent,
@@ -53,12 +53,9 @@ registerHeartbeatComponent("web_server", { required: config.ENABLE_WEB_UI });
 registerHeartbeatComponent("scheduler", { required: config.ENABLE_AUTONOMOUS });
 registerHeartbeatComponent("task_queue", { required: config.ENABLE_AUTONOMOUS });
 registerHeartbeatComponent("brain_loop", { required: config.ENABLE_AUTONOMOUS });
-registerHeartbeatComponent("cortex", { required: config.ENABLE_AUTONOMOUS });
 
 heartbeat("app", { event: "startup" });
 startHeartbeatMonitor();
-
-let cortexHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
 const appHeartbeatInterval = setInterval(() => {
   heartbeat("app", { event: "tick", uptimeSec: Math.round(process.uptime()) });
@@ -116,7 +113,6 @@ if (config.ENABLE_AUTONOMOUS) {
         markReplied(to);
 
         // Create expectation for reply tracking (skip if one already exists for this target)
-        const { expectations } = await import("./cortex/expectations.ts");
         const existing = expectations.pending().find(e => e.target === to && e.type === "whatsapp_reply");
         if (!existing) {
           expectations.create({
@@ -380,105 +376,13 @@ if (config.ENABLE_AUTONOMOUS) {
       }
     });
 
-    // Configure Cortex Bridge — tier-2 questions untuk user feedback
-    cortexBridge.configure({
-      onTier2Question: async (feedback) => {
-        // Tier-2 sorularını sana Telegram'dan sor
-        const { senderName, preview, salience, reasoner } = feedback;
-        const questionText = `
-🤔 <b>WhatsApp - ${senderName}</b> (tier-2 - önem: ${(salience.score * 100).toFixed(0)}%)
+    // Load expectations
+    await expectations.load();
 
-Mesaj: ${preview.slice(0, 150)}
-
-<b>Cortex'in önerisi:</b> ${reasoner.reasoning}
-
-<i>Cevap vermemi istersen haber ver.</i>
-        `.trim();
-
-        try {
-          await bot.api.sendMessage(config.MY_TELEGRAM_ID, questionText, { parse_mode: "HTML" });
-        } catch (err) {
-          console.error(`[CortexBridge] Failed to send tier-2 question to user:`, err);
-        }
-      },
-    });
-
-    // Start Cortex — sinir ağı pipeline
-    await cortex.start({
-      userContextProvider: async (userId) => {
-        // Basit context: kullanıcı bilgisi
-        return `Kullanıcı: Fekrat (Yazılım Geliştirici). Zaman: ${new Date().toLocaleString("tr-TR")}`;
-      },
-      onActionExecuted: async (signal, result) => {
-        console.log(`[Cortex] Action result: ${result.action} success=${result.success} ${result.message || ""}`);
-
-        // Skip actions that already communicate with the user or need no notification
-        const SILENT_ACTIONS: ActionType[] = [
-          "send_message", "send_whatsapp", "none", "compound",
-          "morning_briefing", "evening_summary", "goal_nudge", "mood_check", "memory_digest", "think_and_note",
-        ];
-        if (SILENT_ACTIONS.includes(result.action) || !result.success) return;
-
-        let notification: string | null = null;
-
-        switch (result.action) {
-          case "check_whatsapp": {
-            // Handler already sends Telegram if params.notify was set — skip to avoid duplicates
-            const resultData = result.data as Record<string, unknown> | undefined;
-            if (!resultData?.notified) {
-              const count = resultData?.count ?? 0;
-              const chatJid = (resultData?.chatJid as string) || "";
-              const chatName = chatJid.split("@")[0] || "?";
-              notification = `WhatsApp kontrol (${chatName}): ${count} mesaj bulundu.`;
-            }
-            break;
-          }
-          case "remember": {
-            const preview = (result.message || "").replace(/^Stored memory #\d+:\s*/, "").slice(0, 80);
-            notification = `Hafizama kaydettim: ${preview}`;
-            break;
-          }
-          case "calculate_route": {
-            const data = result.data as Record<string, unknown> | undefined;
-            const from = data?.from || "?";
-            const to = data?.to || "?";
-            notification = `Rota: ${from} \u2192 ${to}`;
-            break;
-          }
-          case "create_expectation": {
-            const ctx = (result.data as Record<string, unknown>)?.expectation as Record<string, unknown> | undefined;
-            const desc = (ctx?.context as string) || result.message || "";
-            notification = `Beklenti olusturdum: ${desc.slice(0, 100)}`;
-            break;
-          }
-          case "resolve_expectation": {
-            const ctx = (result.data as Record<string, unknown>)?.expectation as Record<string, unknown> | undefined;
-            const desc = (ctx?.context as string) || result.message || "";
-            notification = `Beklenti cozuldu: ${desc.slice(0, 100)}`;
-            break;
-          }
-        }
-
-        if (notification) {
-          try {
-            await bot.api.sendMessage(config.MY_TELEGRAM_ID, notification);
-          } catch (err) {
-            console.error(`[Cortex] Action notification failed:`, err);
-          }
-        }
-      },
-      onError: (error, signal) => {
-        console.error(`[Cortex] Error processing ${signal.source}/${signal.type}:`, error.message);
-      },
-    });
-
-    // Cortex heartbeat — periodic stats
-    heartbeat("cortex", { event: "started", ...cortex.stats() });
-    cortexHeartbeatInterval = setInterval(() => {
-      if (cortex.isRunning()) {
-        heartbeat("cortex", cortex.stats());
-      }
-    }, 30_000); // Every 30 seconds
+    // Start periodic expectation cleanup
+    setInterval(() => {
+      expectations.cleanExpired();
+    }, config.CORTEX_EXPECTATION_CLEANUP_INTERVAL_MS);
 
     initProactiveInfra(bot);
     console.log("[Autonomous] Proactive infrastructure enabled");
@@ -522,9 +426,7 @@ async function resolveLocationForCortex(
 const shutdown = async () => {
   console.log("\nKapatılıyor...");
 
-  cortex.stop();
   await brainLoop.stop();
-  if (cortexHeartbeatInterval) clearInterval(cortexHeartbeatInterval);
   stopProjectionScheduler();
 
   if (config.ENABLE_AUTONOMOUS) {

@@ -1,16 +1,12 @@
 /**
- * Cortex: Expectations (Pending Actions / Beklentiler)
+ * Expectations (Pending Actions / Beklentiler)
  *
  * "Ne bekliyorum?" state'i. Bir aksiyon yapıldığında (mesaj gönderildi,
  * araştırma başlatıldı) buraya bir beklenti kaydedilir.
- *
- * Signal Bus'tan gelen sinyaller beklentilerle eşleştirilir.
- * Eşleşme olursa beklenti resolve edilir ve onResolved aksiyonu tetiklenir.
  */
 
 import { join } from "node:path";
 import { config } from "../config.ts";
-import { signalBus, type Signal } from "./signal-bus.ts";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -68,11 +64,11 @@ class ExpectationsManager {
         this.expectations = data.expectations || [];
       }
     } catch (err) {
-      console.warn("[Cortex:Expectations] Failed to load:", err);
+      console.warn("[Expectations] Failed to load:", err);
       this.expectations = [];
     }
     this.loaded = true;
-    console.log(`[Cortex:Expectations] Loaded ${this.pending().length} pending expectations`);
+    console.log(`[Expectations] Loaded ${this.pending().length} pending expectations`);
   }
 
   async save(): Promise<void> {
@@ -87,7 +83,7 @@ class ExpectationsManager {
       const fs = await import("node:fs/promises");
       await fs.rename(tmpPath, DATA_FILE);
     } catch (err) {
-      console.warn("[Cortex:Expectations] Failed to save:", err);
+      console.warn("[Expectations] Failed to save:", err);
     }
   }
 
@@ -117,15 +113,7 @@ class ExpectationsManager {
     this.expectations.push(expectation);
     await this.save();
 
-    console.log(`[Cortex:Expectations] Created: ${expectation.type} target=${expectation.target} "${expectation.context}"`);
-
-    // Signal Bus'a bildir
-    signalBus.push("system_event", "expectation_created", {
-      expectationId: expectation.id,
-      type: expectation.type,
-      target: expectation.target,
-      context: expectation.context,
-    }, { userId: params.userId });
+    console.log(`[Expectations] Created: ${expectation.type} target=${expectation.target} "${expectation.context}"`);
 
     return expectation;
   }
@@ -143,42 +131,9 @@ class ExpectationsManager {
     await this.save();
 
     const duration = Math.round((exp.resolvedAt - exp.createdAt) / 1000);
-    console.log(`[Cortex:Expectations] Resolved: ${exp.type} target=${exp.target} (${duration}s)`);
-
-    // Signal Bus'a bildir
-    signalBus.push("system_event", "expectation_resolved", {
-      expectationId: exp.id,
-      type: exp.type,
-      target: exp.target,
-      context: exp.context,
-      onResolved: exp.onResolved,
-      resolvedData: data,
-      durationSeconds: duration,
-    }, { userId: exp.userId });
+    console.log(`[Expectations] Resolved: ${exp.type} target=${exp.target} (${duration}s)`);
 
     return exp;
-  }
-
-  /**
-   * Sinyal ile eşleşen beklentileri bul
-   */
-  matchSignal(signal: Signal): PendingExpectation[] {
-    return this.pending().filter(exp => {
-      // WhatsApp cevabı beklentisi — contactId eşleşmesi
-      if (exp.type === "whatsapp_reply" && signal.source === "whatsapp_message") {
-        return signal.contactId === exp.target;
-      }
-
-      // Konum varışı beklentisi
-      if (exp.type === "location_arrival" && signal.source === "location_change") {
-        return true; // Salience filter detaylı kontrol yapacak
-      }
-
-      // Genel eşleşme — target ile source/contactId karşılaştır
-      if (signal.contactId === exp.target) return true;
-
-      return false;
-    });
   }
 
   /**
@@ -193,21 +148,12 @@ class ExpectationsManager {
         if (now - exp.createdAt > exp.timeout) {
           exp.status = "expired";
           expired.push(exp);
-
-          // Signal Bus'a bildir
-          signalBus.push("expectation_timeout", "expired", {
-            expectationId: exp.id,
-            type: exp.type,
-            target: exp.target,
-            context: exp.context,
-            waitedMinutes: Math.round((now - exp.createdAt) / 60000),
-          }, { userId: exp.userId });
         }
       }
     }
 
     if (expired.length > 0) {
-      console.log(`[Cortex:Expectations] ${expired.length} expectations expired`);
+      console.log(`[Expectations] ${expired.length} expectations expired`);
       this.save(); // async, fire-and-forget
     }
 
@@ -248,7 +194,7 @@ class ExpectationsManager {
     const removed = before - this.expectations.length;
     if (removed > 0) {
       await this.save();
-      console.log(`[Cortex:Expectations] Pruned ${removed} old entries`);
+      console.log(`[Expectations] Pruned ${removed} old entries`);
     }
     return removed;
   }

@@ -18,16 +18,14 @@ import { getMoodTrackingService, type MoodType } from "./mood-tracking.ts";
 import { getActivityPatternService } from "./activity-patterns.ts";
 import { SmartMemory, type FollowupCandidate } from "../memory/smart-memory.ts";
 import { getSessionState, updateSessionState } from "./session-state.ts";
-import { signalBus } from "../cortex/signal-bus.ts";
-import { actionExecutor } from "../cortex/actions.ts";
-import { expectations } from "../cortex/expectations.ts";
+import { actionExecutor, type ActionPlan, type ActionType } from "./actions.ts";
+import { expectations } from "./expectations.ts";
 import { heartbeat } from "./heartbeat.ts";
 import { whatsappDB } from "./whatsapp-db.ts";
 import { getTaskQueue } from "./task-queue.ts";
-import { withTimeout, geminiBreaker } from "../cortex/utils.ts";
+import { withTimeout, geminiBreaker } from "../utils/ai-utils.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
 import { handleDMMessages, handleWatchedGroupMessages } from "./proactive.ts";
-import type { ActionPlan, ActionType } from "../cortex/reasoner.ts";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -297,18 +295,7 @@ class BrainLoop {
       return;
     }
 
-    // 2. Quick rule-based decisions (no AI)
-    const quickActions = this.quickDecisions(ctx);
-    for (const plan of quickActions) {
-      try {
-        await actionExecutor.execute(plan);
-        if (plan.action !== "none") this.cooldowns.set(plan.action);
-      } catch (err) {
-        console.error(`[BrainLoop] Quick action ${plan.action} failed:`, err);
-      }
-    }
-
-    // 3. AI reasoning (Gemini Flash)
+    // 2. AI reasoning (Gemini Flash)
     try {
       const plan = await this.aiReason(ctx);
       console.log(`[BrainLoop:slowTick] decision=${plan.action}${plan.action !== "none" ? ` reason="${(plan as Record<string, unknown>).reasoning || ""}"` : ""}`);
@@ -320,14 +307,14 @@ class BrainLoop {
       console.error("[BrainLoop] aiReason error:", err);
     }
 
-    // 4. Code review cycle
+    // 3. Code review cycle
     try {
       await this.maybeRunCodeReview(userId);
     } catch (err) {
       console.error("[BrainLoop] maybeRunCodeReview error:", err);
     }
 
-    // 5. Persist state
+    // 4. Persist state
     this.persistState();
   }
 
@@ -412,28 +399,6 @@ class BrainLoop {
           whatsappDB.markNotificationsRead(chatIds);
           for (const id of chatIds) processedIds.add(id);
 
-          // Push to Cortex Signal Bus if proactive did NOT auto-reply
-          const proactiveReplied = result.tier === 1 && result.outboxSuccess === true;
-          if (!proactiveReplied && signalBus.isRunning()) {
-            const senderName = msgs[0]?.sender_name || chatJid.split("@")[0] || "unknown";
-            let conversationHistory: string[] = [];
-            try {
-              const recentMsgs = whatsappDB.getMessages(chatJid, 10);
-              conversationHistory = recentMsgs.map(m => {
-                const who = m.is_from_me ? "Ben" : senderName;
-                const typeTag = m.message_type !== "text" ? `[${m.message_type}] ` : "";
-                return `${who}: ${typeTag}${(m.content || "").slice(0, 150)}`;
-              });
-            } catch { /* WhatsApp DB unavailable */ }
-
-            signalBus.push("whatsapp_message", "dm", {
-              chatJid,
-              senderName,
-              messageCount: msgs.length,
-              preview: msgs.map(m => m.content?.slice(0, 100)).filter(Boolean).join(" | "),
-              conversationHistory,
-            }, { userId, contactId: chatJid });
-          }
         } catch (chatError) {
           console.error(`[BrainLoop] DM chat ${chatJid} error:`, chatError);
         }
@@ -628,66 +593,6 @@ class BrainLoop {
     return ctx;
   }
 
-  // ── Quick Decisions (rule-based, no AI) ────────────────────────────
-
-  private quickDecisions(ctx: ContextData): ActionPlan[] {
-    const plans: ActionPlan[] = [];
-    const quiet = isQuietHours();
-
-    // Overdue reminders
-    for (const overdue of ctx.reminders.overdue) {
-      const overdueMs = Date.now() - new Date(overdue.triggerAt).getTime();
-      const isUrgent = overdueMs > 24 * 60 * 60 * 1000;
-      if (quiet && !isUrgent) continue;
-
-      const key = `overdue:${overdue.title}`;
-      if (!this.cooldowns.isExpired(key)) continue;
-      this.cooldowns.set(key);
-
-      plans.push({
-        action: "send_message",
-        params: { text: `⏰ Kaçırdığın hatırlatıcı: "${overdue.title}"` },
-        reasoning: "overdue_reminder",
-        urgency: "immediate",
-      });
-      break; // One at a time
-    }
-
-    // Approaching reminders (within 5 min)
-    if (!quiet && plans.length === 0) {
-      for (const reminder of ctx.reminders.upcoming) {
-        if (reminder.minutesLeft > 5) continue;
-        const key = `upcoming:${reminder.title}`;
-        if (!this.cooldowns.isExpired(key)) continue;
-        this.cooldowns.set(key);
-
-        plans.push({
-          action: "send_message",
-          params: { text: `⏰ ${reminder.minutesLeft} dakika içinde: "${reminder.title}"` },
-          reasoning: "imminent_reminder",
-          urgency: "immediate",
-        });
-        break;
-      }
-    }
-
-    // Goal deadline today
-    if (!quiet && plans.length === 0) {
-      const todayDeadline = ctx.goals.approaching.find(g => g.daysLeft === 0);
-      if (todayDeadline && this.cooldowns.isExpired(`goal_${todayDeadline.id}`)) {
-        this.cooldowns.set(`goal_${todayDeadline.id}`);
-        plans.push({
-          action: "goal_nudge",
-          params: { message: `🎯 Bugün deadline: "${todayDeadline.title}"` },
-          reasoning: "today_deadline",
-          urgency: "immediate",
-        });
-      }
-    }
-
-    return plans;
-  }
-
   // ── AI Reasoning (Gemini Flash) ────────────────────────────────────
 
   private async aiReason(ctx: ContextData): Promise<ActionPlan> {
@@ -781,7 +686,7 @@ Hafıza takip: ${ctx.memoryFollowups.slice(0, 2).map(m => `"${m.topic.slice(0, 5
 Beklentiler: ${ctx.expectations.slice(0, 3).map(e => `[${e.type}] ${e.target}: ${e.context.slice(0, 50)}`).join(" | ") || "yok"}`.trim();
 
     const knowledgeBlock = knowledge
-      ? `\nBİLGİ TABANI (kişiler, lokasyonlar, rutinler, otomatik cevaplar):\n${knowledge.slice(0, 2000)}`
+      ? `\nBİLGİ TABANI (kişiler, lokasyonlar, rutinler, kurallar, otomatik cevaplar):\n${knowledge}`
       : "";
 
     return `Sen Cobrain AI asistanının otonom karar mekanizmasısın. Periyodik olarak kullanıcının durumunu değerlendiriyorsun.

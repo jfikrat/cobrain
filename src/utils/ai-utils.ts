@@ -1,8 +1,8 @@
 /**
- * Cortex shared utilities
+ * Shared AI utilities
  */
 
-import { CircuitBreaker } from "../utils/circuit-breaker.ts";
+import { CircuitBreaker } from "./circuit-breaker.ts";
 
 /**
  * Race a promise against a timeout. Clears the timer when the promise
@@ -17,7 +17,7 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): 
 }
 
 /**
- * Shared Gemini API circuit breaker — used by both Salience and Reasoner.
+ * Shared Gemini API circuit breaker.
  * Single instance because they hit the same Gemini endpoint.
  *
  * Opens after 3 consecutive failures, cools down for 60s, then probes.

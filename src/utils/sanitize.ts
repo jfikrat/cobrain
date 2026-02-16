@@ -1,5 +1,5 @@
 /**
- * Cortex: Input sanitization for AI prompt injection protection.
+ * Input sanitization for AI prompt injection protection.
  *
  * WhatsApp messages and other external content flow into AI prompts.
  * This module ensures external data is treated as DATA, not instructions.

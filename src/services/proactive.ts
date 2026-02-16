@@ -12,16 +12,15 @@ import { userManager } from "./user-manager.ts";
 import { pruneMemories, think } from "../brain/index.ts";
 import { whatsappDB } from "./whatsapp-db.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
-import { signalBus } from "../cortex/index.ts";
 import { classifyWhatsAppMessage, type TierClassification, type GroupClassification } from "./haiku.ts";
 import type { ScheduledTask, QueuedTask, TaskResult, TaskType } from "../types/autonomous.ts";
 import { addWhatsAppNotification } from "./session-state.ts";
 import { config as appConfig } from "../config.ts";
 import { markReplied, wasRecentlyReplied } from "./reply-dedup.ts";
-import { sanitizeText } from "../cortex/sanitize.ts";
+import { sanitizeText } from "../utils/sanitize.ts";
 import { SmartMemory } from "../memory/smart-memory.ts";
 import { consolidateMemories } from "./memory-consolidation.ts";
-import { expectations } from "../cortex/expectations.ts";
+import { expectations } from "./expectations.ts";
 import { recordInteraction, recordUserActivity } from "./interaction-tracker.ts";
 
 let bot: Bot | null = null;
@@ -458,32 +457,6 @@ export async function checkWhatsAppNotifications(): Promise<void> {
           whatsappDB.markNotificationsRead(chatIds);
           for (const id of chatIds) processedIds.add(id);
 
-          // Only push to Cortex Signal Bus if proactive did NOT already auto-reply.
-          // If proactive replied (tier 1 + outboxSuccess), markReplied() is set and
-          // Cortex would skip anyway — but not pushing avoids unnecessary pipeline work.
-          const proactiveReplied = result.tier === 1 && result.outboxSuccess === true;
-          if (!proactiveReplied && signalBus.isRunning()) {
-            const senderName = msgs[0]?.sender_name || chatJid.split("@")[0] || "unknown";
-
-            // Son 10 mesajı getir — Cortex'e konuşma bağlamı sağla
-            let conversationHistory: string[] = [];
-            try {
-              const recentMsgs = whatsappDB.getMessages(chatJid, 10);
-              conversationHistory = recentMsgs.map(m => {
-                const who = m.is_from_me ? "Ben" : senderName;
-                const typeTag = m.message_type !== "text" ? `[${m.message_type}] ` : "";
-                return `${who}: ${typeTag}${(m.content || "").slice(0, 150)}`;
-              });
-            } catch { /* WhatsApp DB unavailable */ }
-
-            signalBus.push("whatsapp_message", "dm", {
-              chatJid,
-              senderName,
-              messageCount: msgs.length,
-              preview: msgs.map(m => m.content?.slice(0, 100)).filter(Boolean).join(" | "),
-              conversationHistory, // Son 10 mesaj: ["Ben: ...", "Burak: ...", ...]
-            }, { userId, contactId: chatJid });
-          }
         } catch (chatError) {
           console.error(`[Proactive] Error processing DM chat ${chatJid}:`, chatError);
           // This chat's IDs remain in 'processing' — will be recovered on next cycle or startup

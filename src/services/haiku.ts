@@ -5,6 +5,8 @@
  */
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { readFileSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { config } from "../config.ts";
 
 const GEMINI_MODEL = "gemini-3-flash-preview";
@@ -402,6 +404,30 @@ export interface GroupClassification {
 /**
  * Classify WhatsApp message tier using Haiku (~25x cheaper than Opus)
  */
+// ── Knowledge Cache ──────────────────────────────────────────────────
+
+let autoRepliesCache: { content: string; loadedAt: number } | null = null;
+const AUTO_REPLIES_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function getAutoRepliesKnowledge(): string {
+  const now = Date.now();
+  if (autoRepliesCache && now - autoRepliesCache.loadedAt < AUTO_REPLIES_TTL_MS) {
+    return autoRepliesCache.content;
+  }
+
+  const filePath = resolve(config.COBRAIN_BASE_PATH, "knowledge", "auto_replies.md");
+  try {
+    if (existsSync(filePath)) {
+      const content = readFileSync(filePath, "utf-8");
+      autoRepliesCache = { content, loadedAt: now };
+      return content;
+    }
+  } catch { /* ignore read errors */ }
+
+  autoRepliesCache = { content: "", loadedAt: now };
+  return "";
+}
+
 export async function classifyWhatsAppMessage(
   senderName: string,
   messages: string,
@@ -409,16 +435,21 @@ export async function classifyWhatsAppMessage(
   groupName?: string
 ): Promise<TierClassification | GroupClassification> {
   if (context === "dm") {
+    const autoRepliesRules = getAutoRepliesKnowledge();
+    const rulesBlock = autoRepliesRules
+      ? `\nOTOMATİK CEVAP KURALLARI:\n${autoRepliesRules}\n`
+      : "";
+
     const prompt = `WhatsApp DM analizi. "${senderName}" mesaj göndermiş:
 
 ${messages}
-
-Karar ver:
-TIER 1 (otomatik cevapla): Selamlasma, "musait misin?", tesekkur
+${rulesBlock}
+Yukarıdaki kurallara göre karar ver:
+TIER 1 (otomatik cevapla): Selamlasma, "musait misin?", tesekkur, kuralda belirtilen durumlar
 TIER 2 (kullaniciya bildir + öneri): Soru, randevu, önemli konu
 TIER 3 (sadece bildir): Medya, belirsiz, bilinmeyen konu
 
-KURALLAR: Sen Cobrain, Fekrat'ın asistanı. Samimi ama kısa yaz.
+KURALLAR: Sen Cobrain, Fekrat'ın asistanı. Samimi ama kısa yaz. Kişiye göre mesaj tarzını ayarla.
 
 JSON döndür:
 {"tier": 1|2|3, "reason": "kısa", "reply": "tier1 cevap", "suggestedReply": "tier2 öneri"}`;
