@@ -88,6 +88,13 @@ const envSchema = z.object({
   CORTEX_EXPECTATION_CLEANUP_INTERVAL_MS: z.coerce.number().default(60_000),
   CORTEX_MODEL: z.string().default("gemini-3-flash-preview"),
 
+  // v1.4: Sentinel (Haiku background watcher)
+  FF_SENTINEL: z.coerce.boolean().default(true),
+  SENTINEL_MODEL: z.string().default("claude-haiku-4-5-20251001"),
+  SENTINEL_MAX_TURNS: z.coerce.number().default(5),
+  SENTINEL_CONSOLIDATION_THRESHOLD: z.coerce.number().default(170_000),
+  SENTINEL_MAX_WAKES_PER_HOUR: z.coerce.number().default(10),
+
   // v1.2: Vector search
   FF_VECTOR_SEARCH: z.coerce.boolean().default(true),
   VECTOR_WEIGHT: z.coerce.number().default(0.7),

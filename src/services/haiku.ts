@@ -1,12 +1,10 @@
 /**
- * Haiku Service - LLM helper for memory operations & WhatsApp classification
- * Now uses Gemini Flash (was Claude Haiku — no ANTHROPIC_API_KEY available)
- * Cobrain v0.3
+ * Haiku Service - LLM helper for memory operations
+ * Uses Gemini Flash for memory classification, ranking, consolidation
+ * Cobrain v0.5 — WhatsApp classification moved to Sentinel
  */
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
 import { config } from "../config.ts";
 
 const GEMINI_MODEL = "gemini-3-flash-preview";
@@ -385,120 +383,4 @@ Format: KEEP:1|2:sebep`;
   };
 }
 
-// ========== WhatsApp Tier Classification ==========
-
-export interface TierClassification {
-  tier: 1 | 2 | 3;
-  reason: string;
-  reply?: string;
-  suggestedReply?: string;
-}
-
-export interface GroupClassification {
-  shouldReply: boolean;
-  reason: string;
-  reply?: string;
-  notifyUser: string;
-}
-
-/**
- * Classify WhatsApp message tier using Haiku (~25x cheaper than Opus)
- */
-// ── Knowledge Cache ──────────────────────────────────────────────────
-
-let autoRepliesCache: { content: string; loadedAt: number } | null = null;
-const AUTO_REPLIES_TTL_MS = 60 * 60 * 1000; // 1 hour
-
-function getAutoRepliesKnowledge(): string {
-  const now = Date.now();
-  if (autoRepliesCache && now - autoRepliesCache.loadedAt < AUTO_REPLIES_TTL_MS) {
-    return autoRepliesCache.content;
-  }
-
-  const filePath = resolve(config.COBRAIN_BASE_PATH, "knowledge", "auto_replies.md");
-  try {
-    if (existsSync(filePath)) {
-      const content = readFileSync(filePath, "utf-8");
-      autoRepliesCache = { content, loadedAt: now };
-      return content;
-    }
-  } catch { /* ignore read errors */ }
-
-  autoRepliesCache = { content: "", loadedAt: now };
-  return "";
-}
-
-export async function classifyWhatsAppMessage(
-  senderName: string,
-  messages: string,
-  context: "dm" | "group",
-  groupName?: string
-): Promise<TierClassification | GroupClassification> {
-  if (context === "dm") {
-    const autoRepliesRules = getAutoRepliesKnowledge();
-    const rulesBlock = autoRepliesRules
-      ? `\nOTOMATİK CEVAP KURALLARI:\n${autoRepliesRules}\n`
-      : "";
-
-    const prompt = `WhatsApp DM analizi. "${senderName}" mesaj göndermiş:
-
-${messages}
-${rulesBlock}
-Yukarıdaki kurallara göre karar ver:
-TIER 1 (otomatik cevapla): Selamlasma, "musait misin?", tesekkur, kuralda belirtilen durumlar
-TIER 2 (kullaniciya bildir + öneri): Soru, randevu, önemli konu
-TIER 3 (sadece bildir): Medya, belirsiz, bilinmeyen konu
-
-KURALLAR: Sen Cobrain, Fekrat'ın asistanı. Samimi ama kısa yaz. Kişiye göre mesaj tarzını ayarla.
-
-JSON döndür:
-{"tier": 1|2|3, "reason": "kısa", "reply": "tier1 cevap", "suggestedReply": "tier2 öneri"}`;
-
-    const systemPrompt = "WhatsApp mesaj sınıflandırıcısın. SADECE geçerli JSON döndür, başka bir şey yazma.";
-    const raw = await complete(prompt, systemPrompt, 300);
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return { tier: 3, reason: "parse_error" };
-    }
-    try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        tier: [1, 2, 3].includes(parsed.tier) ? parsed.tier : 3,
-        reason: String(parsed.reason || ""),
-        reply: parsed.reply ? String(parsed.reply) : undefined,
-        suggestedReply: parsed.suggestedReply ? String(parsed.suggestedReply) : undefined,
-      };
-    } catch {
-      return { tier: 3, reason: "json_parse_error" };
-    }
-  } else {
-    const prompt = `WhatsApp grup analizi. "${groupName}" grubunda mesajlar:
-
-${messages}
-
-Fekrat'a yönelik mi? Cevap vermeli mi?
-
-KURALLAR: Aile grubu, samimi ol. Emin değilsen CEVAP VERME.
-
-JSON döndür:
-{"shouldReply": true/false, "reason": "kısa", "reply": "cevap", "notifyUser": "Telegram bildirimi"}`;
-
-    const systemPrompt = "WhatsApp grup mesaj analizcisisin. SADECE geçerli JSON döndür.";
-    const raw = await complete(prompt, systemPrompt, 300);
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return { shouldReply: false, reason: "parse_error", notifyUser: "" };
-    }
-    try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return {
-        shouldReply: Boolean(parsed.shouldReply),
-        reason: String(parsed.reason || ""),
-        reply: parsed.reply ? String(parsed.reply) : undefined,
-        notifyUser: String(parsed.notifyUser || ""),
-      };
-    } catch {
-      return { shouldReply: false, reason: "json_parse_error", notifyUser: "" };
-    }
-  }
-}
+// WhatsApp classification removed — now handled by Sentinel (Haiku via Agent SDK)

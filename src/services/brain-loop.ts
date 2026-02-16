@@ -1,153 +1,40 @@
 /**
- * BrainLoop — Unified autonomous loop
- * Replaces: living-assistant.ts + cortex/heartbeat.ts + autonomous-loop.ts
+ * BrainLoop — Unified autonomous loop (Sentinel edition)
  *
  * Architecture:
- * - fastTick (30s): WhatsApp poll + due reminders + cooldown cleanup (no AI)
- * - slowTick (5min): context gathering + knowledge + Gemini Flash reasoning + actions
+ * - fastTick (30s): WhatsApp poll → sentinel events, due reminders → sentinel events
+ * - slowTick (5min): periodic check → sentinel event, code review cycle
+ *
+ * AI reasoning is now handled entirely by the Sentinel (Haiku).
+ * Gemini Flash and ActionExecutor have been removed.
  */
 
-import { readdirSync, readFileSync, existsSync } from "node:fs";
-import { resolve, join } from "node:path";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { resolve } from "node:path";
 import { Bot } from "grammy";
 import { config } from "../config.ts";
 import { userManager } from "./user-manager.ts";
 import { getGoalsService } from "./goals.ts";
-import { getMoodTrackingService, type MoodType } from "./mood-tracking.ts";
-import { getActivityPatternService } from "./activity-patterns.ts";
-import { SmartMemory, type FollowupCandidate } from "../memory/smart-memory.ts";
+import { SmartMemory } from "../memory/smart-memory.ts";
 import { getSessionState, updateSessionState } from "./session-state.ts";
-import { actionExecutor, type ActionPlan, type ActionType } from "./actions.ts";
 import { expectations } from "./expectations.ts";
 import { heartbeat } from "./heartbeat.ts";
 import { whatsappDB } from "./whatsapp-db.ts";
 import { getTaskQueue } from "./task-queue.ts";
-import { withTimeout, geminiBreaker } from "../utils/ai-utils.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
-import { handleDMMessages, handleWatchedGroupMessages } from "./proactive.ts";
-
-// ── Types ────────────────────────────────────────────────────────────────
-
-export interface ContextData {
-  time: {
-    hour: number;
-    dayOfWeek: number;
-    dayName: string;
-    timeOfDay: "morning" | "afternoon" | "evening" | "night";
-    isWeekend: boolean;
-  };
-  goals: {
-    active: number;
-    approaching: Array<{ id: number; title: string; dueDate: string; daysLeft: number }>;
-    needingFollowup: Array<{ id: number; title: string; progress: number; daysSinceFollowup: number }>;
-  };
-  reminders: {
-    pending: number;
-    upcoming: Array<{ title: string; triggerAt: string; minutesLeft: number }>;
-    overdue: Array<{ title: string; triggerAt: string }>;
-  };
-  lastInteraction: {
-    minutesAgo: number;
-    wasRecent: boolean;
-  };
-  mood: {
-    current: MoodType | null;
-    trend: "improving" | "stable" | "declining";
-    averageEnergy: number;
-  };
-  patterns: {
-    isOptimalTime: boolean;
-    currentSlotScore: number;
-  };
-  memoryFollowups: FollowupCandidate[];
-  expectations: Array<{ type: string; target: string; context: string }>;
-}
-
-/** Result shape from handleDMMessages / handleWatchedGroupMessages */
-interface WhatsAppResult {
-  tier?: number;
-  outboxSuccess?: boolean;
-  model: string;
-  error?: string;
-}
-
-// ── Cooldown Manager ─────────────────────────────────────────────────────
-
-const COOLDOWN_DEFAULTS: Record<string, number> = {
-  morning_briefing: 23 * 60 * 60 * 1000,
-  evening_summary: 23 * 60 * 60 * 1000,
-  goal_nudge: 47 * 60 * 60 * 1000,
-  mood_check: 4 * 60 * 60 * 1000,
-  memory_digest: 6 * 24 * 60 * 60 * 1000,
-  inactivity_nudge: 3 * 60 * 60 * 1000,
-  goal_followup: 24 * 60 * 60 * 1000,
-  code_review: 23 * 60 * 60 * 1000,
-  general_notification: 5 * 60 * 1000,
-};
-
-class CooldownManager {
-  private cooldowns = new Map<string, number>();
-
-  isExpired(key: string): boolean {
-    const last = this.cooldowns.get(key);
-    if (!last) return true;
-    // Use the registered TTL, or extract base key for lookup
-    const baseKey = key.includes(":") ? key.split(":")[0]! : key;
-    const ttl = COOLDOWN_DEFAULTS[key] ?? COOLDOWN_DEFAULTS[baseKey] ?? COOLDOWN_DEFAULTS.general_notification!;
-    return Date.now() - last >= ttl;
-  }
-
-  set(key: string): void {
-    this.cooldowns.set(key, Date.now());
-  }
-
-  restore(cooldowns: Record<string, { lastSent: number; type: string }>): void {
-    for (const [key, entry] of Object.entries(cooldowns)) {
-      this.cooldowns.set(key, entry.lastSent);
-    }
-  }
-
-  serialize(): Record<string, { lastSent: number; type: string }> {
-    const result: Record<string, { lastSent: number; type: string }> = {};
-    for (const [key, timestamp] of this.cooldowns) {
-      result[key] = { lastSent: timestamp, type: key };
-    }
-    return result;
-  }
-
-  cleanup(): void {
-    const now = Date.now();
-    for (const [key, timestamp] of this.cooldowns) {
-      const baseKey = key.includes(":") ? key.split(":")[0]! : key;
-      const ttl = COOLDOWN_DEFAULTS[key] ?? COOLDOWN_DEFAULTS[baseKey] ?? COOLDOWN_DEFAULTS.general_notification!;
-      if (now - timestamp > ttl * 2) {
-        this.cooldowns.delete(key);
-      }
-    }
-  }
-
-  get size(): number {
-    return this.cooldowns.size;
-  }
-}
+import type { Sentinel } from "../sentinel/sentinel.ts";
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-const QUIET_HOURS = { start: 23, end: 8 };
 const FAST_TICK_MS = 30_000;     // 30 seconds
 const SLOW_TICK_MS = 300_000;    // 5 minutes
-const KNOWLEDGE_DIR = "knowledge";
-const KNOWLEDGE_TTL_MS = 60 * 60 * 1000; // 1 hour cache
 
 const CODE_REVIEW_FILES = [
   "src/agent/chat.ts",
   "src/services/brain-loop.ts",
   "src/brain/index.ts",
   "src/memory/smart-memory.ts",
-  "src/services/proactive.ts",
+  "src/sentinel/sentinel.ts",
   "src/channels/telegram.ts",
-  "src/services/whatsapp.ts",
   "src/agent/prompts.ts",
   "src/brain/router-lite.ts",
   "src/brain/event-store.ts",
@@ -160,80 +47,21 @@ const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const HAIKU_MODEL = "claude-haiku-4-5-20250121";
 const PROJECT_ROOT = resolve(import.meta.dir, "../..");
 
-// ── Knowledge Cache ──────────────────────────────────────────────────────
-
-let knowledgeCache: { content: string; loadedAt: number } | null = null;
-
-function getKnowledge(): string {
-  const now = Date.now();
-  if (knowledgeCache && now - knowledgeCache.loadedAt < KNOWLEDGE_TTL_MS) {
-    return knowledgeCache.content;
-  }
-
-  const knowledgePath = resolve(config.COBRAIN_BASE_PATH, KNOWLEDGE_DIR);
-
-  try {
-    if (!existsSync(knowledgePath)) {
-      knowledgeCache = { content: "", loadedAt: now };
-      return "";
-    }
-
-    const files = readdirSync(knowledgePath).filter(f => f.endsWith(".md"));
-    const parts: string[] = [];
-
-    for (const file of files) {
-      try {
-        const content = readFileSync(join(knowledgePath, file), "utf-8");
-        parts.push(`## ${file.replace(".md", "")}\n${content.trim()}`);
-      } catch {
-        // Skip unreadable files
-      }
-    }
-
-    const combined = parts.join("\n\n");
-    knowledgeCache = { content: combined, loadedAt: now };
-    return combined;
-  } catch (err) {
-    console.warn("[BrainLoop] Knowledge load failed:", err);
-    knowledgeCache = { content: "", loadedAt: now };
-    return "";
-  }
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────
-
-function isQuietHours(): boolean {
-  const hour = new Date().getHours();
-  return hour >= QUIET_HOURS.start || hour < QUIET_HOURS.end;
-}
-
-function getTimeOfDay(hour: number): "morning" | "afternoon" | "evening" | "night" {
-  if (hour >= 6 && hour < 12) return "morning";
-  if (hour >= 12 && hour < 17) return "afternoon";
-  if (hour >= 17 && hour < 22) return "evening";
-  return "night";
-}
-
 // ── BrainLoop Class ──────────────────────────────────────────────────────
 
 class BrainLoop {
   private bot: Bot | null = null;
+  private sentinel: Sentinel | null = null;
   private fastIntervalId: ReturnType<typeof setInterval> | null = null;
   private slowIntervalId: ReturnType<typeof setInterval> | null = null;
-  private cooldowns = new CooldownManager();
-  private geminiModel;
   private codeReviewIndex = 0;
   private lastCodeReviewDate: string | null = null;
 
-  constructor() {
-    const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
-    this.geminiModel = genAI.getGenerativeModel({ model: config.CORTEX_MODEL });
-  }
-
   // ── Lifecycle ────────────────────────────────────────────────────────
 
-  start(botInstance: Bot): void {
+  start(botInstance: Bot, sentinel: Sentinel): void {
     this.bot = botInstance;
+    this.sentinel = sentinel;
     this.restoreState();
 
     this.fastIntervalId = setInterval(() => {
@@ -260,7 +88,7 @@ class BrainLoop {
     console.log("[BrainLoop] Stopped");
   }
 
-  // ── Fast Tick (30s, no AI) ─────────────────────────────────────────
+  // ── Fast Tick (30s) ─────────────────────────────────────────────────
 
   private async fastTick(): Promise<void> {
     heartbeat("brain_loop", { event: "fast_tick" });
@@ -276,49 +104,37 @@ class BrainLoop {
     } catch (err) {
       console.error("[BrainLoop] checkDueReminders error:", err);
     }
-
-    this.cooldowns.cleanup();
   }
 
-  // ── Slow Tick (5min, with AI) ──────────────────────────────────────
+  // ── Slow Tick (5min) ────────────────────────────────────────────────
 
   private async slowTick(): Promise<void> {
     heartbeat("brain_loop", { event: "slow_tick" });
-    const userId = config.MY_TELEGRAM_ID;
 
-    // 1. Gather context
-    let ctx: ContextData;
-    try {
-      ctx = await this.gatherContext(userId);
-    } catch (err) {
-      console.error("[BrainLoop] gatherContext error:", err);
-      return;
-    }
-
-    // 2. AI reasoning (Gemini Flash)
-    try {
-      const plan = await this.aiReason(ctx);
-      console.log(`[BrainLoop:slowTick] decision=${plan.action}${plan.action !== "none" ? ` reason="${(plan as Record<string, unknown>).reasoning || ""}"` : ""}`);
-      if (plan.action !== "none") {
-        await actionExecutor.execute(plan);
-        this.cooldowns.set(plan.action);
+    // Periodic check via sentinel
+    if (this.sentinel) {
+      try {
+        await this.sentinel.feedEvent({
+          type: "periodic_check",
+          payload: {},
+          timestamp: Date.now(),
+        });
+      } catch (err) {
+        console.error("[BrainLoop] sentinel periodic_check error:", err);
       }
-    } catch (err) {
-      console.error("[BrainLoop] aiReason error:", err);
     }
 
-    // 3. Code review cycle
+    // Code review cycle (independent of sentinel)
     try {
-      await this.maybeRunCodeReview(userId);
+      await this.maybeRunCodeReview(config.MY_TELEGRAM_ID);
     } catch (err) {
       console.error("[BrainLoop] maybeRunCodeReview error:", err);
     }
 
-    // 4. Persist state
     this.persistState();
   }
 
-  // ── WhatsApp Polling ───────────────────────────────────────────────
+  // ── WhatsApp Polling → Sentinel Events ──────────────────────────────
 
   private async pollWhatsApp(): Promise<void> {
     if (!this.bot || !whatsappDB.isAvailable()) return;
@@ -383,8 +199,8 @@ class BrainLoop {
     const dms = notifications.filter(n => !n.is_group);
     const groupMsgs = notifications.filter(n => n.is_group);
 
-    // ── Process DMs ──────────────────────────────────────────────────
-    if (dms.length > 0) {
+    // ── Feed DMs to Sentinel ──────────────────────────────────────────
+    if (dms.length > 0 && this.sentinel) {
       const bySender = new Map<string, typeof dms>();
       for (const notif of dms) {
         const key = notif.chat_jid;
@@ -394,19 +210,31 @@ class BrainLoop {
 
       for (const [chatJid, msgs] of bySender) {
         try {
-          const result: WhatsAppResult = await handleDMMessages(msgs, chatJid, userId, config.WHATSAPP_MAX_REPLY_LENGTH);
+          await this.sentinel.feedEvent({
+            type: "whatsapp_dm",
+            payload: {
+              chatJid,
+              senderName: msgs[0]!.sender_name || chatJid.split("@")[0] || "?",
+              messages: msgs.map(m => ({
+                content: m.content,
+                message_type: m.message_type,
+                sender_name: m.sender_name,
+              })),
+              isGroup: false,
+            },
+            timestamp: Date.now(),
+          });
           const chatIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(chatIds);
           for (const id of chatIds) processedIds.add(id);
-
         } catch (chatError) {
           console.error(`[BrainLoop] DM chat ${chatJid} error:`, chatError);
         }
       }
     }
 
-    // ── Process Group Messages ───────────────────────────────────────
-    if (groupMsgs.length > 0) {
+    // ── Feed Group Messages to Sentinel ───────────────────────────────
+    if (groupMsgs.length > 0 && this.sentinel) {
       const byGroup = new Map<string, typeof groupMsgs>();
       for (const notif of groupMsgs) {
         const key = notif.chat_jid;
@@ -417,7 +245,21 @@ class BrainLoop {
       for (const [groupJid, msgs] of byGroup) {
         try {
           const replyAllowed = allowedGroupJids.length > 0 && allowedGroupJids.includes(groupJid);
-          await handleWatchedGroupMessages(msgs, userId, replyAllowed, config.WHATSAPP_MAX_REPLY_LENGTH);
+          await this.sentinel.feedEvent({
+            type: "whatsapp_group",
+            payload: {
+              chatJid: groupJid,
+              groupName: msgs[0]!.sender_name?.split(" @ ")[1] || groupJid,
+              messages: msgs.map(m => ({
+                content: m.content,
+                message_type: m.message_type,
+                sender_name: m.sender_name,
+              })),
+              isGroup: true,
+              replyAllowed,
+            },
+            timestamp: Date.now(),
+          });
           const groupIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(groupIds);
           for (const id of groupIds) processedIds.add(id);
@@ -435,11 +277,10 @@ class BrainLoop {
     });
   }
 
-  // ── Due Reminders ──────────────────────────────────────────────────
+  // ── Due Reminders → Sentinel Events ──────────────────────────────────
 
   private async checkDueReminders(): Promise<void> {
     const userId = config.MY_TELEGRAM_ID;
-    const taskQueue = getTaskQueue();
 
     try {
       const db = await userManager.getUserDb(userId);
@@ -447,275 +288,31 @@ class BrainLoop {
       const dueReminders = goalsService.getDueReminders();
 
       for (const reminder of dueReminders) {
-        taskQueue.enqueue(
-          userId,
-          "reminder",
-          { reminderId: reminder.id, title: reminder.title, message: reminder.message },
-          5,
-          `reminder:${reminder.id}`
-        );
+        if (this.sentinel) {
+          await this.sentinel.feedEvent({
+            type: "reminder_due",
+            payload: {
+              reminderId: reminder.id,
+              title: reminder.title,
+              message: reminder.message,
+            },
+            timestamp: Date.now(),
+          });
+        } else {
+          // Fallback: enqueue to task queue
+          const taskQueue = getTaskQueue();
+          taskQueue.enqueue(
+            userId,
+            "reminder",
+            { reminderId: reminder.id, title: reminder.title, message: reminder.message },
+            5,
+            `reminder:${reminder.id}`,
+          );
+        }
       }
     } catch (err) {
       console.error("[BrainLoop] checkDueReminders error:", err);
     }
-  }
-
-  // ── Context Gathering ──────────────────────────────────────────────
-
-  private async gatherContext(userId: number): Promise<ContextData> {
-    const now = new Date();
-    const hour = now.getHours();
-    const dayOfWeek = now.getDay();
-    const dayNames = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
-
-    const ctx: ContextData = {
-      time: {
-        hour,
-        dayOfWeek,
-        dayName: dayNames[dayOfWeek]!,
-        timeOfDay: getTimeOfDay(hour),
-        isWeekend: [0, 6].includes(dayOfWeek),
-      },
-      goals: { active: 0, approaching: [], needingFollowup: [] },
-      reminders: { pending: 0, upcoming: [], overdue: [] },
-      lastInteraction: { minutesAgo: -1, wasRecent: false },
-      mood: { current: null, trend: "stable", averageEnergy: 3 },
-      patterns: { isOptimalTime: false, currentSlotScore: 0 },
-      memoryFollowups: [],
-      expectations: [],
-    };
-
-    // Goals & reminders
-    try {
-      const db = await userManager.getUserDb(userId);
-      const goalsService = await getGoalsService(db, userId);
-      const activeGoals = goalsService.getActiveGoals();
-      const pendingReminders = goalsService.getPendingReminders();
-
-      ctx.goals.active = activeGoals.length;
-      ctx.goals.approaching = activeGoals
-        .filter(g => g.dueDate)
-        .map(g => {
-          const dueDate = new Date(g.dueDate!);
-          const daysLeft = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          return { id: g.id, title: g.title, dueDate: g.dueDate!, daysLeft };
-        })
-        .filter(g => g.daysLeft >= 0 && g.daysLeft <= 3)
-        .sort((a, b) => a.daysLeft - b.daysLeft);
-
-      ctx.goals.needingFollowup = goalsService.getGoalsNeedingFollowup()
-        .filter(g => this.cooldowns.isExpired(`goal_${g.id}`))
-        .map(g => ({
-          id: g.id,
-          title: g.title,
-          progress: Math.round(g.progress * 100),
-          daysSinceFollowup: goalsService.getDaysSinceFollowup(g.id) ?? 0,
-        }));
-
-      ctx.reminders.pending = pendingReminders.length;
-      ctx.reminders.upcoming = pendingReminders
-        .map(r => {
-          const triggerAt = new Date(r.triggerAt);
-          const minutesLeft = Math.ceil((triggerAt.getTime() - now.getTime()) / (1000 * 60));
-          return { title: r.title, triggerAt: r.triggerAt, minutesLeft };
-        })
-        .filter(r => r.minutesLeft > 0 && r.minutesLeft <= 30)
-        .sort((a, b) => a.minutesLeft - b.minutesLeft);
-
-      ctx.reminders.overdue = pendingReminders
-        .filter(r => new Date(r.triggerAt) < now)
-        .map(r => ({ title: r.title, triggerAt: r.triggerAt }));
-    } catch (err) {
-      console.warn("[BrainLoop] Goals/reminders context failed:", err);
-    }
-
-    // Last interaction (from session state)
-    try {
-      const state = getSessionState(userId);
-      const minutesAgo = state.lastInteractionTime > 0
-        ? Math.floor((Date.now() - state.lastInteractionTime) / (1000 * 60))
-        : -1;
-      ctx.lastInteraction = { minutesAgo, wasRecent: minutesAgo >= 0 && minutesAgo < 30 };
-    } catch (err) {
-      console.warn("[BrainLoop] Last interaction context failed:", err);
-    }
-
-    // Mood
-    try {
-      const moodService = await getMoodTrackingService(userId);
-      const currentMood = moodService.getCurrentMood();
-      const moodTrend = moodService.getMoodTrend(7);
-      ctx.mood = {
-        current: currentMood?.mood ?? null,
-        trend: moodTrend.direction,
-        averageEnergy: moodTrend.averageEnergy,
-      };
-    } catch (err) {
-      console.warn("[BrainLoop] Mood context failed:", err);
-    }
-
-    // Activity patterns
-    try {
-      const patternService = await getActivityPatternService(userId);
-      ctx.patterns = {
-        isOptimalTime: patternService.shouldNotifyNow(),
-        currentSlotScore: patternService.getCurrentSlotScore(),
-      };
-    } catch (err) {
-      console.warn("[BrainLoop] Patterns context failed:", err);
-    }
-
-    // Memory follow-ups
-    if (this.cooldowns.isExpired("memory_digest")) {
-      let memory: SmartMemory | null = null;
-      try {
-        const userFolder = userManager.getUserFolder(userId);
-        memory = new SmartMemory(userFolder, userId);
-        ctx.memoryFollowups = memory.findFollowupOpportunities(14);
-      } catch (err) {
-        console.warn("[BrainLoop] Memory followup context failed:", err);
-      } finally {
-        try { memory?.close(); } catch { /* ignore close errors */ }
-      }
-    }
-
-    // Pending expectations
-    try {
-      ctx.expectations = expectations.pending().map(e => ({
-        type: e.type,
-        target: e.target || "",
-        context: e.context || "",
-      }));
-    } catch (err) {
-      console.warn("[BrainLoop] Expectations context failed:", err);
-    }
-
-    return ctx;
-  }
-
-  // ── AI Reasoning (Gemini Flash) ────────────────────────────────────
-
-  private async aiReason(ctx: ContextData): Promise<ActionPlan> {
-    const noAction: ActionPlan = { action: "none", params: {}, reasoning: "", urgency: "background" };
-
-    if (!config.GEMINI_API_KEY) {
-      noAction.reasoning = "no_gemini_key";
-      return noAction;
-    }
-
-    // Don't disturb at night
-    if (ctx.time.timeOfDay === "night" && ctx.time.hour >= 23) {
-      noAction.reasoning = "quiet_hours";
-      return noAction;
-    }
-
-    // Don't disturb if recently active
-    if (ctx.lastInteraction.wasRecent) {
-      noAction.reasoning = "recently_active";
-      return noAction;
-    }
-
-    const knowledge = getKnowledge();
-    const prompt = this.buildAIPrompt(ctx, knowledge);
-
-    try {
-      const result = await geminiBreaker.execute(() =>
-        withTimeout(
-          this.geminiModel.generateContent(prompt),
-          config.CORTEX_AI_TIMEOUT_MS,
-          "BrainLoop AI reasoning",
-        ),
-      );
-      const text = result.response.text().trim();
-
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        return { action: "none", params: {}, reasoning: "no_json_in_response", urgency: "background" };
-      }
-
-      const raw = JSON.parse(jsonMatch[0]);
-
-      const VALID_ACTIONS: ActionType[] = [
-        "send_message", "send_whatsapp", "calculate_route", "remember",
-        "create_expectation", "resolve_expectation", "check_whatsapp",
-        "morning_briefing", "evening_summary", "goal_nudge",
-        "mood_check", "memory_digest", "think_and_note",
-        "compound", "none",
-      ];
-      const VALID_URGENCIES: ActionPlan["urgency"][] = ["immediate", "soon", "background"];
-
-      if (!VALID_ACTIONS.includes(raw.action)) {
-        console.warn(`[BrainLoop] Invalid AI action "${raw.action}", defaulting to none`);
-        return { action: "none", params: {}, reasoning: `invalid_action: ${raw.action}`, urgency: "background" };
-      }
-
-      const plan: ActionPlan = {
-        action: raw.action as ActionType,
-        params: raw.params && typeof raw.params === "object" ? raw.params : {},
-        reasoning: typeof raw.reasoning === "string" ? raw.reasoning : "No reasoning",
-        urgency: VALID_URGENCIES.includes(raw.urgency) ? raw.urgency : "background",
-        ...(raw.followUp ? { followUp: raw.followUp } : {}),
-      };
-
-      console.log(`[BrainLoop] AI decision: action=${plan.action} urgency=${plan.urgency} "${plan.reasoning}"`);
-      return plan;
-    } catch (err) {
-      console.warn("[BrainLoop] AI reasoning failed:", err);
-      return { action: "none", params: {}, reasoning: "ai_error", urgency: "background" };
-    }
-  }
-
-  // ── AI Prompt Builder ──────────────────────────────────────────────
-
-  private buildAIPrompt(ctx: ContextData, knowledge: string): string {
-    const moodLabels: Record<string, string> = {
-      great: "harika", good: "iyi", neutral: "normal", low: "düşük", bad: "kötü",
-    };
-
-    const contextSummary = `Şu an: ${ctx.time.dayName}, saat ${ctx.time.hour}:00 (${ctx.time.timeOfDay})
-Hafta sonu: ${ctx.time.isWeekend ? "evet" : "hayır"}
-Son etkileşim: ${ctx.lastInteraction.minutesAgo >= 0 ? `${ctx.lastInteraction.minutesAgo} dakika önce` : "bilinmiyor"}
-Aktif hedef: ${ctx.goals.active}
-Yaklaşan deadline: ${ctx.goals.approaching.map(g => `"${g.title}" (${g.daysLeft} gün)`).join(", ") || "yok"}
-Takip bekleyen: ${ctx.goals.needingFollowup.map(g => `"${g.title}" (%${g.progress}, ${g.daysSinceFollowup} gün)`).join(", ") || "yok"}
-Bekleyen hatırlatıcı: ${ctx.reminders.pending}
-Yaklaşan (30dk): ${ctx.reminders.upcoming.map(r => `"${r.title}" (${r.minutesLeft}dk)`).join(", ") || "yok"}
-Ruh hali: ${ctx.mood.current ? moodLabels[ctx.mood.current] || ctx.mood.current : "bilinmiyor"} (trend: ${ctx.mood.trend}, enerji: ${ctx.mood.averageEnergy.toFixed(1)}/5)
-Optimal zaman: ${ctx.patterns.isOptimalTime ? "evet" : "hayır"} (skor: ${(ctx.patterns.currentSlotScore * 100).toFixed(0)}%)
-Hafıza takip: ${ctx.memoryFollowups.slice(0, 2).map(m => `"${m.topic.slice(0, 50)}" (${m.daysSince}g)`).join(", ") || "yok"}
-Beklentiler: ${ctx.expectations.slice(0, 3).map(e => `[${e.type}] ${e.target}: ${e.context.slice(0, 50)}`).join(" | ") || "yok"}`.trim();
-
-    const knowledgeBlock = knowledge
-      ? `\nBİLGİ TABANI (kişiler, lokasyonlar, rutinler, kurallar, otomatik cevaplar):\n${knowledge}`
-      : "";
-
-    return `Sen Cobrain AI asistanının otonom karar mekanizmasısın. Periyodik olarak kullanıcının durumunu değerlendiriyorsun.
-
-BAĞLAM:
-${contextSummary}
-${knowledgeBlock}
-
-MEVCUT AKSİYONLAR:
-- send_message: Telegram'dan kullanıcıya bildir. Params: {text: "mesaj"}
-- morning_briefing: Sabah özeti. Params: {message: "özet"}
-- evening_summary: Akşam özeti. Params: {message: "özet"}
-- goal_nudge: Hedef hatırlatması. Params: {message: "mesaj"}
-- mood_check: Ruh hali kontrolü. Params: {message: "mesaj"}
-- memory_digest: Hafıza özeti. Params: {message: "özet"}
-- remember: Hafızaya kaydet. Params: {content: "...", importance?: 0-1}
-- think_and_note: Sessiz not. Params: {content: "not"}
-- none: Aksiyon gerekmiyor
-
-KURALLAR:
-1. Gereksiz bildirim GÖNDERME. Çoğu zaman "none" doğru cevaptır.
-2. Sabah (8-10) kısa özet, akşam (20-22) günü değerlendirme uygun olabilir.
-3. Hedef takibi için samimi ama kısa ol.
-4. Mood düşükse nazik ol, zorlama.
-5. Optimal zaman değilse priority düşür.
-6. Kısa, doğal, samimi mesajlar yaz — makine gibi özet değil, arkadaş gibi check-in.
-
-SADECE JSON döndür:
-{"action": "...", "params": {...}, "reasoning": "kısa açıklama", "urgency": "immediate|soon|background"}`;
   }
 
   // ── Code Review Cycle ──────────────────────────────────────────────
@@ -727,7 +324,6 @@ SADECE JSON döndür:
 
     if (hour !== 14) return;
     if (this.lastCodeReviewDate === today) return;
-    if (!this.cooldowns.isExpired("code_review")) return;
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return;
@@ -735,7 +331,6 @@ SADECE JSON döndür:
     const filePath = CODE_REVIEW_FILES[this.codeReviewIndex % CODE_REVIEW_FILES.length]!;
     this.codeReviewIndex++;
     this.lastCodeReviewDate = today;
-    this.cooldowns.set("code_review");
 
     const fullPath = resolve(PROJECT_ROOT, filePath);
 
@@ -818,7 +413,7 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
         const bugMsg = highPriorityBugs.map(b => `- ${b}`).join("\n");
         await this.bot.api.sendMessage(
           userId,
-          `🐛 Code review'da yüksek öncelikli bug buldum:\n${bugMsg}\n\nDetay: recall("code-obs") ile bakabilirsin.`
+          `Code review'da yüksek öncelikli bug buldum:\n${bugMsg}\n\nDetay: recall("code-obs") ile bakabilirsin.`,
         );
       }
     } catch (err) {
@@ -833,8 +428,7 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
       const state = getSessionState(config.MY_TELEGRAM_ID);
       this.lastCodeReviewDate = state.lastCodeReviewDate;
       this.codeReviewIndex = state.codeReviewIndex;
-      this.cooldowns.restore(state.cooldowns);
-      console.log(`[BrainLoop] State restored: codeReviewIdx=${this.codeReviewIndex}, cooldowns=${this.cooldowns.size}`);
+      console.log(`[BrainLoop] State restored: codeReviewIdx=${this.codeReviewIndex}`);
     } catch (err) {
       console.warn("[BrainLoop] State restore failed:", err);
     }
@@ -845,7 +439,6 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
       updateSessionState(config.MY_TELEGRAM_ID, {
         codeReviewIndex: this.codeReviewIndex,
         lastCodeReviewDate: this.lastCodeReviewDate,
-        cooldowns: this.cooldowns.serialize(),
       });
     } catch (err) {
       console.warn("[BrainLoop] State persist failed:", err);
