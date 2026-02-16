@@ -54,8 +54,8 @@ registerHeartbeatComponent("app", { required: true });
 registerHeartbeatComponent("ai_agent", { required: true });
 registerHeartbeatComponent("telegram_bot", { required: true });
 registerHeartbeatComponent("web_server", { required: config.ENABLE_WEB_UI });
-registerHeartbeatComponent("scheduler", { required: config.ENABLE_AUTONOMOUS });
-registerHeartbeatComponent("task_queue", { required: config.ENABLE_AUTONOMOUS });
+registerHeartbeatComponent("scheduler", { required: config.ENABLE_AUTONOMOUS && !config.MINIMAL_AUTONOMY });
+registerHeartbeatComponent("task_queue", { required: config.ENABLE_AUTONOMOUS && !config.MINIMAL_AUTONOMY });
 registerHeartbeatComponent("brain_loop", { required: config.ENABLE_AUTONOMOUS });
 
 heartbeat("app", { event: "startup" });
@@ -69,7 +69,7 @@ const aiAgentHeartbeatInterval = setInterval(() => {
   heartbeat("ai_agent", { event: "tick" });
 }, Math.max(10_000, Math.floor(config.HEARTBEAT_STALE_AFTER_MS / 3)));
 
-if (config.ENABLE_AUTONOMOUS) {
+if (config.ENABLE_AUTONOMOUS && !config.MINIMAL_AUTONOMY) {
   initScheduler({ enabled: true });
   initTaskQueue({ enabled: true });
 }
@@ -97,8 +97,12 @@ if (config.ENABLE_AUTONOMOUS) {
       expectations.cleanExpired();
     }, config.CORTEX_EXPECTATION_CLEANUP_INTERVAL_MS);
 
-    initProactiveInfra(bot);
-    console.log("[Autonomous] Proactive infrastructure enabled");
+    if (!config.MINIMAL_AUTONOMY) {
+      initProactiveInfra(bot);
+      console.log("[Autonomous] Proactive infrastructure enabled");
+    } else {
+      console.log("[Autonomous] Minimal autonomy mode: proactive infra disabled");
+    }
 
     // Create and start Sentinel
     if (config.FF_SENTINEL) {
@@ -130,7 +134,7 @@ const shutdown = async () => {
   }
   stopProjectionScheduler();
 
-  if (config.ENABLE_AUTONOMOUS) {
+  if (config.ENABLE_AUTONOMOUS && !config.MINIMAL_AUTONOMY) {
     stopProactiveInfra();
   }
 

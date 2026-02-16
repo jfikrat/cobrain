@@ -62,7 +62,9 @@ class BrainLoop {
   start(botInstance: Bot, sentinel: Sentinel): void {
     this.bot = botInstance;
     this.sentinel = sentinel;
-    this.restoreState();
+    if (!config.MINIMAL_AUTONOMY) {
+      this.restoreState();
+    }
 
     this.fastIntervalId = setInterval(() => {
       this.fastTick().catch(err => console.error("[BrainLoop] fastTick error:", err));
@@ -84,7 +86,9 @@ class BrainLoop {
       clearInterval(this.slowIntervalId);
       this.slowIntervalId = null;
     }
-    this.persistState();
+    if (!config.MINIMAL_AUTONOMY) {
+      this.persistState();
+    }
     console.log("[BrainLoop] Stopped");
   }
 
@@ -124,14 +128,16 @@ class BrainLoop {
       }
     }
 
-    // Code review cycle (independent of sentinel)
-    try {
-      await this.maybeRunCodeReview(config.MY_TELEGRAM_ID);
-    } catch (err) {
-      console.error("[BrainLoop] maybeRunCodeReview error:", err);
-    }
+    // Code review cycle is disabled in minimal autonomy mode.
+    if (!config.MINIMAL_AUTONOMY) {
+      try {
+        await this.maybeRunCodeReview(config.MY_TELEGRAM_ID);
+      } catch (err) {
+        console.error("[BrainLoop] maybeRunCodeReview error:", err);
+      }
 
-    this.persistState();
+      this.persistState();
+    }
   }
 
   // ── WhatsApp Polling → Sentinel Events ──────────────────────────────
@@ -298,7 +304,7 @@ class BrainLoop {
             },
             timestamp: Date.now(),
           });
-        } else {
+        } else if (!config.MINIMAL_AUTONOMY) {
           // Fallback: enqueue to task queue
           const taskQueue = getTaskQueue();
           taskQueue.enqueue(
@@ -308,6 +314,8 @@ class BrainLoop {
             5,
             `reminder:${reminder.id}`,
           );
+        } else {
+          console.warn(`[BrainLoop] Reminder due but sentinel is unavailable (reminderId=${reminder.id})`);
         }
       }
     } catch (err) {

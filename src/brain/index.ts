@@ -132,12 +132,18 @@ export async function think(userId: number, message: string | MultimodalMessage,
     });
   }
 
-  // Route decision
-  const route = routeLite({
-    text: textMessage,
-    hasImage,
-    channel,
-  });
+  // Route decision: in minimal autonomy mode always use the primary model.
+  const route = config.MINIMAL_AUTONOMY
+    ? {
+        model: config.AGENT_MODEL,
+        level: "deep" as const,
+        reason: "minimal_autonomy",
+      }
+    : routeLite({
+        text: textMessage,
+        hasImage,
+        channel,
+      });
 
   if (eventStore) {
     eventStore.append({
@@ -152,7 +158,10 @@ export async function think(userId: number, message: string | MultimodalMessage,
   // Model override only when FF_ROUTER_LITE is enabled, route has a real model,
   // and query is fast or default tier. Deep (complex) stays on AGENT_MODEL.
   const modelOverride =
-    config.FF_ROUTER_LITE && route.model !== "none" && (route.level === "fast" || route.level === "default")
+    !config.MINIMAL_AUTONOMY
+    && config.FF_ROUTER_LITE
+    && route.model !== "none"
+    && (route.level === "fast" || route.level === "default")
       ? route.model
       : undefined;
 
@@ -187,7 +196,7 @@ export async function think(userId: number, message: string | MultimodalMessage,
     }
 
     // Session state update (after response)
-    if (config.FF_SESSION_STATE) {
+    if (config.FF_SESSION_STATE && !config.MINIMAL_AUTONOMY) {
       try {
         const detectedPhase = detectPhase(response.content);
         const detectedTopic = detectTopic(textMessage, response.content);

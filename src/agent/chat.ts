@@ -226,6 +226,35 @@ export async function chat(
         })()
       : (typeof message === "string" ? message : message.text);
 
+    const hooks = {
+      PreToolUse: createPreToolUseHooks({
+        userId,
+        toolsUsed,
+        traceId,
+        permissionMode: settings.permissionMode || config.PERMISSION_MODE,
+      }),
+      ...(config.MINIMAL_AUTONOMY ? {} : { PreCompact: createPreCompactHook(userId) }),
+    };
+
+    const subAgents = config.MINIMAL_AUTONOMY
+      ? undefined
+      : {
+          researcher: {
+            description: "Web'de araştırma yapar, bilgi toplar. Güncel bilgi, haber, teknik dokümantasyon aramak için kullan.",
+            prompt: "Sen bir araştırmacısın. Verilen konuyu web'de araştır, güvenilir kaynaklardan bilgi topla ve özet sun. Türkçe yanıt ver.",
+            tools: ["WebSearch", "WebFetch"],
+          },
+          summarizer: {
+            description: "Uzun metinleri özetler. Makale, döküman, konuşma özeti için kullan.",
+            prompt: "Sen bir özetleyicisin. Verilen metni kısa, öz ve anlaşılır şekilde özetle. Önemli noktaları vurgula. Türkçe yanıt ver.",
+          },
+          "memory-expert": {
+            description: "Kullanıcının hafızasında arama ve analiz yapar. Geçmiş konuşmalar, kaydedilen bilgiler için kullan.",
+            prompt: "Sen hafıza uzmanısın. Kullanıcının hafızasında detaylı arama yap, ilgili bilgileri bul ve özetle. Türkçe yanıt ver.",
+            tools: ["mcp__memory__recall", "mcp__memory__memory_stats"],
+          },
+        };
+
     const queryResult = query({
       prompt,
       options: {
@@ -262,34 +291,10 @@ export async function chat(
           },
         },
 
-        // Subagents for specialized tasks
-        agents: {
-          researcher: {
-            description: "Web'de araştırma yapar, bilgi toplar. Güncel bilgi, haber, teknik dokümantasyon aramak için kullan.",
-            prompt: "Sen bir araştırmacısın. Verilen konuyu web'de araştır, güvenilir kaynaklardan bilgi topla ve özet sun. Türkçe yanıt ver.",
-            tools: ["WebSearch", "WebFetch"],
-          },
-          summarizer: {
-            description: "Uzun metinleri özetler. Makale, döküman, konuşma özeti için kullan.",
-            prompt: "Sen bir özetleyicisin. Verilen metni kısa, öz ve anlaşılır şekilde özetle. Önemli noktaları vurgula. Türkçe yanıt ver.",
-          },
-          "memory-expert": {
-            description: "Kullanıcının hafızasında arama ve analiz yapar. Geçmiş konuşmalar, kaydedilen bilgiler için kullan.",
-            prompt: "Sen hafıza uzmanısın. Kullanıcının hafızasında detaylı arama yap, ilgili bilgileri bul ve özetle. Türkçe yanıt ver.",
-            tools: ["mcp__memory__recall", "mcp__memory__memory_stats"],
-          },
-        },
+        ...(subAgents ? { agents: subAgents } : {}),
 
         // Hooks for logging and permission control
-        hooks: {
-          PreToolUse: createPreToolUseHooks({
-            userId,
-            toolsUsed,
-            traceId,
-            permissionMode: settings.permissionMode || config.PERMISSION_MODE,
-          }),
-          PreCompact: createPreCompactHook(userId),
-        },
+        hooks,
 
         // Limit turns to prevent runaway
         maxTurns: config.MAX_AGENT_TURNS,

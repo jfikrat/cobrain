@@ -20,6 +20,12 @@ const envSchema = z.object({
     .default("true")
     .transform((val) => val === "true" || val === "1"),
 
+  // Minimal autonomy mode: prefer direct LLM reasoning over orchestration layers
+  MINIMAL_AUTONOMY: z
+    .string()
+    .default("true")
+    .transform((val) => val === "true" || val === "1"),
+
   // v0.3: Agent SDK mode (vs CLI mode)
   USE_AGENT_SDK: z
     .string()
