@@ -8,7 +8,7 @@ import { whatsappDB, type PendingChat } from "../services/whatsapp-db.ts";
 import { analyzeMessages, generateSummary, type MessageAnalysis } from "../services/analyzer.ts";
 import { getPersonaService } from "../services/persona.ts";
 import { applyApprovedPersonaChange, applyApprovedRollback } from "../agent/tools/persona.ts";
-import { recordInteraction, extractMoodFromMessage, recordUserActivity } from "../services/living-assistant.ts";
+import { recordInteraction, extractMoodFromMessage, recordUserActivity } from "../services/interaction-tracker.ts";
 import {
   formatSummaryMessage,
   formatDetailMessage,

@@ -6,7 +6,8 @@
 import { startBot, stopBot, bot } from "./channels/telegram.ts";
 import { closeAll } from "./brain/index.ts";
 import { config } from "./config.ts";
-import { initProactive, stopProactive } from "./services/proactive.ts";
+import { initProactiveInfra, stopProactiveInfra } from "./services/proactive.ts";
+import { brainLoop } from "./services/brain-loop.ts";
 import { initScheduler } from "./services/scheduler.ts";
 import { initTaskQueue } from "./services/task-queue.ts";
 import { cortex, actionExecutor, cortexBridge } from "./cortex/index.ts";
@@ -21,7 +22,6 @@ import { startWebServer, stopWebServer } from "./web/server.ts";
 import { initEventStore } from "./brain/event-store.ts";
 import { startProjectionScheduler, stopProjectionScheduler } from "./brain/projections.ts";
 import { userManager } from "./services/user-manager.ts";
-import { autonomousLoop } from "./services/autonomous-loop.ts";
 
 console.log(`
    ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗███╗   ██╗
@@ -480,19 +480,12 @@ Mesaj: ${preview.slice(0, 150)}
       }
     }, 30_000); // Every 30 seconds
 
-    // Start heartbeat signals (morning briefing, evening summary, goal nudges, etc.)
-    if (config.ENABLE_HEARTBEAT_SIGNALS) {
-      try {
-        const { startHeartbeat } = await import("./cortex/heartbeat.ts");
-        startHeartbeat(userId);
-        console.log("[Startup] Heartbeat signals started");
-      } catch (err) {
-        console.error("[Startup] Heartbeat signals failed to start:", err);
-      }
-    }
+    initProactiveInfra(bot);
+    console.log("[Autonomous] Proactive infrastructure enabled");
 
-    initProactive(bot);
-    console.log("[Autonomous] Proactive features enabled");
+    // Start BrainLoop — unified tick-based autonomous loop
+    await brainLoop.start(bot);
+    console.log("[Startup] BrainLoop started");
   }, 1000);
 }
 
@@ -526,30 +519,16 @@ async function resolveLocationForCortex(
   return null;
 }
 
-// Initialize Autonomous Loop (Heartbeat System)
-if (config.ENABLE_AUTONOMOUS) {
-  setTimeout(async () => {
-    try {
-      await autonomousLoop.start();
-      console.log("[Startup] Autonomous Loop başlatıldı (30 saniye heartbeat)");
-    } catch (err) {
-      console.error("[Startup] Autonomous Loop başlatılamadı:", err);
-    }
-  }, 2000); // 2 saniye beklettikten sonra (cortex'in sonra başlamasın diye)
-}
-
 const shutdown = async () => {
   console.log("\nKapatılıyor...");
 
   cortex.stop();
-  // Stop heartbeat signals
-  try { const { stopHeartbeat } = await import("./cortex/heartbeat.ts"); stopHeartbeat(); } catch {}
+  await brainLoop.stop();
   if (cortexHeartbeatInterval) clearInterval(cortexHeartbeatInterval);
   stopProjectionScheduler();
 
   if (config.ENABLE_AUTONOMOUS) {
-    stopProactive();
-    await autonomousLoop.stop();
+    stopProactiveInfra();
   }
 
   if (config.ENABLE_WEB_UI) {

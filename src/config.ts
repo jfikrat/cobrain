@@ -67,14 +67,10 @@ const envSchema = z.object({
   HEARTBEAT_STALE_AFTER_MS: z.coerce.number().default(120_000),
   HEARTBEAT_LOG_INTERVAL_MS: z.coerce.number().default(30_000),
 
-  // v1.3: Heartbeat signals (morning briefing, evening summary, goal nudges, etc.)
-  ENABLE_HEARTBEAT_SIGNALS: z
-    .string()
-    .default("true")
-    .transform((val) => val === "true" || val === "1"),
-  HEARTBEAT_MORNING_HOUR: z.coerce.number().default(8),
-  HEARTBEAT_EVENING_HOUR: z.coerce.number().default(21),
-  HEARTBEAT_INACTIVITY_HOURS: z.coerce.number().default(6),
+  // v1.3: BrainLoop tick intervals and knowledge base
+  BRAIN_LOOP_FAST_TICK_MS: z.coerce.number().default(30_000),
+  BRAIN_LOOP_SLOW_TICK_MS: z.coerce.number().default(300_000),
+  BRAIN_LOOP_KNOWLEDGE_PATH: z.string().default("knowledge"),
 
   // v0.8: WhatsApp notification settings
   WHATSAPP_STALE_MAX_AGE_SEC: z.coerce.number().default(300),

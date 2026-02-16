@@ -1,6 +1,6 @@
 /**
  * Proactive Service - Handles scheduled task execution
- * Cobrain v0.3 - Now with Living Assistant
+ * Cobrain v0.4 - Simplified for BrainLoop integration
  */
 
 import { Bot } from "grammy";
@@ -10,7 +10,6 @@ import { getTaskQueue, type TaskQueue } from "./task-queue.ts";
 import { getGoalsService } from "./goals.ts";
 import { userManager } from "./user-manager.ts";
 import { pruneMemories, think } from "../brain/index.ts";
-import { initLivingAssistant, stopLivingAssistant, recordInteraction, recordUserActivity } from "./living-assistant.ts";
 import { whatsappDB } from "./whatsapp-db.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
 import { signalBus } from "../cortex/index.ts";
@@ -23,6 +22,7 @@ import { sanitizeText } from "../cortex/sanitize.ts";
 import { SmartMemory } from "../memory/smart-memory.ts";
 import { consolidateMemories } from "./memory-consolidation.ts";
 import { expectations } from "../cortex/expectations.ts";
+import { recordInteraction, recordUserActivity } from "./interaction-tracker.ts";
 
 let bot: Bot | null = null;
 
@@ -72,13 +72,14 @@ interface ProcessingResult {
   error?: string;
 }
 
-// Re-export for use in telegram channel (now from living-assistant)
+// Re-export for use in telegram channel (from interaction-tracker)
 export { recordInteraction, recordUserActivity };
 
 /**
- * Initialize proactive services with bot instance
+ * Initialize proactive infrastructure (scheduler + task-queue handlers).
+ * Timer-based polling (WhatsApp checker, reminder checker) removed — BrainLoop handles those.
  */
-export function initProactive(botInstance: Bot): void {
+export function initProactiveInfra(botInstance: Bot): void {
   bot = botInstance;
 
   const scheduler = getScheduler();
@@ -107,45 +108,23 @@ export function initProactive(botInstance: Bot): void {
   scheduler.start();
   taskQueue.start();
 
-  // Start reminder check interval (every minute)
-  startReminderChecker();
-
-  // Start WhatsApp DM notification checker (every 30 seconds)
-  startWhatsAppNotificationChecker();
-
-  // Start Living Assistant (AI-powered proactive awareness)
-  initLivingAssistant(bot);
-
   // Heartbeat: proactive service started
   heartbeat("proactive_service", { event: "started" });
 
-  console.log("[Proactive] Services initialized (with Living Assistant)");
+  console.log("[Proactive] Infrastructure initialized (scheduler + task-queue)");
 }
 
 /**
- * Stop proactive services
+ * Stop proactive infrastructure
  */
-export function stopProactive(): void {
+export function stopProactiveInfra(): void {
   const scheduler = getScheduler();
   const taskQueue = getTaskQueue();
 
   scheduler.stop();
   taskQueue.stop();
 
-  if (reminderIntervalId) {
-    clearInterval(reminderIntervalId);
-    reminderIntervalId = null;
-  }
-
-  if (whatsappNotifIntervalId) {
-    clearInterval(whatsappNotifIntervalId);
-    whatsappNotifIntervalId = null;
-  }
-
-  // Stop Living Assistant
-  stopLivingAssistant();
-
-  console.log("[Proactive] Services stopped");
+  console.log("[Proactive] Infrastructure stopped");
 }
 
 // ========== SCHEDULED TASK HANDLERS ==========
@@ -358,21 +337,9 @@ async function handleMemoryConsolidationTask(task: QueuedTask): Promise<TaskResu
   }
 }
 
-// ========== REMINDER CHECKER ==========
+// ========== REMINDER CHECKER (called by BrainLoop) ==========
 
-let reminderIntervalId: ReturnType<typeof setInterval> | null = null;
-
-function startReminderChecker(): void {
-  // Check for due reminders every minute
-  reminderIntervalId = setInterval(async () => {
-    await checkDueReminders();
-  }, 60_000);
-
-  // Initial check
-  checkDueReminders();
-}
-
-async function checkDueReminders(): Promise<void> {
+export async function checkDueReminders(): Promise<void> {
   const { config } = await import("../config.ts");
   const taskQueue = getTaskQueue();
   const userId = config.MY_TELEGRAM_ID;
@@ -402,28 +369,9 @@ async function checkDueReminders(): Promise<void> {
   }
 }
 
-// ========== WHATSAPP DM NOTIFICATION CHECKER ==========
+// ========== WHATSAPP NOTIFICATION CHECKER (called by BrainLoop) ==========
 
-let whatsappNotifIntervalId: ReturnType<typeof setInterval> | null = null;
-
-function startWhatsAppNotificationChecker(): void {
-  if (!whatsappDB.isAvailable()) {
-    console.log("[Proactive] WhatsApp DB unavailable, DM notifications disabled");
-    return;
-  }
-
-  // Check every 30 seconds
-  whatsappNotifIntervalId = setInterval(async () => {
-    await checkWhatsAppNotifications();
-  }, 30_000);
-
-  // Initial check after 10 seconds (let everything start up first)
-  setTimeout(() => checkWhatsAppNotifications(), 10_000);
-
-  console.log("[Proactive] WhatsApp DM notification checker started (30s interval)");
-}
-
-async function checkWhatsAppNotifications(): Promise<void> {
+export async function checkWhatsAppNotifications(): Promise<void> {
   if (!bot) return;
 
   const allNotifications = whatsappDB.getPendingNotifications(10);
@@ -607,7 +555,7 @@ async function checkWhatsAppNotifications(): Promise<void> {
  * Handle incoming DMs with Haiku classification (2-stage LLM).
  * Tier 1: Auto-reply | Tier 2: Notify + suggest | Tier 3: Just notify
  */
-async function handleDMMessages(
+export async function handleDMMessages(
   messages: ReturnType<typeof whatsappDB.getPendingNotifications>,
   chatJid: string,
   telegramUserId: number,
@@ -796,7 +744,7 @@ async function sendDMNotification(
  * Analyze watched group messages with Haiku classification.
  * Respects allowlist: only groups in WHATSAPP_ALLOWED_GROUP_JIDS can receive auto-replies.
  */
-async function handleWatchedGroupMessages(
+export async function handleWatchedGroupMessages(
   messages: ReturnType<typeof whatsappDB.getPendingNotifications>,
   telegramUserId: number,
   replyAllowed: boolean,
