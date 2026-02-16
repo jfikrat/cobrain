@@ -1,0 +1,125 @@
+{
+  "expectations": [
+    {
+      "id": "exp_1771064962864_ddjvru",
+      "type": "custom",
+      "target": "",
+      "context": "",
+      "onResolved": "",
+      "userId": 0,
+      "timeout": 1800000,
+      "createdAt": 1771064962864,
+      "status": "expired"
+    },
+    {
+      "id": "exp_1771082693301_n1mgm9",
+      "type": "custom",
+      "target": "",
+      "context": "Burak ile doğum günü hakkında karşılıklı sesli mesajlaşma devam ediyor, sesli mesaja yanıt verilmesi gerekebilir.",
+      "onResolved": "",
+      "userId": 0,
+      "timeout": 1800000,
+      "createdAt": 1771082693301,
+      "status": "expired"
+    },
+    {
+      "id": "exp_1771082806061_zsxici",
+      "type": "custom",
+      "target": "",
+      "context": "",
+      "onResolved": "",
+      "userId": 0,
+      "timeout": 1800000,
+      "createdAt": 1771082806061,
+      "status": "expired"
+    },
+    {
+      "id": "exp_1771082836495_xswa6c",
+      "type": "social_interaction",
+      "target": "",
+      "context": "Burak Ahmedoğlu ile WhatsApp üzerinden devam eden sohbet",
+      "onResolved": "",
+      "userId": 0,
+      "timeout": 1800000,
+      "createdAt": 1771082836495,
+      "status": "expired"
+    },
+    {
+      "id": "exp_1771083350487_5mcnzn",
+      "type": "social_interaction",
+      "target": "",
+      "context": "",
+      "onResolved": "",
+      "userId": 0,
+      "timeout": 1800000,
+      "createdAt": 1771083350487,
+      "status": "expired"
+    },
+    {
+      "id": "exp_1771113660434_cjvxym",
+      "type": "custom",
+      "target": "",
+      "context": "Partner gece geç saatte dışarıda ve konum paylaştı, kullanıcının uyanık olup olmadığını kontrol ediyor.",
+      "onResolved": "",
+      "userId": 0,
+      "timeout": 1800000,
+      "createdAt": 1771113660434,
+      "status": "expired"
+    },
+    {
+      "id": "exp_1771143828435_489a8a",
+      "type": "custom",
+      "target": "",
+      "context": "Tareq şu an havaalanında, pasaport kontrolü sırasında ve bir belge/işlem ('Sen bunu yaptın mı?') hakkında soru sordu. Rezervasyon bilgilerini iletti.",
+      "onResolved": "",
+      "userId": 0,
+      "timeout": 1800000,
+      "createdAt": 1771143828435,
+      "status": "expired"
+    },
+    {
+      "id": "exp_1771150727586_jfe8yq",
+      "type": "waiting_response",
+      "target": "",
+      "context": "Ibrahim Alzobaidy tarafından iletilen '1088D 575315' kodu ve hemen ardından gelen sesli mesaj için bir işlem veya yanıt bekleniyor.",
+      "onResolved": "",
+      "userId": 0,
+      "timeout": 1800000,
+      "createdAt": 1771150727586,
+      "status": "expired"
+    },
+    {
+      "id": "exp_1771170268371_vyku5j",
+      "type": "physical_visit",
+      "target": "",
+      "context": "Burak Ahmedoğlu'nun namaz sonrası ziyareti ve paylaştığı strateji belgeleri (Muhammed Ziyad 90 Günlük İçerik Planı, Growth War Plan vb.) üzerine yapılacak görüşme.",
+      "onResolved": "",
+      "userId": 0,
+      "timeout": 1800000,
+      "createdAt": 1771170268371,
+      "status": "expired"
+    },
+    {
+      "id": "exp_1771174463495_56l9lr",
+      "type": "custom",
+      "target": "",
+      "context": "Strateji belgeleri ve sesli mesajlar üzerine yapılan görüşmede Burak'ın yaptığı ses düzeyi veya içerik yoğunluğu hakkındaki eleştiri.",
+      "onResolved": "",
+      "userId": 0,
+      "timeout": 1800000,
+      "createdAt": 1771174463495,
+      "status": "expired"
+    },
+    {
+      "id": "exp_1771190784939_bm37mb",
+      "type": "custom",
+      "target": "",
+      "context": "Gular Saeed (yakın aile ferdi), WhatsApp üzerinden bir fotoğrafın AI ile düzenlenmesini ve sonucun paylaşılmasını talep etti.",
+      "onResolved": "",
+      "userId": 0,
+      "timeout": 1800000,
+      "createdAt": 1771190784939,
+      "status": "expired"
+    }
+  ]
+}

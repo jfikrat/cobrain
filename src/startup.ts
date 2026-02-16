@@ -21,6 +21,7 @@ import { startWebServer, stopWebServer } from "./web/server.ts";
 import { initEventStore } from "./brain/event-store.ts";
 import { startProjectionScheduler, stopProjectionScheduler } from "./brain/projections.ts";
 import { userManager } from "./services/user-manager.ts";
+import { autonomousLoop } from "./services/autonomous-loop.ts";
 
 console.log(`
    ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗███╗   ██╗
@@ -525,6 +526,18 @@ async function resolveLocationForCortex(
   return null;
 }
 
+// Initialize Autonomous Loop (Heartbeat System)
+if (config.ENABLE_AUTONOMOUS) {
+  setTimeout(async () => {
+    try {
+      await autonomousLoop.start();
+      console.log("[Startup] Autonomous Loop başlatıldı (30 saniye heartbeat)");
+    } catch (err) {
+      console.error("[Startup] Autonomous Loop başlatılamadı:", err);
+    }
+  }, 2000); // 2 saniye beklettikten sonra (cortex'in sonra başlamasın diye)
+}
+
 const shutdown = async () => {
   console.log("\nKapatılıyor...");
 
@@ -536,6 +549,7 @@ const shutdown = async () => {
 
   if (config.ENABLE_AUTONOMOUS) {
     stopProactive();
+    await autonomousLoop.stop();
   }
 
   if (config.ENABLE_WEB_UI) {
