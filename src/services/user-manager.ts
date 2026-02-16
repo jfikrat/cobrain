@@ -5,7 +5,8 @@
 
 import { Database } from "bun:sqlite";
 import { mkdir } from "node:fs/promises";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { config } from "../config.ts";
 import { UserMemory } from "../memory/sqlite.ts";
@@ -16,9 +17,11 @@ export class UserManager {
   private userDbs: Map<number, Database> = new Map();
   private userMemories: Map<number, UserMemory> = new Map();
   private basePath: string;
+  private projectRoot: string;
 
   constructor() {
     this.basePath = config.COBRAIN_BASE_PATH;
+    this.projectRoot = process.env.COBRAIN_WORK_DIR || process.cwd();
     this.globalDb = this.initGlobalDb();
   }
 
@@ -139,7 +142,7 @@ export class UserManager {
     await mkdir(join(folderPath, "agent"), { recursive: true });
 
     // Create CLAUDE.md for this user's Claude session
-    await this.createUserClaudeMd(folderPath, userId);
+    await this.createUserClaudeMd(folderPath);
 
     // Insert user record
     this.globalDb.run(
@@ -167,11 +170,9 @@ export class UserManager {
   getUserFolder(userId: number): string {
     const folderPath = join(this.basePath, "users", userId.toString());
 
-    // Ensure CLAUDE.md exists (for existing users who don't have it)
-    const claudeMdPath = join(folderPath, "CLAUDE.md");
-    if (!existsSync(claudeMdPath) && existsSync(folderPath)) {
-      // Create CLAUDE.md synchronously to avoid race conditions
-      this.createUserClaudeMdSync(folderPath, userId);
+    // Ensure CLAUDE.md exists and keeps required context references.
+    if (existsSync(folderPath)) {
+      this.ensureUserClaudeMdSync(folderPath);
     }
 
     return folderPath;
@@ -389,9 +390,29 @@ export class UserManager {
   /**
    * Create CLAUDE.md for user's Claude session
    */
-  private async createUserClaudeMd(folderPath: string, userId: number): Promise<void> {
-    const claudeMdPath = join(folderPath, "CLAUDE.md");
-    const claudeMdContent = `# Sen Cobrain'sin
+  private getContextReferencesBlock(): string {
+    const refs: string[] = [];
+    const projectAgentsPath = join(this.projectRoot, "agents.md");
+    const projectClaudePath = join(this.projectRoot, "CLAUDE.md");
+    const globalClaudePath = join(homedir(), ".claude", "CLAUDE.md");
+
+    if (existsSync(projectAgentsPath)) refs.push(`@${projectAgentsPath}`);
+    if (existsSync(projectClaudePath)) refs.push(`@${projectClaudePath}`);
+    if (existsSync(globalClaudePath)) refs.push(`@${globalClaudePath}`);
+
+    return [
+      "<!-- COBRAIN_CONTEXT_REFS -->",
+      ...refs,
+      "<!-- /COBRAIN_CONTEXT_REFS -->",
+    ].join("\n");
+  }
+
+  private buildUserClaudeMdContent(): string {
+    const refs = this.getContextReferencesBlock();
+
+    return `# Sen Cobrain'sin
+
+${refs}
 
 Sen **Cobrain** adında kişisel bir AI asistansın. Kullanıcı seninle Telegram üzerinden konuşuyor.
 
@@ -425,6 +446,51 @@ Sen **Cobrain** adında kişisel bir AI asistansın. Kullanıcı seninle Telegra
 2. Hassas bilgileri (şifre, token) loglama
 3. Emin olmadığında sor
 `;
+  }
+
+  private upsertContextReferences(content: string): string {
+    const block = this.getContextReferencesBlock();
+    const startMarker = "<!-- COBRAIN_CONTEXT_REFS -->";
+    const endMarker = "<!-- /COBRAIN_CONTEXT_REFS -->";
+
+    if (content.includes(startMarker) && content.includes(endMarker)) {
+      return content.replace(
+        /<!-- COBRAIN_CONTEXT_REFS -->[\s\S]*?<!-- \/COBRAIN_CONTEXT_REFS -->/,
+        block,
+      );
+    }
+
+    // Keep existing custom content, only inject the refs block near top.
+    if (content.startsWith("#")) {
+      return content.replace(/^#.*\n/, (heading) => `${heading}\n${block}\n`);
+    }
+
+    return `${block}\n\n${content}`;
+  }
+
+  private ensureUserClaudeMdSync(folderPath: string): void {
+    const claudeMdPath = join(folderPath, "CLAUDE.md");
+
+    if (!existsSync(claudeMdPath)) {
+      this.createUserClaudeMdSync(folderPath);
+      return;
+    }
+
+    try {
+      const current = readFileSync(claudeMdPath, "utf-8");
+      const updated = this.upsertContextReferences(current);
+      if (updated !== current) {
+        writeFileSync(claudeMdPath, updated, "utf-8");
+        console.log(`[UserManager] CLAUDE.md referansları güncellendi: ${claudeMdPath}`);
+      }
+    } catch (err) {
+      console.warn("[UserManager] CLAUDE.md reference update failed:", err);
+    }
+  }
+
+  private async createUserClaudeMd(folderPath: string): Promise<void> {
+    const claudeMdPath = join(folderPath, "CLAUDE.md");
+    const claudeMdContent = this.buildUserClaudeMdContent();
 
     await Bun.write(claudeMdPath, claudeMdContent);
     console.log(`[UserManager] CLAUDE.md oluşturuldu: ${claudeMdPath}`);
@@ -433,42 +499,9 @@ Sen **Cobrain** adında kişisel bir AI asistansın. Kullanıcı seninle Telegra
   /**
    * Create CLAUDE.md synchronously (for existing users)
    */
-  private createUserClaudeMdSync(folderPath: string, userId: number): void {
+  private createUserClaudeMdSync(folderPath: string): void {
     const claudeMdPath = join(folderPath, "CLAUDE.md");
-    const claudeMdContent = `# Sen Cobrain'sin
-
-Sen **Cobrain** adında kişisel bir AI asistansın. Kullanıcı seninle Telegram üzerinden konuşuyor.
-
-## Kimliğin
-
-- Adın: Cobrain
-- Kendini asla "Claude" olarak tanıtma, sen "Cobrain"sin
-- Samimi, yardımsever ve pratik bir asistansın
-- Kullanıcının kişisel asistanısın, ona "sen" diye hitap et
-
-## İletişim
-
-- Türkçe konuş (teknik terimler İngilizce olabilir)
-- Kısa ve öz yanıtlar ver (Telegram için optimize)
-- Tablolar yerine liste formatı kullan (Telegram tabloları desteklemiyor)
-- Kod için \`\`\` kullan
-
-## Yeteneklerin
-
-- **Google Drive**: rclone ile dosya listele, indir, yükle, link oluştur
-  - \`rclone lsf gdrive:\` - Dosyaları listele
-  - \`rclone link gdrive:path/file\` - Paylaşılabilir link
-  - \`rclone copy file gdrive:folder/\` - Yükle
-- **Dosya işlemleri**: Okuma, yazma, düzenleme
-- **Kod**: Yazma, debug, açıklama
-- **Araştırma**: Web araması, bilgi toplama
-
-## Kurallar
-
-1. Kullanıcının dosyalarına dikkat et, izinsiz silme yapma
-2. Hassas bilgileri (şifre, token) loglama
-3. Emin olmadığında sor
-`;
+    const claudeMdContent = this.buildUserClaudeMdContent();
 
     writeFileSync(claudeMdPath, claudeMdContent, "utf-8");
     console.log(`[UserManager] CLAUDE.md oluşturuldu (sync): ${claudeMdPath}`);

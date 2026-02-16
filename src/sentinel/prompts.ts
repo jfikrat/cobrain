@@ -3,16 +3,34 @@
  * Injects knowledge base files + notebook seed content.
  */
 
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { config } from "../config.ts";
 import type { Notebook } from "./notebook.ts";
 
-const KNOWLEDGE_DIR = "knowledge";
 const KNOWLEDGE_FILES = ["auto_replies.md", "rules.md", "people.md", "routines.md", "locations.md"];
 
 let knowledgeCache: { content: string; loadedAt: number } | null = null;
 const KNOWLEDGE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function getKnowledgeCandidates(): string[] {
+  const configuredPath = config.BRAIN_LOOP_KNOWLEDGE_PATH || "knowledge";
+  const candidates = configuredPath.startsWith("/")
+    ? [configuredPath]
+    : [
+        resolve(config.COBRAIN_BASE_PATH, configuredPath),
+        resolve(process.cwd(), configuredPath),
+      ];
+
+  return Array.from(new Set(candidates));
+}
+
+function resolveKnowledgePath(): string | null {
+  for (const candidate of getKnowledgeCandidates()) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
 
 function loadKnowledge(): string {
   const now = Date.now();
@@ -20,11 +38,11 @@ function loadKnowledge(): string {
     return knowledgeCache.content;
   }
 
-  const knowledgePath = resolve(config.COBRAIN_BASE_PATH, KNOWLEDGE_DIR);
+  const knowledgePath = resolveKnowledgePath();
   const parts: string[] = [];
 
   try {
-    if (!existsSync(knowledgePath)) {
+    if (!knowledgePath) {
       knowledgeCache = { content: "", loadedAt: now };
       return "";
     }

@@ -270,9 +270,9 @@ export async function chat(
         // Resume previous session if exists
         resume: existingSessionId,
 
-        // Don't load CLAUDE.md - use only our custom systemPrompt
-        // This prevents Claude Code identity from leaking through
-        settingSources: [],
+        // Load project instructions (user-folder CLAUDE.md and its @refs)
+        // so reasoning can be driven by Markdown-based policy files.
+        settingSources: ["project"],
 
         // MCP Servers (createSdkMcpServer returns full config)
         mcpServers: {
