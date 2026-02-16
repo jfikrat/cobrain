@@ -266,11 +266,9 @@ class BrainLoop {
 
   private async fastTick(): Promise<void> {
     heartbeat("brain_loop", { event: "fast_tick" });
-    console.log("[BrainLoop:fastTick] start");
 
     try {
       await this.pollWhatsApp();
-      console.log("[BrainLoop:fastTick] pollWhatsApp done");
     } catch (err) {
       console.error("[BrainLoop] pollWhatsApp error:", err);
     }
@@ -282,7 +280,6 @@ class BrainLoop {
     }
 
     this.cooldowns.cleanup();
-    console.log("[BrainLoop:fastTick] done");
   }
 
   // ── Slow Tick (5min, with AI) ──────────────────────────────────────
@@ -290,13 +287,11 @@ class BrainLoop {
   private async slowTick(): Promise<void> {
     heartbeat("brain_loop", { event: "slow_tick" });
     const userId = config.MY_TELEGRAM_ID;
-    console.log("[BrainLoop:slowTick] start");
 
     // 1. Gather context
     let ctx: ContextData;
     try {
       ctx = await this.gatherContext(userId);
-      console.log("[BrainLoop:slowTick] gatherContext done");
     } catch (err) {
       console.error("[BrainLoop] gatherContext error:", err);
       return;
@@ -304,7 +299,6 @@ class BrainLoop {
 
     // 2. Quick rule-based decisions (no AI)
     const quickActions = this.quickDecisions(ctx);
-    console.log(`[BrainLoop:slowTick] quickDecisions: ${quickActions.length} actions`);
     for (const plan of quickActions) {
       try {
         await actionExecutor.execute(plan);
@@ -315,10 +309,9 @@ class BrainLoop {
     }
 
     // 3. AI reasoning (Gemini Flash)
-    console.log("[BrainLoop:slowTick] aiReason start");
     try {
       const plan = await this.aiReason(ctx);
-      console.log(`[BrainLoop:slowTick] aiReason done: ${plan.action}`);
+      console.log(`[BrainLoop:slowTick] decision=${plan.action}${plan.action !== "none" ? ` reason="${(plan as Record<string, unknown>).reasoning || ""}"` : ""}`);
       if (plan.action !== "none") {
         await actionExecutor.execute(plan);
         this.cooldowns.set(plan.action);
@@ -336,7 +329,6 @@ class BrainLoop {
 
     // 5. Persist state
     this.persistState();
-    console.log("[BrainLoop:slowTick] done");
   }
 
   // ── WhatsApp Polling ───────────────────────────────────────────────
