@@ -266,9 +266,11 @@ class BrainLoop {
 
   private async fastTick(): Promise<void> {
     heartbeat("brain_loop", { event: "fast_tick" });
+    console.log("[BrainLoop:fastTick] start");
 
     try {
       await this.pollWhatsApp();
+      console.log("[BrainLoop:fastTick] pollWhatsApp done");
     } catch (err) {
       console.error("[BrainLoop] pollWhatsApp error:", err);
     }
@@ -280,6 +282,7 @@ class BrainLoop {
     }
 
     this.cooldowns.cleanup();
+    console.log("[BrainLoop:fastTick] done");
   }
 
   // ── Slow Tick (5min, with AI) ──────────────────────────────────────
