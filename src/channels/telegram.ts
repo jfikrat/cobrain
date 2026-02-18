@@ -29,6 +29,18 @@ import { UserMemory } from "../memory/sqlite.ts";
 
 const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
+// Live location cache — think() çağırmadan, sadece in-memory tut
+interface LiveLocationEntry {
+  latitude: number;
+  longitude: number;
+  updatedAt: Date;
+}
+const liveLocationCache = new Map<number, LiveLocationEntry>();
+
+export function getLiveLocation(userId: number): LiveLocationEntry | null {
+  return liveLocationCache.get(userId) ?? null;
+}
+
 // Initialize Telegram MCP with bot instance
 initTelegramMcp(bot);
 
@@ -907,28 +919,20 @@ bot.on("message:location", async (ctx) => {
   }
 });
 
-// Live location güncellemeleri
-bot.on("edited_message:location", async (ctx) => {
+// Live location güncellemeleri — sadece cache'e yaz, agent'ı meşgul etme
+bot.on("edited_message:location", (ctx) => {
   const userId = ctx.from?.id ?? 0;
 
   if (!isAuthorized(userId)) return;
 
   try {
     const location = ctx.editedMessage.location;
-    if (!location) return;
+    if (!location?.live_period) return; // Sadece aktif live location
 
-    const { latitude, longitude, live_period } = location;
+    const { latitude, longitude } = location;
 
-    // Sadece aktif live location güncellemelerini işle
-    if (!live_period) return;
-
-    // Live location güncellemelerini AI'a gönderme — sadece hafızaya kaydet
-    // Çok sık güncelleme olduğu için sessiz işle, sadece logla
-    console.log(`[LiveLocation] ${userId} update: ${latitude},${longitude}`);
-
-    // Agent'a son konumu kaydet (sessiz, Telegram'a mesaj gönderme)
-    await userManager.ensureUser(userId);
-    await think(userId, `[SİSTEM] Kullanıcının canlı konumu güncellendi: lat=${latitude}, lng=${longitude}. Bu konumu hafızanda güncelle ama kullanıcıya mesaj gönderme.`);
+    liveLocationCache.set(userId, { latitude, longitude, updatedAt: new Date() });
+    console.log(`[LiveLocation] ${userId} cached: ${latitude},${longitude}`);
 
   } catch (error) {
     console.error("Live location update error:", error);

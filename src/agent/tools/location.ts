@@ -10,12 +10,51 @@ import { LocationService } from "../../services/location.ts";
 import { userManager } from "../../services/user-manager.ts";
 import { createUserCache } from "../../utils/user-cache.ts";
 import { toolError, toolSuccess } from "../../utils/tool-response.ts";
+import { getLiveLocation } from "../../channels/telegram.ts";
 
 // User-based LocationService cache
 const locationCache = createUserCache(async (userId: number) => {
   const userDb = await userManager.getUserDb(userId);
   return new LocationService(userDb);
 });
+
+// ========== LIVE LOCATION ==========
+
+export const getUserLocationTool = (userId: number) =>
+  tool(
+    "get_user_location",
+    "Kullanıcının anlık live location konumunu getir. Telegram'dan paylaşılan canlı konum varsa döner.",
+    {},
+    async () => {
+      try {
+        const entry = getLiveLocation(userId);
+
+        if (!entry) {
+          return toolSuccess("Aktif live location yok. Kullanıcı Telegram'dan canlı konum paylaşmıyor.");
+        }
+
+        const ageMs = Date.now() - entry.updatedAt.getTime();
+        const ageSec = Math.round(ageMs / 1000);
+        const ageText = ageSec < 60 ? `${ageSec} saniye önce` : `${Math.round(ageSec / 60)} dakika önce`;
+
+        // Reverse geocode ile adres bul
+        const locService = await locationCache.get(userId);
+        let addressText = "";
+        try {
+          const result = await locService.reverseGeocode(entry.latitude, entry.longitude);
+          if (result) addressText = `\nAdres: ${result.formattedAddress}`;
+        } catch {
+          // opsiyonel
+        }
+
+        return toolSuccess(
+          `Kullanıcının anlık konumu (${ageText} güncellendi):\nKoordinat: ${entry.latitude}, ${entry.longitude}${addressText}`
+        );
+      } catch (error) {
+        return toolError("Konum alınamadı", error);
+      }
+    }
+  );
 
 // ========== LOCATION SAVE/LIST ==========
 
@@ -330,6 +369,7 @@ export function createLocationServer(userId: number) {
     name: "cobrain-location",
     version: "1.0.0",
     tools: [
+      getUserLocationTool(userId),
       saveLocationTool(userId),
       listLocationsTool(userId),
       deleteLocationTool(userId),
