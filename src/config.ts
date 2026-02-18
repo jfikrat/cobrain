@@ -79,7 +79,7 @@ const envSchema = z.object({
   BRAIN_LOOP_KNOWLEDGE_PATH: z.string().default("knowledge"),
 
   // v0.8: WhatsApp notification settings
-  WHATSAPP_STALE_MAX_AGE_SEC: z.coerce.number().default(300),
+  WHATSAPP_STALE_MAX_AGE_SEC: z.coerce.number().default(3600),
   WHATSAPP_ALLOWED_GROUP_JIDS: z.string().default(""),
   WHATSAPP_MAX_REPLY_LENGTH: z.coerce.number().default(500),
 
