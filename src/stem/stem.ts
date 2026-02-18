@@ -59,6 +59,10 @@ export class Stem {
 
     // Queue if already processing
     if (this.processing) {
+      if (this.eventQueue.length >= 20) {
+        console.warn(`[Stem] Queue full (20), dropping event: ${event.type}`);
+        return { action: "none", details: "queue_full" };
+      }
       this.eventQueue.push(event);
       console.log(`[Stem] Event queued (queue=${this.eventQueue.length}): ${event.type}`);
       return { action: "none", details: "queued" };
