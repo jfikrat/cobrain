@@ -1,5 +1,5 @@
 /**
- * Hippocampus Tools — Memory file manipulation tools for consolidation agent.
+ * Mneme Tools — Memory file manipulation tools for consolidation agent.
  */
 
 import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
@@ -8,7 +8,7 @@ import { FileMemory } from "../memory/file-memory.ts";
 import { toolError, toolSuccess } from "../utils/tool-response.ts";
 import type { Bot } from "grammy";
 
-export function createHippocampusTools(deps: {
+export function createMnemeTools(deps: {
   memory: FileMemory;
   bot: Bot;
   userId: number;
@@ -42,7 +42,7 @@ export function createHippocampusTools(deps: {
       try {
         const count = await memory.archiveOldEvents(days_old);
         if (count === 0) return toolSuccess("Arşivlenecek eski olay bulunamadı.");
-        console.log(`[Hippocampus] Archived ${count} date sections (>${days_old} days old)`);
+        console.log(`[Mneme] Archived ${count} date sections (>${days_old} days old)`);
         return toolSuccess(`${count} olay bölümü arşivlendi.`);
       } catch (error) {
         return toolError("Arşivleme hatası", error);
@@ -60,7 +60,7 @@ export function createHippocampusTools(deps: {
     async ({ section, content }) => {
       try {
         await memory.storeFact(section, content);
-        console.log(`[Hippocampus] Updated facts [${section}]`);
+        console.log(`[Mneme] Updated facts [${section}]`);
         return toolSuccess(`facts.md güncellendi: [${section}]`);
       } catch (error) {
         return toolError("Güncelleme hatası", error);
@@ -104,7 +104,7 @@ export function createHippocampusTools(deps: {
   );
 
   return createSdkMcpServer({
-    name: "cobrain-hippocampus",
+    name: "cobrain-mneme",
     version: "1.0.0",
     tools: [readMemoryTool, archiveEventsTool, updateFactsTool, logEventTool, sendReportTool],
   });

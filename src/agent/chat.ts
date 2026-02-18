@@ -271,9 +271,9 @@ async function _executeChat(
             description: "Uzun metinleri özetler ve analiz eder. Makale, döküman, konuşma özeti için kullan.",
             prompt: "Sen Cortex'in dil ve anlam sub-agent'ısın (Wernicke). Verilen metni kısa, öz ve anlaşılır şekilde özetle. Önemli noktaları vurgula. Türkçe yanıt ver.",
           },
-          hippocampus: {
+          mneme: {
             description: "Kullanıcının hafızasında arama ve analiz yapar. Geçmiş konuşmalar, kaydedilen bilgiler için kullan.",
-            prompt: "Sen Cortex'in hafıza sub-agent'ısın (Hippocampus). Kullanıcının hafızasında detaylı arama yap, ilgili bilgileri bul ve özetle. Türkçe yanıt ver.",
+            prompt: "Sen Cortex'in hafıza sub-agent'ısın (Mneme). Kullanıcının hafızasında detaylı arama yap, ilgili bilgileri bul ve özetle. Türkçe yanıt ver.",
             tools: ["mcp__memory__recall", "mcp__memory__memory_stats"],
           },
         };

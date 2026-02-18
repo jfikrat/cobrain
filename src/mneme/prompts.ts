@@ -1,10 +1,10 @@
 /**
- * Hippocampus — System prompt for memory consolidation agent.
+ * Mneme — System prompt for memory consolidation agent.
  * Runs during low-activity periods (sleep cycle).
  */
 
-export function buildHippocampusPrompt(userId: number): string {
-  return `Sen Cobrain'in Hippocampus ajanısın.
+export function buildMnemePrompt(userId: number): string {
+  return `Sen Cobrain'in Mneme ajanısın.
 
 Cobrain'in hafızasını, insan beyninin uyku sırasında yaptığı gibi konsolide edersin:
 gereksizleri at, önemlileri promote et, çakışanları çöz, düzeni koru.

@@ -22,7 +22,7 @@ import { whatsappDB } from "./whatsapp-db.ts";
 import { getTaskQueue } from "./task-queue.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
 import { chat, isUserBusy } from "../agent/chat.ts";
-import { hippocampus } from "../hippocampus/hippocampus.ts";
+import { mneme } from "../mneme/mneme.ts";
 import { stemRef } from "./stem-ref.ts";
 import { inbox } from "./inbox.ts";
 
@@ -145,10 +145,10 @@ class BrainLoop {
   private async slowTick(): Promise<void> {
     heartbeat("brain_loop", { event: "slow_tick" });
 
-    // Hippocampus: memory consolidation during sleep hours (03:00-03:59)
-    if (hippocampus.shouldRun() && this.bot) {
-      hippocampus.run(config.MY_TELEGRAM_ID, this.bot).catch(err =>
-        console.error("[BrainLoop] hippocampus error:", err)
+    // Mneme: memory consolidation during sleep hours (03:00-03:59)
+    if (mneme.shouldRun() && this.bot) {
+      mneme.run(config.MY_TELEGRAM_ID, this.bot).catch(err =>
+        console.error("[BrainLoop] mneme error:", err)
       );
     }
 

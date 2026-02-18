@@ -1,7 +1,7 @@
 /**
  * Agent Inbox — Cortex'in Gelen Kutusu
  *
- * Stem/Hippocampus/Scheduler mesajlarını bir inbox'a iter.
+ * Stem/Mneme/Scheduler mesajlarını bir inbox'a iter.
  * BrainLoop fastTick'te !isUserBusy iken Cortex işler.
  * Bu sayede kullanıcı konuşurken session kirlenmez.
  */
@@ -13,7 +13,7 @@ import { join } from "node:path";
 export interface InboxItem {
   /** "inbox_{timestamp}_{random6hex}" */
   id: string;
-  from: "stem" | "hippocampus" | "scheduler";
+  from: "stem" | "mneme" | "scheduler";
   /** Kısa özet (log için) */
   subject: string;
   /** Tam mesaj (Cortex'e gidecek) */

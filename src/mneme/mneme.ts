@@ -1,5 +1,5 @@
 /**
- * Hippocampus — Memory consolidation agent.
+ * Mneme — Memory consolidation agent.
  *
  * Runs during low-activity periods (sleep cycle), like the human hippocampus
  * consolidating memories during sleep. Uses Haiku for reasoning.
@@ -12,38 +12,38 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { Bot } from "grammy";
 import { FileMemory } from "../memory/file-memory.ts";
-import { createHippocampusTools } from "./tools.ts";
-import { buildHippocampusPrompt } from "./prompts.ts";
+import { createMnemeTools } from "./tools.ts";
+import { buildMnemePrompt } from "./prompts.ts";
 import { userManager } from "../services/user-manager.ts";
 
 const MODEL = "claude-haiku-4-5-20251001";
 const MAX_TURNS = 10;
 
-export class Hippocampus {
+export class Mneme {
   private lastRunDate: string | null = null;
   private running = false;
 
   async run(userId: number, bot: Bot): Promise<void> {
     if (this.running) {
-      console.log("[Hippocampus] Already running, skipping.");
+      console.log("[Mneme] Already running, skipping.");
       return;
     }
 
     const today = new Date().toISOString().slice(0, 10);
     if (this.lastRunDate === today) {
-      console.log("[Hippocampus] Already ran today, skipping.");
+      console.log("[Mneme] Already ran today, skipping.");
       return;
     }
 
     this.running = true;
-    console.log(`[Hippocampus] Starting memory consolidation for user ${userId}...`);
+    console.log(`[Mneme] Starting memory consolidation for user ${userId}...`);
 
     try {
       const userFolder = userManager.getUserFolder(userId);
       const memory = new FileMemory(userFolder);
-      const mcpServer = createHippocampusTools({ memory, bot, userId });
+      const mcpServer = createMnemeTools({ memory, bot, userId });
 
-      const systemPrompt = buildHippocampusPrompt(userId);
+      const systemPrompt = buildMnemePrompt(userId);
       const prompt = `Hafıza konsolidasyonunu başlat. Sırasıyla: eski olayları arşivle, son olaylardan gerçek çıkar, çakışanları çöz.`;
 
       let totalCost = 0;
@@ -52,7 +52,7 @@ export class Hippocampus {
         model: MODEL,
         systemPrompt,
         maxTurns: MAX_TURNS,
-        mcpServers: { hippocampus: mcpServer },
+        mcpServers: { mneme: mcpServer },
         settingSources: [],
       }})) {
         if (msg.type === "result") {
@@ -61,9 +61,9 @@ export class Hippocampus {
       }
 
       this.lastRunDate = today;
-      console.log(`[Hippocampus] Consolidation complete. Cost: $${totalCost.toFixed(4)}`);
+      console.log(`[Mneme] Consolidation complete. Cost: $${totalCost.toFixed(4)}`);
     } catch (err) {
-      console.error("[Hippocampus] Consolidation failed:", err);
+      console.error("[Mneme] Consolidation failed:", err);
     } finally {
       this.running = false;
     }
@@ -84,4 +84,4 @@ export class Hippocampus {
   }
 }
 
-export const hippocampus = new Hippocampus();
+export const mneme = new Mneme();
