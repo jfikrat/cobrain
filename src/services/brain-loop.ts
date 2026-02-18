@@ -387,9 +387,11 @@ class BrainLoop {
 
     console.log(`[BrainLoop] Inbox item işleniyor: "${pendingItem.subject}"`);
 
-    chat(config.MY_TELEGRAM_ID, prompt).catch(err =>
-      console.error("[BrainLoop] Inbox işleme hatası:", err)
-    );
+    chat(config.MY_TELEGRAM_ID, prompt)
+      .then(response => {
+        if (this.bot) sendLogToChannel(this.bot, `📬 Inbox [${pendingItem.from}] — ${pendingItem.subject.slice(0, 60)}`, response);
+      })
+      .catch(err => console.error("[BrainLoop] Inbox işleme hatası:", err));
   }
 
   // ── Code Review Cycle ──────────────────────────────────────────────
