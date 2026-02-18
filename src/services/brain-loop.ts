@@ -23,6 +23,7 @@ import { getTaskQueue } from "./task-queue.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
 import { chat } from "../agent/chat.ts";
 import { hippocampus } from "../hippocampus/hippocampus.ts";
+import { stemRef } from "./stem-ref.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -137,14 +138,19 @@ class BrainLoop {
   private async slowTick(): Promise<void> {
     heartbeat("brain_loop", { event: "slow_tick" });
 
-    // Periodic check via Cortex — chat() queue handles busy state automatically
+    // Periodic check → Stem (fallback: Cortex)
     const userId = config.MY_TELEGRAM_ID;
     try {
-      const periodicResponse = await chat(
-        userId,
-        `[OTONOM OLAY — Periyodik kontrol]\nSaat: ${new Date().toLocaleString("tr-TR")}\n\n---\nBekleyen görevleri, hedefleri veya takip gerektiren bir şey varsa Telegram'dan bildir. Yoksa sessiz kal.`,
-      );
-      if (this.bot) await sendLogToChannel(this.bot, `🔄 Periyodik kontrol`, periodicResponse);
+      const stem = stemRef.get();
+      if (stem) {
+        await stem.feedEvent({ type: "periodic_check", payload: {}, timestamp: Date.now() });
+      } else {
+        const periodicResponse = await chat(
+          userId,
+          `[OTONOM OLAY — Periyodik kontrol]\nSaat: ${new Date().toLocaleString("tr-TR")}\n\n---\nBekleyen görevleri, hedefleri veya takip gerektiren bir şey varsa Telegram'dan bildir. Yoksa sessiz kal.`,
+        );
+        if (this.bot) await sendLogToChannel(this.bot, `🔄 Periyodik kontrol`, periodicResponse);
+      }
     } catch (err) {
       console.error("[BrainLoop] periodic_check error:", err);
       if (this.bot) await sendRawLog(this.bot, `❌ <b>Periyodik kontrol hata</b>\n<code>${String(err).slice(0, 200)}</code>`);
@@ -234,7 +240,7 @@ class BrainLoop {
     const dms = notifications.filter(n => !n.is_group);
     const groupMsgs = notifications.filter(n => n.is_group);
 
-    // ── Feed DMs to Cortex ────────────────────────────────────────
+    // ── Feed DMs to Stem (fallback: Cortex) ──────────────────────
     if (dms.length > 0) {
       const bySender = new Map<string, typeof dms>();
       for (const notif of dms) {
@@ -246,23 +252,38 @@ class BrainLoop {
       for (const [chatJid, msgs] of bySender) {
         const senderName = msgs[0]!.sender_name || chatJid.split("@")[0] || "?";
         try {
-          const msgTexts = msgs.map(m => m.content || "[medya]").join("\n");
-          const dmResponse = await chat(
-            userId,
-            `[OTONOM OLAY — WhatsApp DM]\nGönderen: ${senderName} (${chatJid})\n\n${msgTexts}\n\n---\nBu mesajı değerlendir: Telegram'dan beni bilgilendir ve/veya gerekirse WhatsApp'tan cevap ver.`,
-          );
-          if (this.bot) await sendLogToChannel(this.bot, `📱 WA DM — ${senderName}`, dmResponse);
+          const stem = stemRef.get();
+          if (stem) {
+            await stem.feedEvent({
+              type: "whatsapp_dm",
+              payload: {
+                chatJid,
+                senderName,
+                messages: msgs.map(m => ({ content: m.content || "[medya]", message_type: "text" })),
+              },
+              timestamp: Date.now(),
+            });
+            console.log(`[BrainLoop] WA DM → Stem: ${senderName}`);
+          } else {
+            // Stem disabled — fallback to Cortex
+            const msgTexts = msgs.map(m => m.content || "[medya]").join("\n");
+            const dmResponse = await chat(
+              userId,
+              `[OTONOM OLAY — WhatsApp DM]\nGönderen: ${senderName} (${chatJid})\n\n${msgTexts}\n\n---\nBu mesajı değerlendir: Telegram'dan beni bilgilendir ve/veya gerekirse WhatsApp'tan cevap ver.`,
+            );
+            if (this.bot) await sendLogToChannel(this.bot, `📱 WA DM — ${senderName}`, dmResponse);
+          }
           const chatIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(chatIds);
           for (const id of chatIds) processedIds.add(id);
         } catch (chatError) {
-          console.error(`[BrainLoop] DM chat ${chatJid} error:`, chatError);
+          console.error(`[BrainLoop] DM ${chatJid} error:`, chatError);
           if (this.bot) await sendRawLog(this.bot, `❌ <b>WA DM hata</b> — ${escapeHtml(senderName)}\n<code>${String(chatError).slice(0, 200)}</code>`);
         }
       }
     }
 
-    // ── Feed Group Messages to Cortex ─────────────────────────────
+    // ── Feed Group Messages to Stem (fallback: Cortex) ────────────
     if (groupMsgs.length > 0) {
       const byGroup = new Map<string, typeof groupMsgs>();
       for (const notif of groupMsgs) {
@@ -275,12 +296,32 @@ class BrainLoop {
         const groupName = msgs[0]!.sender_name?.split(" @ ")[1] || groupJid;
         try {
           const replyAllowed = allowedGroupJids.length > 0 && allowedGroupJids.includes(groupJid);
-          const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
-          const grpResponse = await chat(
-            userId,
-            `[OTONOM OLAY — WhatsApp Grup]\nGrup: ${groupName} (${groupJid})\nCevap izni: ${replyAllowed ? "evet" : "hayır"}\n\n${msgTexts}\n\n---\nBu grup mesajını değerlendir: Önemliyse Telegram'dan beni bilgilendir.`,
-          );
-          if (this.bot) await sendLogToChannel(this.bot, `👥 WA Grup — ${groupName}`, grpResponse);
+          const stem = stemRef.get();
+          if (stem) {
+            await stem.feedEvent({
+              type: "whatsapp_group",
+              payload: {
+                chatJid: groupJid,
+                groupName,
+                replyAllowed,
+                messages: msgs.map(m => ({
+                  content: m.content || "[medya]",
+                  sender_name: m.sender_name || "?",
+                  message_type: "text",
+                })),
+              },
+              timestamp: Date.now(),
+            });
+            console.log(`[BrainLoop] WA Grup → Stem: ${groupName}`);
+          } else {
+            // Stem disabled — fallback to Cortex
+            const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
+            const grpResponse = await chat(
+              userId,
+              `[OTONOM OLAY — WhatsApp Grup]\nGrup: ${groupName} (${groupJid})\nCevap izni: ${replyAllowed ? "evet" : "hayır"}\n\n${msgTexts}\n\n---\nBu grup mesajını değerlendir: Önemliyse Telegram'dan beni bilgilendir.`,
+            );
+            if (this.bot) await sendLogToChannel(this.bot, `👥 WA Grup — ${groupName}`, grpResponse);
+          }
           const groupIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(groupIds);
           for (const id of groupIds) processedIds.add(id);
@@ -311,13 +352,24 @@ class BrainLoop {
 
       for (const reminder of dueReminders) {
         try {
-          const remResponse = await chat(
-            userId,
-            `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}\n\n---\nBu hatırlatıcıyı Telegram'dan bana ilet.`,
-          );
-          if (this.bot) await sendLogToChannel(this.bot, `⏰ Hatırlatıcı — ${reminder.title}`, remResponse);
+          const stem = stemRef.get();
+          if (stem) {
+            await stem.feedEvent({
+              type: "reminder_due",
+              payload: { title: reminder.title, message: reminder.message || "" },
+              timestamp: Date.now(),
+            });
+            console.log(`[BrainLoop] Hatırlatıcı → Stem: ${reminder.title}`);
+          } else {
+            // Stem disabled — fallback to Cortex
+            const remResponse = await chat(
+              userId,
+              `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}\n\n---\nBu hatırlatıcıyı Telegram'dan bana ilet.`,
+            );
+            if (this.bot) await sendLogToChannel(this.bot, `⏰ Hatırlatıcı — ${reminder.title}`, remResponse);
+          }
         } catch (err) {
-          console.error("[BrainLoop] reminder chat error:", err);
+          console.error("[BrainLoop] reminder error:", err);
           if (this.bot) await sendRawLog(this.bot, `❌ <b>Hatırlatıcı hata</b> — ${escapeHtml(reminder.title)}\n<code>${String(err).slice(0, 200)}</code>`);
         }
         // Başarı veya hata — mark et (hata durumunda sonsuz döngüyü önle)

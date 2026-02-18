@@ -9,6 +9,7 @@ export interface StemConfig {
   consolidationThreshold: number;
   maxWakesPerHour: number;
   userId: number;
+  userFolder: string;
 }
 
 export interface StemEvent {

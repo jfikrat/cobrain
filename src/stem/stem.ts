@@ -103,7 +103,7 @@ export class Stem {
     console.log(`[Stem] feedEvent: ${event.type}`);
 
     try {
-      const systemPrompt = buildStemSystemPrompt(this.notebook);
+      const systemPrompt = await buildStemSystemPrompt(this.config.userFolder, this.notebook);
 
       let sessionId = "";
       let lastContent = "";
@@ -203,7 +203,7 @@ export class Stem {
           prompt: consolidationPrompt,
           options: {
             model: this.config.model,
-            systemPrompt: buildStemSystemPrompt(this.notebook),
+            systemPrompt: await buildStemSystemPrompt(this.config.userFolder, this.notebook),
             resume: this.sessionId || undefined,
             settingSources: [],
             mcpServers: { stem: this.mcpServer },

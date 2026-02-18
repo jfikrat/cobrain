@@ -25,6 +25,7 @@ import { join } from "node:path";
 
 // Stem
 import { Stem } from "./stem/stem.ts";
+import { stemRef } from "./services/stem-ref.ts";
 
 console.log(`
    ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗███╗   ██╗
@@ -114,8 +115,10 @@ if (config.ENABLE_AUTONOMOUS) {
         consolidationThreshold: config.SENTINEL_CONSOLIDATION_THRESHOLD,
         maxWakesPerHour: config.SENTINEL_MAX_WAKES_PER_HOUR,
         userId: config.MY_TELEGRAM_ID,
+        userFolder,
       });
       await stem.start(bot);
+      stemRef.set(stem);
       console.log("[Startup] Stem started");
     }
 
