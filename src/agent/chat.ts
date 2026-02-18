@@ -298,8 +298,12 @@ async function _executeChat(
         resume: existingSessionId,
 
         // Load project instructions (user-folder CLAUDE.md and its @refs)
-        // so reasoning can be driven by Markdown-based policy files.
+        // Firecrawl skill lives in userFolder/.claude/skills/firecrawl-cli/
+        // Custom skills: Cobrain writes to userFolder/.claude/skills/ — auto-discovered.
         settingSources: ["project"],
+
+        // Allow Skill tool to run without permission prompts
+        allowedTools: ["Skill"],
 
         // MCP Servers (createSdkMcpServer returns full config)
         mcpServers: {
