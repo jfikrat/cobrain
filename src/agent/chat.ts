@@ -48,7 +48,7 @@ const activeThinking = new Set<number>();
 // Per-user serialization queue: ensures chat() calls run one at a time per user
 const pendingChats = new Map<number, Promise<ChatResponse>>();
 
-export function isUserBusy(userId: number): boolean {
+function isUserBusy(userId: number): boolean {
   return activeThinking.has(userId);
 }
 

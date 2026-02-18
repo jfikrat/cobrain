@@ -21,7 +21,7 @@ import { heartbeat } from "./heartbeat.ts";
 import { whatsappDB } from "./whatsapp-db.ts";
 import { getTaskQueue } from "./task-queue.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
-import { chat, isUserBusy } from "../agent/chat.ts";
+import { chat } from "../agent/chat.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -302,11 +302,6 @@ class BrainLoop {
       const dueReminders = goalsService.getDueReminders();
 
       for (const reminder of dueReminders) {
-        if (isUserBusy(userId)) {
-          // Cortex meşgul — işaretleme, sonraki tick'te tekrar denenecek
-          if (this.bot) await sendRawLog(this.bot, `⏭️ <b>Hatırlatıcı ertelendi</b> — ${escapeHtml(reminder.title)} (Cortex meşgul)`);
-          continue;
-        }
         try {
           const remResponse = await chat(
             userId,
