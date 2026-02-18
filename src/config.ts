@@ -51,7 +51,7 @@ const envSchema = z.object({
   TRANSCRIPTION_MODEL: z.string().default("gemini-3-flash-preview"),
 
   // v0.6: Agent model
-  AGENT_MODEL: z.string().default("claude-sonnet-4-5"),
+  AGENT_MODEL: z.string().default("claude-sonnet-4-6"),
   MAX_AGENT_TURNS: z.coerce.number().default(20),
 
   // v0.9: Brain Events — Phase 1
@@ -61,8 +61,8 @@ const envSchema = z.object({
   FF_MEMORY_CONSOLIDATION: z.coerce.boolean().default(true),
 
   // Model cascade (router-lite)
-  AGENT_MODEL_FAST: z.string().default("claude-sonnet-4-5"),
-  AGENT_MODEL_DEFAULT: z.string().default("claude-sonnet-4-5"),
+  AGENT_MODEL_FAST: z.string().default("claude-sonnet-4-6"),
+  AGENT_MODEL_DEFAULT: z.string().default("claude-sonnet-4-6"),
   // AGENT_MODEL is used as the "deep" path (now also Sonnet)
 
   // v0.7: Always-on heartbeat monitoring
@@ -96,7 +96,7 @@ const envSchema = z.object({
 
   // v1.4: Sentinel (Sonnet background watcher)
   FF_SENTINEL: z.coerce.boolean().default(true),
-  SENTINEL_MODEL: z.string().default("claude-sonnet-4-5"),
+  SENTINEL_MODEL: z.string().default("claude-sonnet-4-6"),
   SENTINEL_MAX_TURNS: z.coerce.number().default(5),
   SENTINEL_CONSOLIDATION_THRESHOLD: z.coerce.number().default(170_000),
   SENTINEL_MAX_WAKES_PER_HOUR: z.coerce.number().default(10),
