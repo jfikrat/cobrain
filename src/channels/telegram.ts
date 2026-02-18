@@ -727,6 +727,29 @@ bot.callbackQuery(/^mood_(great|neutral|low)$/, async (ctx) => {
   }
 });
 
+// ============ CATCH-ALL CALLBACK HANDLER ============
+// Cortex'in gönderdiği free-form butonlar buraya düşer.
+// Buton metnini kullanıcıdan gelen mesaj gibi Cortex'e iletir.
+
+bot.callbackQuery(/.+/, async (ctx) => {
+  const userId = ctx.from?.id ?? 0;
+  const data = ctx.callbackQuery.data;
+
+  // Spinner'ı kapat
+  await ctx.answerCallbackQuery();
+
+  if (!isAuthorized(userId)) return;
+
+  console.log(`[Telegram] Unhandled callback from ${userId}: "${data}"`);
+
+  recordInteraction(userId);
+
+  const response = await think(userId, data);
+  if (response.content) {
+    await ctx.reply(response.content, { parse_mode: "HTML" });
+  }
+});
+
 // ============ SES MESAJI HANDLER ============
 
 bot.on("message:voice", async (ctx) => {
