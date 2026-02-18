@@ -136,21 +136,17 @@ class BrainLoop {
   private async slowTick(): Promise<void> {
     heartbeat("brain_loop", { event: "slow_tick" });
 
-    // Periodic check via Cortex
+    // Periodic check via Cortex — chat() queue handles busy state automatically
     const userId = config.MY_TELEGRAM_ID;
-    if (isUserBusy(userId)) {
-      if (this.bot) await sendRawLog(this.bot, `⏭️ <b>Periyodik kontrol ertelendi</b> (kullanıcı meşgul)`);
-    } else {
-      try {
-        const periodicResponse = await chat(
-          userId,
-          `[OTONOM OLAY — Periyodik kontrol]\nSaat: ${new Date().toLocaleString("tr-TR")}\n\n---\nBekleyen görevleri, hedefleri veya takip gerektiren bir şey varsa Telegram'dan bildir. Yoksa sessiz kal.`,
-        );
-        if (this.bot) await sendLogToChannel(this.bot, `🔄 Periyodik kontrol`, periodicResponse);
-      } catch (err) {
-        console.error("[BrainLoop] periodic_check error:", err);
-        if (this.bot) await sendRawLog(this.bot, `❌ <b>Periyodik kontrol hata</b>\n<code>${String(err).slice(0, 200)}</code>`);
-      }
+    try {
+      const periodicResponse = await chat(
+        userId,
+        `[OTONOM OLAY — Periyodik kontrol]\nSaat: ${new Date().toLocaleString("tr-TR")}\n\n---\nBekleyen görevleri, hedefleri veya takip gerektiren bir şey varsa Telegram'dan bildir. Yoksa sessiz kal.`,
+      );
+      if (this.bot) await sendLogToChannel(this.bot, `🔄 Periyodik kontrol`, periodicResponse);
+    } catch (err) {
+      console.error("[BrainLoop] periodic_check error:", err);
+      if (this.bot) await sendRawLog(this.bot, `❌ <b>Periyodik kontrol hata</b>\n<code>${String(err).slice(0, 200)}</code>`);
     }
 
     // Code review cycle is disabled in minimal autonomy mode.
