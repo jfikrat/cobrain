@@ -138,24 +138,6 @@ class BrainLoop {
   private async slowTick(): Promise<void> {
     heartbeat("brain_loop", { event: "slow_tick" });
 
-    // Periodic check → Stem (fallback: Cortex)
-    const userId = config.MY_TELEGRAM_ID;
-    try {
-      const stem = stemRef.get();
-      if (stem) {
-        await stem.feedEvent({ type: "periodic_check", payload: {}, timestamp: Date.now() });
-      } else {
-        const periodicResponse = await chat(
-          userId,
-          `[OTONOM OLAY — Periyodik kontrol]\nSaat: ${new Date().toLocaleString("tr-TR")}\n\n---\nBekleyen görevleri, hedefleri veya takip gerektiren bir şey varsa Telegram'dan bildir. Yoksa sessiz kal.`,
-        );
-        if (this.bot) await sendLogToChannel(this.bot, `🔄 Periyodik kontrol`, periodicResponse);
-      }
-    } catch (err) {
-      console.error("[BrainLoop] periodic_check error:", err);
-      if (this.bot) await sendRawLog(this.bot, `❌ <b>Periyodik kontrol hata</b>\n<code>${String(err).slice(0, 200)}</code>`);
-    }
-
     // Hippocampus: memory consolidation during sleep hours (03:00-03:59)
     if (hippocampus.shouldRun() && this.bot) {
       hippocampus.run(config.MY_TELEGRAM_ID, this.bot).catch(err =>

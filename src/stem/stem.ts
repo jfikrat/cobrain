@@ -269,9 +269,6 @@ export class Stem {
         return `[${time}] Hatırlatıcı tetiklendi: "${p.title}" — ${p.message || "(mesaj yok)"}`;
       }
 
-      case "periodic_check":
-        return `[${time}] Periyodik kontrol — Bekleyen bir iş var mı? Beklentileri ve defteri kontrol et.`;
-
       case "expectation_timeout": {
         const p = event.payload;
         return `[${time}] Beklenti timeout: [${p.type}] ${p.target} — ${p.context}`;

@@ -17,7 +17,6 @@ export interface StemEvent {
     | "whatsapp_dm"
     | "whatsapp_group"
     | "reminder_due"
-    | "periodic_check"
     | "expectation_timeout";
   payload: Record<string, unknown>;
   timestamp: number;
