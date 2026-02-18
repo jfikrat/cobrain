@@ -10,7 +10,7 @@ import { think } from "../brain/index.ts";
 import { whatsappDB } from "../services/whatsapp-db.ts";
 import { markReplied, wasRecentlyReplied } from "../services/reply-dedup.ts";
 import { expectations } from "../services/expectations.ts";
-import { SmartMemory } from "../memory/smart-memory.ts";
+import { FileMemory } from "../memory/file-memory.ts";
 import { userManager } from "../services/user-manager.ts";
 import type { Notebook } from "./notebook.ts";
 import type { Bot } from "grammy";
@@ -158,32 +158,35 @@ export function createStemTools(deps: {
   // ── recall_memory ────────────────────────────────────────────────────
   const recallMemoryTool = tool(
     "recall_memory",
-    "Hafızada ara. Kişi bilgisi, geçmiş olaylar, kurallar için kullan.",
+    "Hafızada ara. facts.md (kalıcı bilgiler) + events.md (son olaylar) üzerinde arama yapar.",
     {
-      query: z.string().describe("Arama sorgusu"),
-      limit: z.number().default(3).describe("Maksimum sonuç"),
+      query: z.string().describe("Arama sorgusu veya 'all' ile tüm hafızayı oku"),
+      days: z.number().default(30).describe("Kaç günlük olay geçmişi"),
     },
-    async ({ query, limit }) => {
-      let memory: SmartMemory | null = null;
+    async ({ query, days }) => {
       try {
         const userFolder = userManager.getUserFolder(userId);
-        memory = new SmartMemory(userFolder, userId);
-        const results = await memory.search(query, { limit, minScore: 0.3 });
+        const memory = new FileMemory(userFolder);
 
-        if (results.length === 0) {
-          return "İlgili hafıza bulunamadı.";
+        if (query === "all") {
+          const all = await memory.readAll(days);
+          return all || "Hafıza boş.";
         }
 
-        return results
-          .map((r, i) => {
-            const summary = r.summary || r.content.slice(0, 120);
-            return `${i + 1}. [${r.type}] ${summary}`;
-          })
-          .join("\n");
+        const facts = await memory.readFacts();
+        const events = await memory.readRecentEvents(days);
+        const q = query.toLowerCase();
+
+        const matchingFacts = facts.split("\n").filter(l => l.toLowerCase().includes(q) && l.trim());
+        const matchingEvents = events.split("\n").filter(l => l.toLowerCase().includes(q) && l.trim());
+
+        const results: string[] = [];
+        if (matchingFacts.length > 0) results.push(`**Gerçekler:**\n${matchingFacts.join("\n")}`);
+        if (matchingEvents.length > 0) results.push(`**Olaylar:**\n${matchingEvents.join("\n")}`);
+
+        return results.length > 0 ? results.join("\n\n") : "İlgili hafıza bulunamadı.";
       } catch (err) {
         return `Hafıza arama hatası: ${err instanceof Error ? err.message : String(err)}`;
-      } finally {
-        try { memory?.close(); } catch { /* ignore */ }
       }
     },
   );
@@ -191,28 +194,27 @@ export function createStemTools(deps: {
   // ── store_memory ─────────────────────────────────────────────────────
   const storeMemoryTool = tool(
     "store_memory",
-    "Kalıcı bilgiyi hafızaya kaydet. Konsolidasyon sırasında önemli bilgiler için kullan.",
+    "Kalıcı bilgiyi hafızaya kaydet. semantic/procedural → facts.md, episodic → events.md",
     {
       content: z.string().describe("Kaydedilecek bilgi"),
       type: z.enum(["semantic", "episodic", "procedural"]).default("semantic"),
-      importance: z.number().min(0).max(1).default(0.5),
+      section: z.string().optional().describe("facts.md bölüm başlığı (ör: 'Konum', 'Tercihler')"),
     },
-    async ({ content, type, importance }) => {
-      let memory: SmartMemory | null = null;
+    async ({ content, type, section }) => {
       try {
         const userFolder = userManager.getUserFolder(userId);
-        memory = new SmartMemory(userFolder, userId);
-        const id = await memory.store({
-          content,
-          type,
-          importance,
-          source: "stem",
-        });
-        return `Hafızaya kaydedildi (ID: ${id})`;
+        const memory = new FileMemory(userFolder);
+
+        if (type === "episodic") {
+          await memory.logEvent(content);
+          return `Olay kaydedildi: ${content.slice(0, 60)}`;
+        } else {
+          const sectionName = section || inferSection(content);
+          await memory.storeFact(sectionName, content);
+          return `Hafızaya kaydedildi [${sectionName}]: ${content.slice(0, 60)}`;
+        }
       } catch (err) {
         return `Kaydetme hatası: ${err instanceof Error ? err.message : String(err)}`;
-      } finally {
-        try { memory?.close(); } catch { /* ignore */ }
       }
     },
   );
@@ -305,4 +307,16 @@ export function createStemTools(deps: {
       createExpectationTool,
     ],
   });
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function inferSection(content: string): string {
+  const lower = content.toLowerCase();
+  if (lower.includes("yaşıyor") || lower.includes("istanbul") || lower.includes("ankara") || lower.includes("şehir")) return "Konum";
+  if (lower.includes("meslek") || lower.includes("çalış") || lower.includes("yazılım") || lower.includes("mühendis")) return "Meslek";
+  if (lower.includes("eş") || lower.includes("karı") || lower.includes("evli") || lower.includes("anne") || lower.includes("baba")) return "Aile";
+  if (lower.includes("sever") || lower.includes("tercih") || lower.includes("hoşlan") || lower.includes("sevmez")) return "Tercihler";
+  if (lower.includes("hedef") || lower.includes("plan") || lower.includes("yapmak istiyor")) return "Hedefler";
+  return "Notlar";
 }
