@@ -11,8 +11,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { userManager } from "../services/user-manager.ts";
 import { heartbeat } from "../services/heartbeat.ts";
-import { generatePersonaSystemPrompt, type DynamicContext } from "./prompts.ts";
-import { getPersonaService } from "../services/persona.ts";
+import { readMindFiles, buildMdSystemPrompt, type DynamicContext } from "./prompts.ts";
 import { getMoodTrackingService } from "../services/mood-tracking.ts";
 import { SmartMemory } from "../memory/smart-memory.ts";
 import { getSessionState, updateSessionState, detectTopic, detectPhase } from "../services/session-state.ts";
@@ -22,7 +21,7 @@ import type { MemorySearchResult } from "../types/memory.ts";
 import type { MemoryEntry } from "../types/memory.ts";
 
 // Split modules
-import { getMemoryServer, getTelegramMcpServer, getGoalsServer, getPersonaServer, getMoodServer, getLocationServer, getTimeServer } from "./mcp-servers.ts";
+import { getMemoryServer, getTelegramMcpServer, getGoalsServer, getMoodServer, getLocationServer, getTimeServer } from "./mcp-servers.ts";
 import { extractTextContent, buildMessageContent, type MultimodalMessage } from "./message-builder.ts";
 import { createPreToolUseHooks, createPreCompactHook } from "./hooks.ts";
 
@@ -120,10 +119,6 @@ async function _executeChat(
   const settings = await userManager.getUserSettings(userId);
   const userFolder = userManager.getUserFolder(userId);
 
-  // Get persona
-  const personaService = await getPersonaService(userId);
-  const persona = await personaService.getActivePersona();
-
   // Build dynamic context (time + mood + recent memories)
   const dynamicTime = buildTimeContext();
 
@@ -211,7 +206,8 @@ async function _executeChat(
     } catch {}
   }
 
-  const systemPrompt = generatePersonaSystemPrompt(persona, {
+  const mindContent = await readMindFiles(userFolder);
+  const systemPrompt = buildMdSystemPrompt(mindContent, {
     time: dynamicTime,
     mood: dynamicMood,
     recentMemories,
@@ -308,7 +304,6 @@ async function _executeChat(
         mcpServers: {
           memory: getMemoryServer(userId),
           goals: getGoalsServer(userId),
-          persona: getPersonaServer(userId),
           telegram: getTelegramMcpServer(),
           time: getTimeServer(),
           mood: getMoodServer(userId),

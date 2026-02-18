@@ -4,6 +4,7 @@
  * v0.3 - Dynamic Persona System
  */
 
+import { join } from "node:path";
 import type { UserSettings } from "../types/user.ts";
 import type { Persona } from "../types/persona.ts";
 
@@ -771,6 +772,48 @@ function getClarificationDesc(level: number): string {
   if (level < 0.4) return 'Varsayımlarla ilerle';
   if (level < 0.7) return 'Belirsizlikte sor';
   return 'Her detayı netleştir';
+}
+
+// ========== NEW: MD-based System Prompt ==========
+
+const MIND_FILES = ["identity.md", "capabilities.md", "rules.md", "behaviors.md", "user.md", "contacts.md"];
+
+/**
+ * Read mind/*.md files from the user's folder and concatenate them.
+ * Files that don't exist are silently skipped.
+ */
+export async function readMindFiles(userFolder: string): Promise<string> {
+  const mindDir = join(userFolder, "mind");
+  const sections: string[] = [];
+
+  for (const file of MIND_FILES) {
+    try {
+      const content = await Bun.file(join(mindDir, file)).text();
+      if (content.trim()) sections.push(content.trim());
+    } catch { /* file doesn't exist — skip */ }
+  }
+
+  if (sections.length === 0) {
+    return `# Cobrain\nSen Cobrain adlı kişisel AI asistansın. Türkçe konuş. Kendini Claude olarak tanıtma.`;
+  }
+
+  return sections.join("\n\n---\n\n");
+}
+
+/**
+ * Build system prompt from mind/*.md content + optional dynamic context.
+ */
+export function buildMdSystemPrompt(mindContent: string, dynamicContext?: DynamicContext): string {
+  const preamble = `# KİMLİK UYARISI
+
+Sen "Cobrain" adlı bir AI asistansın. "Claude Code" veya "Claude" DEĞİLSİN.
+Kullanıcı sana kim olduğunu sorduğunda SADECE "Cobrain" olarak tanıt.
+
+---
+
+`;
+  const dynamic = dynamicContext ? '\n\n' + buildDynamicContextXml(dynamicContext) : '';
+  return `${preamble}${mindContent}${dynamic}`;
 }
 
 /**
