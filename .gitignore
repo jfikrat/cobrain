@@ -45,3 +45,5 @@ data/whatsapp-auth/
 # Claude Code
 .claude/
 .firecrawl/
+CLAUDE.md
+AGENTS.md
