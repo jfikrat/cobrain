@@ -265,18 +265,19 @@ async function _executeChat(
     const subAgents = config.MINIMAL_AUTONOMY
       ? undefined
       : {
-          researcher: {
+          // Sub-agents of Cortex (main agent) — brain-themed names
+          frontal: {
             description: "Web'de araştırma yapar, bilgi toplar. Güncel bilgi, haber, teknik dokümantasyon aramak için kullan.",
-            prompt: "Sen bir araştırmacısın. Verilen konuyu web'de araştır, güvenilir kaynaklardan bilgi topla ve özet sun. Türkçe yanıt ver.",
+            prompt: "Sen Cortex'in araştırma sub-agent'ısın (Frontal). Verilen konuyu web'de araştır, güvenilir kaynaklardan bilgi topla ve özet sun. Türkçe yanıt ver.",
             tools: ["WebSearch", "WebFetch"],
           },
-          summarizer: {
-            description: "Uzun metinleri özetler. Makale, döküman, konuşma özeti için kullan.",
-            prompt: "Sen bir özetleyicisin. Verilen metni kısa, öz ve anlaşılır şekilde özetle. Önemli noktaları vurgula. Türkçe yanıt ver.",
+          wernicke: {
+            description: "Uzun metinleri özetler ve analiz eder. Makale, döküman, konuşma özeti için kullan.",
+            prompt: "Sen Cortex'in dil ve anlam sub-agent'ısın (Wernicke). Verilen metni kısa, öz ve anlaşılır şekilde özetle. Önemli noktaları vurgula. Türkçe yanıt ver.",
           },
-          "memory-expert": {
+          hippocampus: {
             description: "Kullanıcının hafızasında arama ve analiz yapar. Geçmiş konuşmalar, kaydedilen bilgiler için kullan.",
-            prompt: "Sen hafıza uzmanısın. Kullanıcının hafızasında detaylı arama yap, ilgili bilgileri bul ve özetle. Türkçe yanıt ver.",
+            prompt: "Sen Cortex'in hafıza sub-agent'ısın (Hippocampus). Kullanıcının hafızasında detaylı arama yap, ilgili bilgileri bul ve özetle. Türkçe yanıt ver.",
             tools: ["mcp__memory__recall", "mcp__memory__memory_stats"],
           },
         };
