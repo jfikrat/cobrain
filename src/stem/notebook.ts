@@ -21,7 +21,7 @@ Güncelleme: ${new Date().toISOString()}
 ## Öğrenilenler
 - (henüz yok)
 
-## Opus'a Bildirilecekler
+## Cortex'e Bildirilecekler
 - (boş)
 `;
 

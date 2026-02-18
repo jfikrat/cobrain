@@ -72,11 +72,11 @@ async function getOrResumeSession(userId: number): Promise<string | undefined> {
     const hour = new Date().getHours();
     const effectiveTTL = hour >= 23 || hour < 8 ? SESSION_TTL_MS * 3 : SESSION_TTL_MS;
     if (age > effectiveTTL) {
-      console.log(`[Agent] Session expired (${Math.round(age / 60000)}min), starting fresh`);
+      console.log(`[Cortex] Session expired (${Math.round(age / 60000)}min), starting fresh`);
       return undefined;
     }
 
-    console.log(`[Agent] Resuming session from DB (${Math.round(age / 60000)}min old)`);
+    console.log(`[Cortex] Resuming session from DB (${Math.round(age / 60000)}min old)`);
     userSessions.set(userId, session.id);
     return session.id;
   } catch {
@@ -234,7 +234,7 @@ async function _executeChat(
 
   const actualModel = modelOverride || config.AGENT_MODEL;
 
-  console.log(`[Agent] Chat started for user ${userId}: "${messagePreview}..."${hasImages ? " (with images)" : ""}${modelOverride ? ` (model: ${actualModel})` : ""}`);
+  console.log(`[Cortex] Chat started for user ${userId}: "${messagePreview}..."${hasImages ? " (with images)" : ""}${modelOverride ? ` (model: ${actualModel})` : ""}`);
 
   try {
     // Create the prompt - use SDKUserMessage for multimodal content
@@ -340,9 +340,9 @@ async function _executeChat(
               const mem = new UserMemory(userDb);
               mem.setSession(sessionId);
             } catch (e) {
-              console.warn(`[Agent] Session persist failed:`, e);
+              console.warn(`[Cortex] Session persist failed:`, e);
             }
-            console.log(`[Agent] Session: ${sessionId.slice(0, 8)}...`);
+            console.log(`[Cortex] Session: ${sessionId.slice(0, 8)}...`);
           }
           break;
 
@@ -364,7 +364,7 @@ async function _executeChat(
             }
           } else {
             // Error case
-            console.error(`[Agent] Error: ${result.subtype}`, (result as any).errors);
+            console.error(`[Cortex] Error: ${result.subtype}`, (result as any).errors);
             if (!lastAssistantContent) {
               lastAssistantContent = `Bir hata oluştu: ${result.subtype}`;
             }
@@ -374,7 +374,7 @@ async function _executeChat(
     }
 
     console.log(
-      `[Agent] Completed: ${numTurns} turns, ${toolsUsed.length} tools, $${totalCost.toFixed(4)}`
+      `[Cortex] Completed: ${numTurns} turns, ${toolsUsed.length} tools, $${totalCost.toFixed(4)}`
     );
 
     // Heartbeat: agent completed successfully
@@ -415,7 +415,7 @@ async function _executeChat(
     // Stale session from DB — SDK can't find it after restart
     // Clear and retry once with a fresh session (call _executeChat directly to avoid queue deadlock)
     if (existingSessionId && errorMessage.includes("exited with code")) {
-      console.warn(`[Agent] Stale session detected, retrying with fresh session...`);
+      console.warn(`[Cortex] Stale session detected, retrying with fresh session...`);
       userSessions.delete(userId);
       try {
         const userDb = await userManager.getUserDb(userId);
@@ -425,7 +425,7 @@ async function _executeChat(
       return _executeChat(userId, message, traceId, modelOverride);
     }
 
-    console.error("[Agent] Chat error:", error);
+    console.error("[Cortex] Chat error:", error);
 
     // Clear session on error to start fresh next time
     userSessions.delete(userId);
@@ -451,7 +451,7 @@ async function _executeChat(
  */
 export function clearSession(userId: number): void {
   userSessions.delete(userId);
-  console.log(`[Agent] Session cleared for user ${userId}`);
+  console.log(`[Cortex] Session cleared for user ${userId}`);
 }
 
 /**

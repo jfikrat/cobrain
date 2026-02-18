@@ -23,7 +23,7 @@ export interface StemEvent {
 }
 
 export interface StemResult {
-  action: "replied" | "notified" | "woke_opus" | "noted" | "none";
+  action: "replied" | "notified" | "woke_cortex" | "noted" | "none";
   details?: string;
   tokensUsed?: number;
 }

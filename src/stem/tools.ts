@@ -15,7 +15,7 @@ import { userManager } from "../services/user-manager.ts";
 import type { Notebook } from "./notebook.ts";
 import type { Bot } from "grammy";
 
-// ── Rate limiter for wake_opus ─────────────────────────────────────────
+// ── Rate limiter for wake_cortex ─────────────────────────────────────────
 
 class WakeRateLimiter {
   private timestamps: number[] = [];
@@ -53,10 +53,10 @@ export function createStemTools(deps: {
   const { notebook, bot, userId, maxWakesPerHour } = deps;
   const wakeLimiter = new WakeRateLimiter(maxWakesPerHour);
 
-  // ── wake_opus ────────────────────────────────────────────────────────
+  // ── wake_cortex ────────────────────────────────────────────────────────
   const wakeOpusTool = tool(
-    "wake_opus",
-    "Karmaşık karar gerektiğinde Opus'u uyandır. Rate limit: saatte max " + maxWakesPerHour,
+    "wake_cortex",
+    "Karmaşık karar gerektiğinde Cortex'i uyandır. Rate limit: saatte max " + maxWakesPerHour,
     {
       reason: z.string().describe("Neden Opus gerekli — kısa açıklama"),
       context: z.string().describe("Bağlam bilgisi — mesaj içeriği, kişi, durum"),
@@ -68,7 +68,7 @@ export function createStemTools(deps: {
       }
 
       wakeLimiter.record();
-      console.log(`[Stem] wake_opus: ${reason} (urgency=${urgency}, remaining=${wakeLimiter.remaining()})`);
+      console.log(`[Stem] wake_cortex: ${reason} (urgency=${urgency}, remaining=${wakeLimiter.remaining()})`);
 
       try {
         const response = await think(
@@ -76,18 +76,18 @@ export function createStemTools(deps: {
           `[SENTINEL ESCALATION]\n${reason}\n\nBağlam:\n${context}`,
           "stem",
         );
-        return `Opus cevabı: ${response.content}`;
+        return `Cortex cevabı: ${response.content}`;
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        console.error("[Stem] wake_opus failed:", errMsg);
+        console.error("[Stem] wake_cortex failed:", errMsg);
         // Fallback: send simple Telegram notification
         try {
           await bot.api.sendMessage(
             userId,
-            `[Stem] Opus'a ulaşamadım. Sebep: ${reason}\nBağlam: ${context.slice(0, 200)}`,
+            `[Stem] Cortex'e ulaşamadım. Sebep: ${reason}\nBağlam: ${context.slice(0, 200)}`,
           );
         } catch { /* ignore telegram error */ }
-        return `Opus hatası: ${errMsg}. Telegram bildirimi gönderildi (fallback).`;
+        return `Cortex hatası: ${errMsg}. Telegram bildirimi gönderildi (fallback).`;
       }
     },
   );
@@ -220,7 +220,7 @@ export function createStemTools(deps: {
   // ── update_notebook ──────────────────────────────────────────────────
   const updateNotebookTool = tool(
     "update_notebook",
-    "Defteri güncelle. Bölüm adı ve yeni içerik ver. Bölümler: Aktif Durum, Bekleyen İşler, Bugünkü Olaylar, Öğrenilenler, Opus'a Bildirilecekler",
+    "Defteri güncelle. Bölüm adı ve yeni içerik ver. Bölümler: Aktif Durum, Bekleyen İşler, Bugünkü Olaylar, Öğrenilenler, Cortex'e Bildirilecekler",
     {
       section: z.string().describe("Bölüm başlığı (## sonrası)"),
       content: z.string().describe("Yeni bölüm içeriği (üzerine yazılır)"),

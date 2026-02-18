@@ -93,7 +93,7 @@ export function createPreToolUseHooks(params: {
           const toolName = input.tool_name;
           const toolInput = input.tool_input as Record<string, unknown>;
 
-          console.log(`[Agent] Tool: ${toolName}`);
+          console.log(`[Cortex] Tool: ${toolName}`);
           toolsUsed.push(toolName);
 
           // Event: tool called
@@ -121,7 +121,7 @@ export function createPreToolUseHooks(params: {
             }
           } catch (error) {
             // Silently fail - don't interrupt main flow
-            console.error("[Agent] Failed to send status message:", error);
+            console.error("[Cortex] Failed to send status message:", error);
           }
 
           // User's permission mode or fallback to global config
@@ -129,7 +129,7 @@ export function createPreToolUseHooks(params: {
 
           // Check if permission is needed
           if (needsPermission(mode, toolName, toolInput)) {
-            console.log(`[Agent] Asking permission for ${toolName}...`);
+            console.log(`[Cortex] Asking permission for ${toolName}...`);
 
             // Create an AbortController for the permission request
             const abortController = new AbortController();
@@ -142,7 +142,7 @@ export function createPreToolUseHooks(params: {
             );
 
             if (result.behavior === "deny") {
-              console.log(`[Agent] Permission denied for ${toolName}`);
+              console.log(`[Cortex] Permission denied for ${toolName}`);
               return {
                 hookSpecificOutput: {
                   hookEventName: "PreToolUse" as const,
@@ -152,7 +152,7 @@ export function createPreToolUseHooks(params: {
               };
             }
 
-            console.log(`[Agent] Permission granted for ${toolName}`);
+            console.log(`[Cortex] Permission granted for ${toolName}`);
           }
 
           return {

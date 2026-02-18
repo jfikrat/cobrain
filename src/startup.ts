@@ -119,7 +119,7 @@ if (config.ENABLE_AUTONOMOUS) {
       console.log("[Startup] Stem started");
     }
 
-    // Start BrainLoop (events routed directly to main agent)
+    // Start BrainLoop (events routed directly to Cortex)
     brainLoop.start(bot);
     console.log("[Startup] BrainLoop started");
   }, 1000);

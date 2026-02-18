@@ -285,7 +285,7 @@ export class Stem {
   /** Infer action from stem's response text */
   private inferAction(content: string): StemResult["action"] {
     const lower = content.toLowerCase();
-    if (lower.includes("wake_opus") || lower.includes("opus'u uyandır")) return "woke_opus";
+    if (lower.includes("wake_cortex") || lower.includes("opus'u uyandır")) return "woke_cortex";
     if (lower.includes("mesaj gönderildi") || lower.includes("cevap gönderildi") || lower.includes("send_whatsapp_reply")) return "replied";
     if (lower.includes("telegram bildirimi") || lower.includes("send_telegram")) return "notified";
     if (lower.includes("defter güncellendi") || lower.includes("not al")) return "noted";

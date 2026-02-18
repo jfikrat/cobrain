@@ -136,7 +136,7 @@ class BrainLoop {
   private async slowTick(): Promise<void> {
     heartbeat("brain_loop", { event: "slow_tick" });
 
-    // Periodic check via main agent
+    // Periodic check via Cortex
     const userId = config.MY_TELEGRAM_ID;
     if (isUserBusy(userId)) {
       if (this.bot) await sendRawLog(this.bot, `⏭️ <b>Periyodik kontrol ertelendi</b> (kullanıcı meşgul)`);
@@ -230,7 +230,7 @@ class BrainLoop {
     const dms = notifications.filter(n => !n.is_group);
     const groupMsgs = notifications.filter(n => n.is_group);
 
-    // ── Feed DMs to main agent ────────────────────────────────────────
+    // ── Feed DMs to Cortex ────────────────────────────────────────
     if (dms.length > 0) {
       const bySender = new Map<string, typeof dms>();
       for (const notif of dms) {
@@ -263,7 +263,7 @@ class BrainLoop {
       }
     }
 
-    // ── Feed Group Messages to main agent ─────────────────────────────
+    // ── Feed Group Messages to Cortex ─────────────────────────────
     if (groupMsgs.length > 0) {
       const byGroup = new Map<string, typeof groupMsgs>();
       for (const notif of groupMsgs) {
