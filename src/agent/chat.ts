@@ -13,12 +13,10 @@ import { userManager } from "../services/user-manager.ts";
 import { heartbeat } from "../services/heartbeat.ts";
 import { readMindFiles, buildMdSystemPrompt, type DynamicContext } from "./prompts.ts";
 import { getMoodTrackingService } from "../services/mood-tracking.ts";
-import { SmartMemory } from "../memory/smart-memory.ts";
+import { FileMemory } from "../memory/file-memory.ts";
 import { getSessionState, updateSessionState, detectTopic, detectPhase } from "../services/session-state.ts";
 import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
-import type { MemorySearchResult } from "../types/memory.ts";
-import type { MemoryEntry } from "../types/memory.ts";
 
 // Split modules
 import { getMemoryServer, getTelegramMcpServer, getGoalsServer, getMoodServer, getLocationServer, getTimeServer } from "./mcp-servers.ts";
@@ -145,40 +143,29 @@ async function _executeChat(
     }
   } catch {}
 
-  // Token budget: max 5 memories, query-relevant + importance, deduplicated
+  // Load recent memories from file-based system
   let recentMemories: string[] = [];
   try {
-    const memory = new SmartMemory(userFolder, userId);
-    const now = Date.now();
-
-    // Query-relevant memories (hybrid search)
+    const fileMemory = new FileMemory(userFolder);
     const queryText = typeof message === 'string' ? message : (message as any).text || '';
-    let queryRelevant: MemorySearchResult[] = [];
-    try {
-      queryRelevant = await memory.search(queryText, { limit: 3, minScore: 0.3 });
-    } catch {}
+    const q = queryText.toLowerCase();
 
-    // Importance-based (reduced)
-    const important = memory.getByImportance(2, 0.7);
+    const facts = await fileMemory.readFacts();
+    const events = await fileMemory.readRecentEvents(30);
 
-    // Merge + deduplicate by id, cap at 5
-    const seenIds = new Set<number>();
-    const merged: MemoryEntry[] = [];
-    for (const entry of [...queryRelevant, ...important]) {
-      if (seenIds.has(entry.id)) continue;
-      seenIds.add(entry.id);
-      merged.push(entry);
-      if (merged.length >= 5) break;
+    // Simple relevance: lines containing query keywords
+    const keywords = q.split(/\s+/).filter((w: string) => w.length > 2);
+    const allLines = [...facts.split("\n"), ...events.split("\n")];
+    const relevant = keywords.length > 0
+      ? allLines.filter(l => keywords.some((k: string) => l.toLowerCase().includes(k)) && l.trim() && !l.startsWith("#"))
+      : [];
+
+    // Fallback: just include facts if no relevant lines
+    if (relevant.length === 0 && facts.trim()) {
+      recentMemories = [facts.slice(0, 400)];
+    } else {
+      recentMemories = deduplicateMemories(relevant.slice(0, 5).map(l => l.trim()));
     }
-
-    // Format with recency & importance labels
-    recentMemories = deduplicateMemories(
-      merged.map(e => {
-        const daysAgo = Math.floor((now - new Date(e.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-        return `[${daysAgo}d ago, imp=${e.importance.toFixed(1)}] ${truncate(e.content, 180)}`;
-      })
-    );
-    memory.close();
   } catch {}
 
   // Session state for continuity

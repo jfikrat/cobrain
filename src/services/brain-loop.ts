@@ -22,6 +22,7 @@ import { whatsappDB } from "./whatsapp-db.ts";
 import { getTaskQueue } from "./task-queue.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
 import { chat } from "../agent/chat.ts";
+import { hippocampus } from "../hippocampus/hippocampus.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -147,6 +148,13 @@ class BrainLoop {
     } catch (err) {
       console.error("[BrainLoop] periodic_check error:", err);
       if (this.bot) await sendRawLog(this.bot, `❌ <b>Periyodik kontrol hata</b>\n<code>${String(err).slice(0, 200)}</code>`);
+    }
+
+    // Hippocampus: memory consolidation during sleep hours (03:00-03:59)
+    if (hippocampus.shouldRun() && this.bot) {
+      hippocampus.run(config.MY_TELEGRAM_ID, this.bot).catch(err =>
+        console.error("[BrainLoop] hippocampus error:", err)
+      );
     }
 
     // Code review cycle is disabled in minimal autonomy mode.
