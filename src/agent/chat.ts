@@ -106,11 +106,20 @@ export function chat(
   return current;
 }
 
+const RETRYABLE_PATTERNS = ["Internal server error", "overloaded", "rate limit", "529", "500"];
+const MAX_RETRIES = 3;
+const RETRY_DELAYS_MS = [1000, 3000, 8000];
+
+function isRetryableError(message: string): boolean {
+  return RETRYABLE_PATTERNS.some((p) => message.toLowerCase().includes(p.toLowerCase()));
+}
+
 async function _executeChat(
   userId: number,
   message: string | MultimodalMessage,
   traceId?: string,
   modelOverride?: string,
+  attempt = 1,
 ): Promise<ChatResponse> {
   activeThinking.add(userId);
   try {
@@ -426,7 +435,16 @@ async function _executeChat(
         const mem = new UserMemory(userDb);
         mem.clearSession();
       } catch {}
-      return _executeChat(userId, message, traceId, modelOverride);
+      return _executeChat(userId, message, traceId, modelOverride, attempt);
+    }
+
+    // Retry on transient API errors (500, overloaded, rate limit)
+    if (attempt <= MAX_RETRIES && isRetryableError(errorMessage)) {
+      const delay = RETRY_DELAYS_MS[attempt - 1] ?? 8000;
+      console.warn(`[Cortex] API error (attempt ${attempt}/${MAX_RETRIES}), retrying in ${delay}ms: ${errorMessage.slice(0, 80)}`);
+      await new Promise((r) => setTimeout(r, delay));
+      activeThinking.delete(userId);
+      return _executeChat(userId, message, traceId, modelOverride, attempt + 1);
     }
 
     console.error("[Cortex] Chat error:", error);
