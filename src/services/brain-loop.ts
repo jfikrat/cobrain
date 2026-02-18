@@ -119,7 +119,7 @@ class BrainLoop {
       try {
         await chat(
           userId,
-          `🔄 Periyodik kontrol — ${new Date().toLocaleString("tr-TR")}. Takip etmeni gerektiren bir şey var mı?`,
+          `[OTONOM OLAY — Periyodik kontrol]\nSaat: ${new Date().toLocaleString("tr-TR")}\n\n---\nBekleyen görevleri, hedefleri veya takip gerektiren bir şey varsa Telegram'dan bildir. Yoksa sessiz kal.`,
         );
       } catch (err) {
         console.error("[BrainLoop] periodic_check error:", err);
@@ -222,7 +222,7 @@ class BrainLoop {
           const msgTexts = msgs.map(m => m.content || "[medya]").join("\n");
           await chat(
             userId,
-            `📱 WhatsApp DM — ${senderName} (${chatJid}):\n${msgTexts}`,
+            `[OTONOM OLAY — WhatsApp DM]\nGönderen: ${senderName} (${chatJid})\n\n${msgTexts}\n\n---\nBu mesajı değerlendir: Telegram'dan beni bilgilendir ve/veya gerekirse WhatsApp'tan cevap ver.`,
           );
           const chatIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(chatIds);
@@ -253,7 +253,7 @@ class BrainLoop {
           const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
           await chat(
             userId,
-            `📱 WhatsApp Grup — ${groupName} (${groupJid}, cevap: ${replyAllowed ? "evet" : "hayır"}):\n${msgTexts}`,
+            `[OTONOM OLAY — WhatsApp Grup]\nGrup: ${groupName} (${groupJid})\nCevap izni: ${replyAllowed ? "evet" : "hayır"}\n\n${msgTexts}\n\n---\nBu grup mesajını değerlendir: Önemliyse Telegram'dan beni bilgilendir.`,
           );
           const groupIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(groupIds);
@@ -286,7 +286,7 @@ class BrainLoop {
         if (!isUserBusy(userId)) {
           await chat(
             userId,
-            `⏰ Hatırlatıcı: ${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}`,
+            `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}\n\n---\nBu hatırlatıcıyı Telegram'dan bana ilet.`,
           );
         }
         // Always mark as sent to prevent infinite loop (regardless of busy state)
