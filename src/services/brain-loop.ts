@@ -237,11 +237,6 @@ class BrainLoop {
 
       for (const [chatJid, msgs] of bySender) {
         const senderName = msgs[0]!.sender_name || chatJid.split("@")[0] || "?";
-        if (isUserBusy(userId)) {
-          console.log(`[BrainLoop] User busy, deferring DM from ${chatJid}`);
-          if (this.bot) await sendRawLog(this.bot, `⏭️ <b>WA DM ertelendi</b> — ${escapeHtml(senderName)} (kullanıcı meşgul)`);
-          continue;
-        }
         try {
           const msgTexts = msgs.map(m => m.content || "[medya]").join("\n");
           const dmResponse = await chat(
@@ -270,11 +265,6 @@ class BrainLoop {
 
       for (const [groupJid, msgs] of byGroup) {
         const groupName = msgs[0]!.sender_name?.split(" @ ")[1] || groupJid;
-        if (isUserBusy(userId)) {
-          console.log(`[BrainLoop] User busy, deferring group ${groupJid}`);
-          if (this.bot) await sendRawLog(this.bot, `⏭️ <b>WA Grup ertelendi</b> — ${escapeHtml(groupName)} (kullanıcı meşgul)`);
-          continue;
-        }
         try {
           const replyAllowed = allowedGroupJids.length > 0 && allowedGroupJids.includes(groupJid);
           const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
