@@ -94,6 +94,9 @@ const envSchema = z.object({
   CORTEX_EXPECTATION_CLEANUP_INTERVAL_MS: z.coerce.number().default(60_000),
   CORTEX_MODEL: z.string().default("gemini-3-flash-preview"),
 
+  // Log channel: autonomous event logs sent here
+  LOG_CHANNEL_ID: z.coerce.number().optional(),
+
   // v1.4: Sentinel (Sonnet background watcher)
   FF_SENTINEL: z.coerce.boolean().default(true),
   SENTINEL_MODEL: z.string().default("claude-sonnet-4-6"),

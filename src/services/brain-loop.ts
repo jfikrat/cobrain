@@ -23,6 +23,20 @@ import { getTaskQueue } from "./task-queue.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
 import { chat, isUserBusy } from "../agent/chat.ts";
 
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+async function sendLogToChannel(bot: Bot, eventType: string, response: Awaited<ReturnType<typeof chat>>): Promise<void> {
+  if (!config.LOG_CHANNEL_ID) return;
+  try {
+    const tools = response.toolsUsed.length > 0 ? response.toolsUsed.join(", ") : "—";
+    const preview = response.content.slice(0, 300).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const msg = `🤖 <b>${eventType}</b>\n\n${preview}${response.content.length > 300 ? "…" : ""}\n\n🔧 <code>${tools}</code> | 💰 $${response.totalCost.toFixed(4)} | 🔄 ${response.numTurns} turn`;
+    await bot.api.sendMessage(config.LOG_CHANNEL_ID, msg, { parse_mode: "HTML" });
+  } catch (err) {
+    console.error("[BrainLoop] Log channel send failed:", err);
+  }
+}
+
 // ── Constants ────────────────────────────────────────────────────────────
 
 const FAST_TICK_MS = 30_000;     // 30 seconds
@@ -117,10 +131,11 @@ class BrainLoop {
     const userId = config.MY_TELEGRAM_ID;
     if (!isUserBusy(userId)) {
       try {
-        await chat(
+        const periodicResponse = await chat(
           userId,
           `[OTONOM OLAY — Periyodik kontrol]\nSaat: ${new Date().toLocaleString("tr-TR")}\n\n---\nBekleyen görevleri, hedefleri veya takip gerektiren bir şey varsa Telegram'dan bildir. Yoksa sessiz kal.`,
         );
+        if (this.bot) await sendLogToChannel(this.bot, `🔄 Periyodik kontrol`, periodicResponse);
       } catch (err) {
         console.error("[BrainLoop] periodic_check error:", err);
       }
@@ -220,10 +235,11 @@ class BrainLoop {
         try {
           const senderName = msgs[0]!.sender_name || chatJid.split("@")[0] || "?";
           const msgTexts = msgs.map(m => m.content || "[medya]").join("\n");
-          await chat(
+          const dmResponse = await chat(
             userId,
             `[OTONOM OLAY — WhatsApp DM]\nGönderen: ${senderName} (${chatJid})\n\n${msgTexts}\n\n---\nBu mesajı değerlendir: Telegram'dan beni bilgilendir ve/veya gerekirse WhatsApp'tan cevap ver.`,
           );
+          if (this.bot) await sendLogToChannel(this.bot, `📱 WA DM — ${senderName}`, dmResponse);
           const chatIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(chatIds);
           for (const id of chatIds) processedIds.add(id);
@@ -251,10 +267,11 @@ class BrainLoop {
           const replyAllowed = allowedGroupJids.length > 0 && allowedGroupJids.includes(groupJid);
           const groupName = msgs[0]!.sender_name?.split(" @ ")[1] || groupJid;
           const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
-          await chat(
+          const grpResponse = await chat(
             userId,
             `[OTONOM OLAY — WhatsApp Grup]\nGrup: ${groupName} (${groupJid})\nCevap izni: ${replyAllowed ? "evet" : "hayır"}\n\n${msgTexts}\n\n---\nBu grup mesajını değerlendir: Önemliyse Telegram'dan beni bilgilendir.`,
           );
+          if (this.bot) await sendLogToChannel(this.bot, `👥 WA Grup — ${groupName}`, grpResponse);
           const groupIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(groupIds);
           for (const id of groupIds) processedIds.add(id);
@@ -284,10 +301,11 @@ class BrainLoop {
 
       for (const reminder of dueReminders) {
         if (!isUserBusy(userId)) {
-          await chat(
+          const remResponse = await chat(
             userId,
             `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}\n\n---\nBu hatırlatıcıyı Telegram'dan bana ilet.`,
           );
+          if (this.bot) await sendLogToChannel(this.bot, `⏰ Hatırlatıcı — ${reminder.title}`, remResponse);
         }
         // Always mark as sent to prevent infinite loop (regardless of busy state)
         goalsService.markReminderSent(reminder.id);
