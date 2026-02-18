@@ -21,9 +21,10 @@ import { heartbeat } from "./heartbeat.ts";
 import { whatsappDB } from "./whatsapp-db.ts";
 import { getTaskQueue } from "./task-queue.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
-import { chat } from "../agent/chat.ts";
+import { chat, isUserBusy } from "../agent/chat.ts";
 import { hippocampus } from "../hippocampus/hippocampus.ts";
 import { stemRef } from "./stem-ref.ts";
+import { inbox } from "./inbox.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -130,6 +131,12 @@ class BrainLoop {
       await this.checkDueReminders();
     } catch (err) {
       console.error("[BrainLoop] checkDueReminders error:", err);
+    }
+
+    try {
+      await this.processInbox();
+    } catch (err) {
+      console.error("[BrainLoop] processInbox error:", err);
     }
   }
 
@@ -360,6 +367,29 @@ class BrainLoop {
     } catch (err) {
       console.error("[BrainLoop] checkDueReminders error:", err);
     }
+  }
+
+  // ── Inbox Processing ─────────────────────────────────────────────────
+
+  private async processInbox(): Promise<void> {
+    const pendingItem = inbox.pending()[0];
+    if (!pendingItem) return;
+    if (isUserBusy(config.MY_TELEGRAM_ID)) return;
+
+    await inbox.markProcessed(pendingItem.id);
+
+    const prompt = [
+      `[GELEN KUTUSU — ${pendingItem.from.toUpperCase()}]`,
+      `Konu: ${pendingItem.subject}`,
+      ``,
+      pendingItem.body,
+    ].join("\n");
+
+    console.log(`[BrainLoop] Inbox item işleniyor: "${pendingItem.subject}"`);
+
+    chat(config.MY_TELEGRAM_ID, prompt).catch(err =>
+      console.error("[BrainLoop] Inbox işleme hatası:", err)
+    );
   }
 
   // ── Code Review Cycle ──────────────────────────────────────────────

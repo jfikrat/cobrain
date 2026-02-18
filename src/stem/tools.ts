@@ -6,7 +6,7 @@
 import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { config } from "../config.ts";
-import { think } from "../brain/index.ts";
+import { inbox } from "../services/inbox.ts";
 import { whatsappDB } from "../services/whatsapp-db.ts";
 import { markReplied, wasRecentlyReplied } from "../services/reply-dedup.ts";
 import { expectations } from "../services/expectations.ts";
@@ -14,33 +14,6 @@ import { FileMemory } from "../memory/file-memory.ts";
 import { userManager } from "../services/user-manager.ts";
 import type { Notebook } from "./notebook.ts";
 import type { Bot } from "grammy";
-
-// ── Rate limiter for wake_cortex ─────────────────────────────────────────
-
-class WakeRateLimiter {
-  private timestamps: number[] = [];
-
-  constructor(private maxPerHour: number) {}
-
-  canWake(): boolean {
-    this.cleanup();
-    return this.timestamps.length < this.maxPerHour;
-  }
-
-  record(): void {
-    this.timestamps.push(Date.now());
-  }
-
-  remaining(): number {
-    this.cleanup();
-    return Math.max(0, this.maxPerHour - this.timestamps.length);
-  }
-
-  private cleanup(): void {
-    const oneHourAgo = Date.now() - 60 * 60 * 1000;
-    this.timestamps = this.timestamps.filter((t) => t > oneHourAgo);
-  }
-}
 
 // ── Tool creation ──────────────────────────────────────────────────────
 
@@ -50,45 +23,32 @@ export function createStemTools(deps: {
   userId: number;
   maxWakesPerHour: number;
 }) {
-  const { notebook, bot, userId, maxWakesPerHour } = deps;
-  const wakeLimiter = new WakeRateLimiter(maxWakesPerHour);
+  const { notebook, bot, userId } = deps;
 
   // ── wake_cortex ────────────────────────────────────────────────────────
   const wakeOpusTool = tool(
     "wake_cortex",
-    "Karmaşık karar gerektiğinde Cortex'i uyandır. Rate limit: saatte max " + maxWakesPerHour,
+    "Cortex'e mesaj ilet. Mesaj inbox'a eklenir, Cortex boşta olduğunda işler.",
     {
-      reason: z.string().describe("Neden Opus gerekli — kısa açıklama"),
+      reason: z.string().describe("Neden Cortex gerekli — kısa açıklama"),
       context: z.string().describe("Bağlam bilgisi — mesaj içeriği, kişi, durum"),
       urgency: z.enum(["immediate", "soon"]).default("soon").describe("Aciliyet"),
     },
     async ({ reason, context, urgency }) => {
-      if (!wakeLimiter.canWake()) {
-        return `Rate limit aşıldı. Kalan wake hakkı: 0/${maxWakesPerHour} (saatlik). Deftere not al ve sonra dene.`;
+      if (inbox.size() >= 10) {
+        return "Gelen kutusu dolu (max 10). Deftere not al ve sonra tekrar dene.";
       }
 
-      wakeLimiter.record();
-      console.log(`[Stem] wake_cortex: ${reason} (urgency=${urgency}, remaining=${wakeLimiter.remaining()})`);
+      await inbox.push({
+        from: "stem",
+        subject: reason,
+        body: `Sebep: ${reason}\n\nBağlam:\n${context}`,
+        priority: urgency === "immediate" ? "urgent" : "normal",
+        ttlMs: urgency === "immediate" ? 30 * 60 * 1000 : 2 * 60 * 60 * 1000,
+      });
 
-      try {
-        const response = await think(
-          userId,
-          `[SENTINEL ESCALATION]\n${reason}\n\nBağlam:\n${context}`,
-          "stem",
-        );
-        return `Cortex cevabı: ${response.content}`;
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        console.error("[Stem] wake_cortex failed:", errMsg);
-        // Fallback: send simple Telegram notification
-        try {
-          await bot.api.sendMessage(
-            userId,
-            `[Stem] Cortex'e ulaşamadım. Sebep: ${reason}\nBağlam: ${context.slice(0, 200)}`,
-          );
-        } catch { /* ignore telegram error */ }
-        return `Cortex hatası: ${errMsg}. Telegram bildirimi gönderildi (fallback).`;
-      }
+      console.log(`[Stem] wake_cortex → inbox: "${reason.slice(0, 80)}" (${urgency})`);
+      return `Cortex'e iletildi: "${reason.slice(0, 80)}" — boşlukta işleyecek.`;
     },
   );
 

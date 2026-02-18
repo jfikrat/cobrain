@@ -26,6 +26,7 @@ import { join } from "node:path";
 // Stem
 import { Stem } from "./stem/stem.ts";
 import { stemRef } from "./services/stem-ref.ts";
+import { initInbox } from "./services/inbox.ts";
 
 console.log(`
    ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗███╗   ██╗
@@ -93,6 +94,10 @@ if (config.ENABLE_AUTONOMOUS) {
     // Load expectations
     await expectations.load();
 
+    // Load inbox
+    const userFolder = userManager.getUserFolder(config.MY_TELEGRAM_ID);
+    await initInbox(userFolder);
+
     // Start periodic expectation cleanup
     setInterval(() => {
       expectations.cleanExpired();
@@ -107,7 +112,6 @@ if (config.ENABLE_AUTONOMOUS) {
 
     // Create and start Stem
     if (config.FF_SENTINEL) {
-      const userFolder = userManager.getUserFolder(config.MY_TELEGRAM_ID);
       stem = new Stem({
         model: config.SENTINEL_MODEL,
         notebookPath: join(userFolder, "stem-notebook.md"),
