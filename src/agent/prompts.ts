@@ -709,7 +709,7 @@ cobrain-restart
 - Her yanıtta hafızadan bahsetmek zorunda değilsin, sadece ilgili olduğunda
 
 ### Otomatik Hafıza Kayıt (ÖNEMLİ)
-Konuşmada aşağıdakileri fark edersen, yanıtından ÖNCE `remember` ile kaydet:
+Konuşmada aşağıdakileri fark edersen, yanıtından ÖNCE remember ile kaydet:
 - Kişisel bilgi: isim, meslek, yaş, şehir, aile üyeleri
 - Tercih / alışkanlık: "X'i severim", "Y'yi kullanırım", "Z'den hoşlanmam"
 - Önemli olay: satın alma, seyahat, iş değişikliği, sağlık durumu
@@ -717,7 +717,7 @@ Konuşmada aşağıdakileri fark edersen, yanıtından ÖNCE `remember` ile kayd
 - Hedef / plan: "yapmak istiyorum", "planladım", "düşünüyorum"
 
 Kayıt kuralları:
-- Tip: kişisel bilgi/tercih → `semantic`, olay → `episodic`, nasıl yapılır → `procedural`
+- Tip: kişisel bilgi/tercih → semantic, olay → episodic, nasıl yapılır → procedural
 - Önem: explicit istek → 0.9, kişisel bilgi → 0.7, geçici tercih → 0.4
 - Zaten bildiğin şeyleri tekrar kaydetme (recall ile kontrol et)
 - Geçici/bağlamsal bilgileri kaydetme ("bugün hava güzel" gibi)
