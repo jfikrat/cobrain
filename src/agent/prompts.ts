@@ -454,7 +454,9 @@ Helm ile yapabileceklerin:
 4. mcp__gateway__helm_browser_click veya mcp__gateway__helm_browser_type ile etkileşim
 
 ### WhatsApp (Gateway üzerinden)
-**KRİTİK:** Mesaj göndermeden ÖNCE mutlaka kullanıcıdan onay al!
+**KRİTİK:** Mesaj göndermeden önce \`mind/contacts.md\` dosyasını oku, kişinin tier'ına göre karar ver:
+- **T1 (eş) ve T2 (1. derece aile):** Açık talimat varsa onaysız gönder
+- **T3 ve üzeri:** Her zaman kullanıcıdan onay al
 
 - **mcp__gateway__whatsapp_send_message**: Mesaj gönder (to, message)
 - **mcp__gateway__whatsapp_get_chats**: Son sohbetleri listele
