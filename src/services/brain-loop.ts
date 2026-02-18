@@ -37,6 +37,15 @@ async function sendLogToChannel(bot: Bot, eventType: string, response: Awaited<R
   }
 }
 
+async function sendRawLog(bot: Bot, msg: string): Promise<void> {
+  if (!config.LOG_CHANNEL_ID) return;
+  try {
+    await bot.api.sendMessage(config.LOG_CHANNEL_ID, msg, { parse_mode: "HTML" });
+  } catch (err) {
+    console.error("[BrainLoop] Log channel send failed:", err);
+  }
+}
+
 // ── Constants ────────────────────────────────────────────────────────────
 
 const FAST_TICK_MS = 30_000;     // 30 seconds
@@ -129,7 +138,9 @@ class BrainLoop {
 
     // Periodic check via main agent
     const userId = config.MY_TELEGRAM_ID;
-    if (!isUserBusy(userId)) {
+    if (isUserBusy(userId)) {
+      if (this.bot) await sendRawLog(this.bot, `⏭️ <b>Periyodik kontrol ertelendi</b> (kullanıcı meşgul)`);
+    } else {
       try {
         const periodicResponse = await chat(
           userId,
@@ -138,6 +149,7 @@ class BrainLoop {
         if (this.bot) await sendLogToChannel(this.bot, `🔄 Periyodik kontrol`, periodicResponse);
       } catch (err) {
         console.error("[BrainLoop] periodic_check error:", err);
+        if (this.bot) await sendRawLog(this.bot, `❌ <b>Periyodik kontrol hata</b>\n<code>${String(err).slice(0, 200)}</code>`);
       }
     }
 
@@ -228,12 +240,13 @@ class BrainLoop {
       }
 
       for (const [chatJid, msgs] of bySender) {
+        const senderName = msgs[0]!.sender_name || chatJid.split("@")[0] || "?";
         if (isUserBusy(userId)) {
           console.log(`[BrainLoop] User busy, deferring DM from ${chatJid}`);
+          if (this.bot) await sendRawLog(this.bot, `⏭️ <b>WA DM ertelendi</b> — ${escapeHtml(senderName)} (kullanıcı meşgul)`);
           continue;
         }
         try {
-          const senderName = msgs[0]!.sender_name || chatJid.split("@")[0] || "?";
           const msgTexts = msgs.map(m => m.content || "[medya]").join("\n");
           const dmResponse = await chat(
             userId,
@@ -245,6 +258,7 @@ class BrainLoop {
           for (const id of chatIds) processedIds.add(id);
         } catch (chatError) {
           console.error(`[BrainLoop] DM chat ${chatJid} error:`, chatError);
+          if (this.bot) await sendRawLog(this.bot, `❌ <b>WA DM hata</b> — ${escapeHtml(senderName)}\n<code>${String(chatError).slice(0, 200)}</code>`);
         }
       }
     }
@@ -259,13 +273,14 @@ class BrainLoop {
       }
 
       for (const [groupJid, msgs] of byGroup) {
+        const groupName = msgs[0]!.sender_name?.split(" @ ")[1] || groupJid;
         if (isUserBusy(userId)) {
           console.log(`[BrainLoop] User busy, deferring group ${groupJid}`);
+          if (this.bot) await sendRawLog(this.bot, `⏭️ <b>WA Grup ertelendi</b> — ${escapeHtml(groupName)} (kullanıcı meşgul)`);
           continue;
         }
         try {
           const replyAllowed = allowedGroupJids.length > 0 && allowedGroupJids.includes(groupJid);
-          const groupName = msgs[0]!.sender_name?.split(" @ ")[1] || groupJid;
           const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
           const grpResponse = await chat(
             userId,
@@ -277,6 +292,7 @@ class BrainLoop {
           for (const id of groupIds) processedIds.add(id);
         } catch (groupError) {
           console.error(`[BrainLoop] Group ${groupJid} error:`, groupError);
+          if (this.bot) await sendRawLog(this.bot, `❌ <b>WA Grup hata</b> — ${escapeHtml(groupName)}\n<code>${String(groupError).slice(0, 200)}</code>`);
         }
       }
     }
@@ -300,12 +316,19 @@ class BrainLoop {
       const dueReminders = goalsService.getDueReminders();
 
       for (const reminder of dueReminders) {
-        if (!isUserBusy(userId)) {
-          const remResponse = await chat(
-            userId,
-            `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}\n\n---\nBu hatırlatıcıyı Telegram'dan bana ilet.`,
-          );
-          if (this.bot) await sendLogToChannel(this.bot, `⏰ Hatırlatıcı — ${reminder.title}`, remResponse);
+        if (isUserBusy(userId)) {
+          if (this.bot) await sendRawLog(this.bot, `⏭️ <b>Hatırlatıcı ertelendi</b> — ${escapeHtml(reminder.title)} (kullanıcı meşgul)`);
+        } else {
+          try {
+            const remResponse = await chat(
+              userId,
+              `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}\n\n---\nBu hatırlatıcıyı Telegram'dan bana ilet.`,
+            );
+            if (this.bot) await sendLogToChannel(this.bot, `⏰ Hatırlatıcı — ${reminder.title}`, remResponse);
+          } catch (err) {
+            console.error("[BrainLoop] reminder chat error:", err);
+            if (this.bot) await sendRawLog(this.bot, `❌ <b>Hatırlatıcı hata</b> — ${escapeHtml(reminder.title)}\n<code>${String(err).slice(0, 200)}</code>`);
+          }
         }
         // Always mark as sent to prevent infinite loop (regardless of busy state)
         goalsService.markReminderSent(reminder.id);
