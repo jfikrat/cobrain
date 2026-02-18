@@ -1,6 +1,6 @@
 /**
  * Proactive Service - Handles scheduled task execution
- * Cobrain v0.5 - Sentinel edition: WA classification removed (Sentinel handles it)
+ * Cobrain v0.5 - Stem edition: WA classification removed (Stem handles it)
  */
 
 import { Bot } from "grammy";
@@ -82,7 +82,7 @@ async function handleGoalCheck(task: ScheduledTask): Promise<void> {
 }
 
 async function handleReminder(_task: ScheduledTask): Promise<void> {
-  // Reminders are now handled by BrainLoop → Sentinel
+  // Reminders are now handled by BrainLoop → Stem
 }
 
 async function handleMemoryPrune(task: ScheduledTask): Promise<void> {

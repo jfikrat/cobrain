@@ -97,7 +97,7 @@ const envSchema = z.object({
   // Log channel: autonomous event logs sent here
   LOG_CHANNEL_ID: z.coerce.number().optional(),
 
-  // v1.4: Sentinel (Sonnet background watcher)
+  // v1.4: Stem (Sonnet background watcher)
   FF_SENTINEL: z.coerce.boolean().default(true),
   SENTINEL_MODEL: z.string().default("claude-sonnet-4-6"),
   SENTINEL_MAX_TURNS: z.coerce.number().default(5),

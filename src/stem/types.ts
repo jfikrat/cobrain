@@ -1,8 +1,8 @@
 /**
- * Sentinel Types — Haiku Sentinel type definitions
+ * Stem Types — Haiku Stem type definitions
  */
 
-export interface SentinelConfig {
+export interface StemConfig {
   model: string;
   notebookPath: string;
   maxTurns: number;
@@ -11,7 +11,7 @@ export interface SentinelConfig {
   userId: number;
 }
 
-export interface SentinelEvent {
+export interface StemEvent {
   type:
     | "whatsapp_dm"
     | "whatsapp_group"
@@ -22,7 +22,7 @@ export interface SentinelEvent {
   timestamp: number;
 }
 
-export interface SentinelResult {
+export interface StemResult {
   action: "replied" | "notified" | "woke_opus" | "noted" | "none";
   details?: string;
   tokensUsed?: number;

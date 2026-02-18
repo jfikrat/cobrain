@@ -1,5 +1,5 @@
 /**
- * Sentinel Tools — MCP tools available to Haiku Sentinel.
+ * Stem Tools — MCP tools available to Haiku Stem.
  * Uses createSdkMcpServer from Agent SDK.
  */
 
@@ -44,7 +44,7 @@ class WakeRateLimiter {
 
 // ── Tool creation ──────────────────────────────────────────────────────
 
-export function createSentinelTools(deps: {
+export function createStemTools(deps: {
   notebook: Notebook;
   bot: Bot;
   userId: number;
@@ -68,23 +68,23 @@ export function createSentinelTools(deps: {
       }
 
       wakeLimiter.record();
-      console.log(`[Sentinel] wake_opus: ${reason} (urgency=${urgency}, remaining=${wakeLimiter.remaining()})`);
+      console.log(`[Stem] wake_opus: ${reason} (urgency=${urgency}, remaining=${wakeLimiter.remaining()})`);
 
       try {
         const response = await think(
           userId,
           `[SENTINEL ESCALATION]\n${reason}\n\nBağlam:\n${context}`,
-          "sentinel",
+          "stem",
         );
         return `Opus cevabı: ${response.content}`;
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        console.error("[Sentinel] wake_opus failed:", errMsg);
+        console.error("[Stem] wake_opus failed:", errMsg);
         // Fallback: send simple Telegram notification
         try {
           await bot.api.sendMessage(
             userId,
-            `[Sentinel] Opus'a ulaşamadım. Sebep: ${reason}\nBağlam: ${context.slice(0, 200)}`,
+            `[Stem] Opus'a ulaşamadım. Sebep: ${reason}\nBağlam: ${context.slice(0, 200)}`,
           );
         } catch { /* ignore telegram error */ }
         return `Opus hatası: ${errMsg}. Telegram bildirimi gönderildi (fallback).`;
@@ -122,8 +122,8 @@ export function createSentinelTools(deps: {
             await expectations.create({
               type: "whatsapp_reply",
               target: chatJid,
-              context: `Sentinel auto-reply: "${message.slice(0, 100)}"`,
-              onResolved: "Reply received to sentinel message",
+              context: `Stem auto-reply: "${message.slice(0, 100)}"`,
+              onResolved: "Reply received to stem message",
               userId,
               timeout: config.CORTEX_EXPECTATION_TIMEOUT_MS,
             });
@@ -206,7 +206,7 @@ export function createSentinelTools(deps: {
           content,
           type,
           importance,
-          source: "sentinel",
+          source: "stem",
         });
         return `Hafızaya kaydedildi (ID: ${id})`;
       } catch (err) {
@@ -292,7 +292,7 @@ export function createSentinelTools(deps: {
   // ── Build MCP server ─────────────────────────────────────────────────
 
   return createSdkMcpServer({
-    name: "cobrain-sentinel",
+    name: "cobrain-stem",
     version: "1.0.0",
     tools: [
       wakeOpusTool,

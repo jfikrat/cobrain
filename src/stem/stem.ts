@@ -1,5 +1,5 @@
 /**
- * Sentinel — Haiku-based background watcher.
+ * Stem — Haiku-based background watcher.
  * Processes events via Agent SDK query(), maintains a persistent notebook,
  * and auto-consolidates when context reaches ~85%.
  */
@@ -10,22 +10,22 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import type { Bot } from "grammy";
 import { Notebook } from "./notebook.ts";
-import { buildSentinelSystemPrompt } from "./prompts.ts";
-import { createSentinelTools } from "./tools.ts";
-import type { SentinelConfig, SentinelEvent, SentinelResult } from "./types.ts";
+import { buildStemSystemPrompt } from "./prompts.ts";
+import { createStemTools } from "./tools.ts";
+import type { StemConfig, StemEvent, StemResult } from "./types.ts";
 
-export class Sentinel {
+export class Stem {
   private sessionId: string | null = null;
   private notebook: Notebook;
   private estimatedTokens = 0;
   private running = false;
   private processing = false;
-  private eventQueue: SentinelEvent[] = [];
-  private config: SentinelConfig;
-  private mcpServer: ReturnType<typeof createSentinelTools> | null = null;
+  private eventQueue: StemEvent[] = [];
+  private config: StemConfig;
+  private mcpServer: ReturnType<typeof createStemTools> | null = null;
   private bot: Bot | null = null;
 
-  constructor(config: SentinelConfig) {
+  constructor(config: StemConfig) {
     this.config = config;
     this.notebook = new Notebook(config.notebookPath);
   }
@@ -34,33 +34,33 @@ export class Sentinel {
 
   async start(bot: Bot): Promise<void> {
     this.bot = bot;
-    this.mcpServer = createSentinelTools({
+    this.mcpServer = createStemTools({
       notebook: this.notebook,
       bot,
       userId: this.config.userId,
       maxWakesPerHour: this.config.maxWakesPerHour,
     });
     this.running = true;
-    console.log(`[Sentinel] Started (model=${this.config.model}, maxTurns=${this.config.maxTurns}, consolidation=${this.config.consolidationThreshold})`);
+    console.log(`[Stem] Started (model=${this.config.model}, maxTurns=${this.config.maxTurns}, consolidation=${this.config.consolidationThreshold})`);
   }
 
   async stop(): Promise<void> {
     this.running = false;
     this.notebook.flush();
-    console.log("[Sentinel] Stopped");
+    console.log("[Stem] Stopped");
   }
 
   // ── Public API ─────────────────────────────────────────────────────
 
-  async feedEvent(event: SentinelEvent): Promise<SentinelResult> {
+  async feedEvent(event: StemEvent): Promise<StemResult> {
     if (!this.running) {
-      return { action: "none", details: "sentinel_not_running" };
+      return { action: "none", details: "stem_not_running" };
     }
 
     // Queue if already processing
     if (this.processing) {
       this.eventQueue.push(event);
-      console.log(`[Sentinel] Event queued (queue=${this.eventQueue.length}): ${event.type}`);
+      console.log(`[Stem] Event queued (queue=${this.eventQueue.length}): ${event.type}`);
       return { action: "none", details: "queued" };
     }
 
@@ -69,14 +69,14 @@ export class Sentinel {
 
   // ── Internal Processing ────────────────────────────────────────────
 
-  private async processEventWithQueue(event: SentinelEvent): Promise<SentinelResult> {
+  private async processEventWithQueue(event: StemEvent): Promise<StemResult> {
     this.processing = true;
-    let result: SentinelResult;
+    let result: StemResult;
 
     try {
       result = await this.processEvent(event);
     } catch (err) {
-      console.error("[Sentinel] processEvent error:", err);
+      console.error("[Stem] processEvent error:", err);
       result = { action: "none", details: `error: ${err instanceof Error ? err.message : String(err)}` };
     }
 
@@ -86,7 +86,7 @@ export class Sentinel {
       try {
         await this.processEvent(next);
       } catch (err) {
-        console.error("[Sentinel] queued event error:", err);
+        console.error("[Stem] queued event error:", err);
       }
     }
 
@@ -94,16 +94,16 @@ export class Sentinel {
     return result;
   }
 
-  private async processEvent(event: SentinelEvent): Promise<SentinelResult> {
+  private async processEvent(event: StemEvent): Promise<StemResult> {
     if (!this.mcpServer) {
       return { action: "none", details: "mcp_server_not_initialized" };
     }
 
     const eventMessage = this.formatEventMessage(event);
-    console.log(`[Sentinel] feedEvent: ${event.type}`);
+    console.log(`[Stem] feedEvent: ${event.type}`);
 
     try {
-      const systemPrompt = buildSentinelSystemPrompt(this.notebook);
+      const systemPrompt = buildStemSystemPrompt(this.notebook);
 
       let sessionId = "";
       let lastContent = "";
@@ -118,7 +118,7 @@ export class Sentinel {
           resume: this.sessionId || undefined,
           settingSources: [],
           mcpServers: {
-            sentinel: this.mcpServer,
+            stem: this.mcpServer,
           },
           maxTurns: this.config.maxTurns,
         },
@@ -153,7 +153,7 @@ export class Sentinel {
                 lastContent = result.result;
               }
             } else {
-              console.error(`[Sentinel] Query error: ${result.subtype}`, (result as any).errors);
+              console.error(`[Stem] Query error: ${result.subtype}`, (result as any).errors);
             }
             break;
           }
@@ -164,7 +164,7 @@ export class Sentinel {
       this.estimatedTokens += inputTokens;
 
       const action = this.inferAction(lastContent);
-      console.log(`[Sentinel] Completed: action=${action} tokens=${inputTokens}in/${outputTokens}out estimated=${this.estimatedTokens}`);
+      console.log(`[Stem] Completed: action=${action} tokens=${inputTokens}in/${outputTokens}out estimated=${this.estimatedTokens}`);
 
       // Check consolidation threshold
       if (this.estimatedTokens > this.config.consolidationThreshold) {
@@ -177,7 +177,7 @@ export class Sentinel {
         tokensUsed: inputTokens + outputTokens,
       };
     } catch (err) {
-      console.error("[Sentinel] query error:", err);
+      console.error("[Stem] query error:", err);
       return {
         action: "none",
         details: `query_error: ${err instanceof Error ? err.message : String(err)}`,
@@ -188,10 +188,10 @@ export class Sentinel {
   // ── Consolidation ──────────────────────────────────────────────────
 
   private async consolidateAndReset(): Promise<void> {
-    console.log(`[Sentinel] Consolidating... (estimated tokens: ${this.estimatedTokens})`);
+    console.log(`[Stem] Consolidating... (estimated tokens: ${this.estimatedTokens})`);
 
     try {
-      // Send consolidation message to sentinel
+      // Send consolidation message to stem
       if (this.mcpServer) {
         const consolidationPrompt =
           "KONSOLIDASYON: Context limitine yaklaşıyorsun. " +
@@ -203,10 +203,10 @@ export class Sentinel {
           prompt: consolidationPrompt,
           options: {
             model: this.config.model,
-            systemPrompt: buildSentinelSystemPrompt(this.notebook),
+            systemPrompt: buildStemSystemPrompt(this.notebook),
             resume: this.sessionId || undefined,
             settingSources: [],
-            mcpServers: { sentinel: this.mcpServer },
+            mcpServers: { stem: this.mcpServer },
             maxTurns: this.config.maxTurns,
           },
         });
@@ -217,18 +217,18 @@ export class Sentinel {
         }
       }
     } catch (err) {
-      console.error("[Sentinel] Consolidation error:", err);
+      console.error("[Stem] Consolidation error:", err);
     }
 
     // Reset session
     this.sessionId = null;
     this.estimatedTokens = 0;
-    console.log("[Sentinel] Session reset after consolidation");
+    console.log("[Stem] Session reset after consolidation");
   }
 
   // ── Helpers ────────────────────────────────────────────────────────
 
-  private formatEventMessage(event: SentinelEvent): string {
+  private formatEventMessage(event: StemEvent): string {
     const time = new Date(event.timestamp).toLocaleTimeString("tr-TR", {
       hour: "2-digit",
       minute: "2-digit",
@@ -282,8 +282,8 @@ export class Sentinel {
     }
   }
 
-  /** Infer action from sentinel's response text */
-  private inferAction(content: string): SentinelResult["action"] {
+  /** Infer action from stem's response text */
+  private inferAction(content: string): StemResult["action"] {
     const lower = content.toLowerCase();
     if (lower.includes("wake_opus") || lower.includes("opus'u uyandır")) return "woke_opus";
     if (lower.includes("mesaj gönderildi") || lower.includes("cevap gönderildi") || lower.includes("send_whatsapp_reply")) return "replied";

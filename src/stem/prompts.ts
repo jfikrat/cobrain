@@ -1,5 +1,5 @@
 /**
- * Sentinel Prompts — Builds the system prompt for Haiku Sentinel.
+ * Stem Prompts — Builds the system prompt for Haiku Stem.
  * Injects knowledge base files + notebook seed content.
  */
 
@@ -59,7 +59,7 @@ function loadKnowledge(): string {
       }
     }
   } catch (err) {
-    console.warn("[Sentinel:Prompts] Knowledge load failed:", err);
+    console.warn("[Stem:Prompts] Knowledge load failed:", err);
   }
 
   const combined = parts.join("\n\n");
@@ -67,11 +67,11 @@ function loadKnowledge(): string {
   return combined;
 }
 
-export function buildSentinelSystemPrompt(notebook: Notebook): string {
+export function buildStemSystemPrompt(notebook: Notebook): string {
   const knowledge = loadKnowledge();
   const notebookContent = notebook.getSeedContent();
 
-  return `Sen Cobrain Sentinel'isin. Fekrat'ın arka plan nöbetçisi olarak çalışıyorsun.
+  return `Sen Cobrain Stem'isin. Fekrat'ın arka plan nöbetçisi olarak çalışıyorsun.
 
 GÖREV: WhatsApp mesajlarını, hatırlatıcıları ve beklentileri izle. Basit işleri kendin hallet, karmaşık kararları Opus'a bırak.
 

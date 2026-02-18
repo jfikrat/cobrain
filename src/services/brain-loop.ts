@@ -1,11 +1,11 @@
 /**
- * BrainLoop — Unified autonomous loop (Sentinel edition)
+ * BrainLoop — Unified autonomous loop (Stem edition)
  *
  * Architecture:
- * - fastTick (30s): WhatsApp poll → sentinel events, due reminders → sentinel events
- * - slowTick (5min): periodic check → sentinel event, code review cycle
+ * - fastTick (30s): WhatsApp poll → stem events, due reminders → stem events
+ * - slowTick (5min): periodic check → stem event, code review cycle
  *
- * AI reasoning is now handled entirely by the Sentinel (Haiku).
+ * AI reasoning is now handled entirely by the Stem (Haiku).
  * Gemini Flash and ActionExecutor have been removed.
  */
 
@@ -56,7 +56,7 @@ const CODE_REVIEW_FILES = [
   "src/services/brain-loop.ts",
   "src/brain/index.ts",
   "src/memory/smart-memory.ts",
-  "src/sentinel/sentinel.ts",
+  "sr./stem/stem.ts",
   "src/channels/telegram.ts",
   "src/agent/prompts.ts",
   "src/brain/router-lite.ts",
@@ -165,7 +165,7 @@ class BrainLoop {
     }
   }
 
-  // ── WhatsApp Polling → Sentinel Events ──────────────────────────────
+  // ── WhatsApp Polling → Stem Events ──────────────────────────────
 
   private async pollWhatsApp(): Promise<void> {
     if (!this.bot || !whatsappDB.isAvailable()) return;
@@ -305,7 +305,7 @@ class BrainLoop {
     });
   }
 
-  // ── Due Reminders → Sentinel Events ──────────────────────────────────
+  // ── Due Reminders → Stem Events ──────────────────────────────────
 
   private async checkDueReminders(): Promise<void> {
     const userId = config.MY_TELEGRAM_ID;

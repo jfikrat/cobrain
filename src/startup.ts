@@ -23,8 +23,8 @@ import { startProjectionScheduler, stopProjectionScheduler } from "./brain/proje
 import { userManager } from "./services/user-manager.ts";
 import { join } from "node:path";
 
-// Sentinel
-import { Sentinel } from "./sentinel/sentinel.ts";
+// Stem
+import { Stem } from "./stem/stem.ts";
 
 console.log(`
    ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗███╗   ██╗
@@ -34,11 +34,11 @@ console.log(`
   ╚██████╗╚██████╔╝██████╔╝██║  ██║██║  ██║██║██║ ╚████║
    ╚═════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝
 
-  Kişisel AI Asistan v0.5.0 — Sentinel Edition
+  Kişisel AI Asistan v0.5.0 — Stem Edition
   Base: ${config.COBRAIN_BASE_PATH}
   Mode: ${config.USE_AGENT_SDK ? "Agent SDK" : "CLI (tmux)"}
   Autonomous: ${config.ENABLE_AUTONOMOUS ? "Enabled" : "Disabled"}
-  Sentinel: ${config.FF_SENTINEL ? `Enabled (${config.SENTINEL_MODEL})` : "Disabled"}
+  Stem: ${config.FF_SENTINEL ? `Enabled (${config.SENTINEL_MODEL})` : "Disabled"}
   Web UI: ${config.ENABLE_WEB_UI ? `Enabled (port ${config.WEB_PORT})` : "Disabled"}
 `);
 
@@ -82,8 +82,8 @@ if (config.ENABLE_WEB_UI) {
   startWebServer();
 }
 
-// Sentinel instance (created outside setTimeout so it's available for shutdown)
-let sentinel: Sentinel | null = null;
+// Stem instance (created outside setTimeout so it's available for shutdown)
+let stem: Stem | null = null;
 
 // Initialize proactive features after bot starts
 if (config.ENABLE_AUTONOMOUS) {
@@ -104,19 +104,19 @@ if (config.ENABLE_AUTONOMOUS) {
       console.log("[Autonomous] Minimal autonomy mode: proactive infra disabled");
     }
 
-    // Create and start Sentinel
+    // Create and start Stem
     if (config.FF_SENTINEL) {
       const userFolder = userManager.getUserFolder(config.MY_TELEGRAM_ID);
-      sentinel = new Sentinel({
+      stem = new Stem({
         model: config.SENTINEL_MODEL,
-        notebookPath: join(userFolder, "sentinel-notebook.md"),
+        notebookPath: join(userFolder, "stem-notebook.md"),
         maxTurns: config.SENTINEL_MAX_TURNS,
         consolidationThreshold: config.SENTINEL_CONSOLIDATION_THRESHOLD,
         maxWakesPerHour: config.SENTINEL_MAX_WAKES_PER_HOUR,
         userId: config.MY_TELEGRAM_ID,
       });
-      await sentinel.start(bot);
-      console.log("[Startup] Sentinel started");
+      await stem.start(bot);
+      console.log("[Startup] Stem started");
     }
 
     // Start BrainLoop (events routed directly to main agent)
@@ -129,8 +129,8 @@ const shutdown = async () => {
   console.log("\nKapatılıyor...");
 
   await brainLoop.stop();
-  if (sentinel) {
-    await sentinel.stop();
+  if (stem) {
+    await stem.stop();
   }
   stopProjectionScheduler();
 

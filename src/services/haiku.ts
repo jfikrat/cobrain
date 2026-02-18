@@ -1,7 +1,7 @@
 /**
  * Haiku Service - LLM helper for memory operations
  * Uses Gemini Flash for memory classification, ranking, consolidation
- * Cobrain v0.5 — WhatsApp classification moved to Sentinel
+ * Cobrain v0.5 — WhatsApp classification moved to Stem
  */
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -383,4 +383,4 @@ Format: KEEP:1|2:sebep`;
   };
 }
 
-// WhatsApp classification removed — now handled by Sentinel (Haiku via Agent SDK)
+// WhatsApp classification removed — now handled by Stem (Haiku via Agent SDK)

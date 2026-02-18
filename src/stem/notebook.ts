@@ -1,12 +1,12 @@
 /**
- * Sentinel Notebook — Persistent scratchpad that survives context resets.
+ * Stem Notebook — Persistent scratchpad that survives context resets.
  * Stored as a markdown file in the user's data folder.
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-const DEFAULT_CONTENT = `# Sentinel Defteri
+const DEFAULT_CONTENT = `# Stem Defteri
 Güncelleme: ${new Date().toISOString()}
 
 ## Aktif Durum
