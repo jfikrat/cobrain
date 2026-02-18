@@ -317,20 +317,21 @@ class BrainLoop {
 
       for (const reminder of dueReminders) {
         if (isUserBusy(userId)) {
-          if (this.bot) await sendRawLog(this.bot, `⏭️ <b>Hatırlatıcı ertelendi</b> — ${escapeHtml(reminder.title)} (kullanıcı meşgul)`);
-        } else {
-          try {
-            const remResponse = await chat(
-              userId,
-              `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}\n\n---\nBu hatırlatıcıyı Telegram'dan bana ilet.`,
-            );
-            if (this.bot) await sendLogToChannel(this.bot, `⏰ Hatırlatıcı — ${reminder.title}`, remResponse);
-          } catch (err) {
-            console.error("[BrainLoop] reminder chat error:", err);
-            if (this.bot) await sendRawLog(this.bot, `❌ <b>Hatırlatıcı hata</b> — ${escapeHtml(reminder.title)}\n<code>${String(err).slice(0, 200)}</code>`);
-          }
+          // Cortex meşgul — işaretleme, sonraki tick'te tekrar denenecek
+          if (this.bot) await sendRawLog(this.bot, `⏭️ <b>Hatırlatıcı ertelendi</b> — ${escapeHtml(reminder.title)} (Cortex meşgul)`);
+          continue;
         }
-        // Always mark as sent to prevent infinite loop (regardless of busy state)
+        try {
+          const remResponse = await chat(
+            userId,
+            `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}\n\n---\nBu hatırlatıcıyı Telegram'dan bana ilet.`,
+          );
+          if (this.bot) await sendLogToChannel(this.bot, `⏰ Hatırlatıcı — ${reminder.title}`, remResponse);
+        } catch (err) {
+          console.error("[BrainLoop] reminder chat error:", err);
+          if (this.bot) await sendRawLog(this.bot, `❌ <b>Hatırlatıcı hata</b> — ${escapeHtml(reminder.title)}\n<code>${String(err).slice(0, 200)}</code>`);
+        }
+        // Başarı veya hata — mark et (hata durumunda sonsuz döngüyü önle)
         goalsService.markReminderSent(reminder.id);
       }
     } catch (err) {
