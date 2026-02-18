@@ -43,8 +43,11 @@ export interface ChatResponse {
 // Session ID cache per user
 const userSessions = new Map<number, string>();
 
-// Concurrency guard: prevent simultaneous think() calls per user
+// Concurrency guard: reflects whether _executeChat is actively running
 const activeThinking = new Set<number>();
+
+// Per-user serialization queue: ensures chat() calls run one at a time per user
+const pendingChats = new Map<number, Promise<ChatResponse>>();
 
 export function isUserBusy(userId: number): boolean {
   return activeThinking.has(userId);
@@ -84,9 +87,27 @@ async function getOrResumeSession(userId: number): Promise<string | undefined> {
 
 /**
  * Main chat function using Agent SDK
- * Supports both text-only and multimodal (with images) messages
+ * Serializes concurrent calls per user to prevent session corruption.
  */
-export async function chat(
+export function chat(
+  userId: number,
+  message: string | MultimodalMessage,
+  traceId?: string,
+  modelOverride?: string,
+): Promise<ChatResponse> {
+  // Chain on the previous pending call so calls are strictly serialized per user
+  const prev = pendingChats.get(userId);
+  const current: Promise<ChatResponse> = (prev?.catch(() => undefined) ?? Promise.resolve(undefined))
+    .then(() => _executeChat(userId, message, traceId, modelOverride));
+  pendingChats.set(userId, current);
+  // Clean up map entry once resolved (avoid memory leak for long-running processes)
+  current.finally(() => {
+    if (pendingChats.get(userId) === current) pendingChats.delete(userId);
+  });
+  return current;
+}
+
+async function _executeChat(
   userId: number,
   message: string | MultimodalMessage,
   traceId?: string,
@@ -396,7 +417,7 @@ export async function chat(
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     // Stale session from DB — SDK can't find it after restart
-    // Clear and retry once with a fresh session
+    // Clear and retry once with a fresh session (call _executeChat directly to avoid queue deadlock)
     if (existingSessionId && errorMessage.includes("exited with code")) {
       console.warn(`[Agent] Stale session detected, retrying with fresh session...`);
       userSessions.delete(userId);
@@ -405,7 +426,7 @@ export async function chat(
         const mem = new UserMemory(userDb);
         mem.clearSession();
       } catch {}
-      return chat(userId, message, traceId, modelOverride);
+      return _executeChat(userId, message, traceId, modelOverride);
     }
 
     console.error("[Agent] Chat error:", error);
