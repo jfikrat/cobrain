@@ -141,9 +141,6 @@ export class UserManager {
     await mkdir(join(folderPath, "uploads"), { recursive: true });
     await mkdir(join(folderPath, "agent"), { recursive: true });
 
-    // Create CLAUDE.md for this user's Claude session
-    await this.createUserClaudeMd(folderPath);
-
     // Insert user record
     this.globalDb.run(
       `INSERT INTO users (id, folder_path, last_seen_at, settings) VALUES (?, ?, CURRENT_TIMESTAMP, '{}')`,
@@ -165,17 +162,10 @@ export class UserManager {
   }
 
   /**
-   * Get user folder path and ensure CLAUDE.md exists
+   * Get user folder path
    */
   getUserFolder(userId: number): string {
-    const folderPath = join(this.basePath, "users", userId.toString());
-
-    // Ensure CLAUDE.md exists and keeps required context references.
-    if (existsSync(folderPath)) {
-      this.ensureUserClaudeMdSync(folderPath);
-    }
-
-    return folderPath;
+    return join(this.basePath, "users", userId.toString());
   }
 
   /**
@@ -390,87 +380,6 @@ export class UserManager {
   /**
    * Create CLAUDE.md for user's Claude session
    */
-  private getContextReferencesBlock(): string {
-    const refs: string[] = [];
-    const projectAgentsPath = join(this.projectRoot, "agents.md");
-    const projectClaudePath = join(this.projectRoot, "CLAUDE.md");
-    const globalClaudePath = join(homedir(), ".claude", "CLAUDE.md");
-
-    if (existsSync(projectAgentsPath)) refs.push(`@${projectAgentsPath}`);
-    if (existsSync(projectClaudePath)) refs.push(`@${projectClaudePath}`);
-    if (existsSync(globalClaudePath)) refs.push(`@${globalClaudePath}`);
-
-    return [
-      "<!-- COBRAIN_CONTEXT_REFS -->",
-      ...refs,
-      "<!-- /COBRAIN_CONTEXT_REFS -->",
-    ].join("\n");
-  }
-
-  private buildUserClaudeMdContent(): string {
-    const refs = this.getContextReferencesBlock();
-    return `${refs}\n`;
-  }
-
-  private upsertContextReferences(content: string): string {
-    const block = this.getContextReferencesBlock();
-    const startMarker = "<!-- COBRAIN_CONTEXT_REFS -->";
-    const endMarker = "<!-- /COBRAIN_CONTEXT_REFS -->";
-
-    if (content.includes(startMarker) && content.includes(endMarker)) {
-      return content.replace(
-        /<!-- COBRAIN_CONTEXT_REFS -->[\s\S]*?<!-- \/COBRAIN_CONTEXT_REFS -->/,
-        block,
-      );
-    }
-
-    // Keep existing custom content, only inject the refs block near top.
-    if (content.startsWith("#")) {
-      return content.replace(/^#.*\n/, (heading) => `${heading}\n${block}\n`);
-    }
-
-    return `${block}\n\n${content}`;
-  }
-
-  private ensureUserClaudeMdSync(folderPath: string): void {
-    const claudeMdPath = join(folderPath, "CLAUDE.md");
-
-    if (!existsSync(claudeMdPath)) {
-      this.createUserClaudeMdSync(folderPath);
-      return;
-    }
-
-    try {
-      const current = readFileSync(claudeMdPath, "utf-8");
-      const updated = this.upsertContextReferences(current);
-      if (updated !== current) {
-        writeFileSync(claudeMdPath, updated, "utf-8");
-        console.log(`[UserManager] CLAUDE.md referansları güncellendi: ${claudeMdPath}`);
-      }
-    } catch (err) {
-      console.warn("[UserManager] CLAUDE.md reference update failed:", err);
-    }
-  }
-
-  private async createUserClaudeMd(folderPath: string): Promise<void> {
-    const claudeMdPath = join(folderPath, "CLAUDE.md");
-    const claudeMdContent = this.buildUserClaudeMdContent();
-
-    await Bun.write(claudeMdPath, claudeMdContent);
-    console.log(`[UserManager] CLAUDE.md oluşturuldu: ${claudeMdPath}`);
-  }
-
-  /**
-   * Create CLAUDE.md synchronously (for existing users)
-   */
-  private createUserClaudeMdSync(folderPath: string): void {
-    const claudeMdPath = join(folderPath, "CLAUDE.md");
-    const claudeMdContent = this.buildUserClaudeMdContent();
-
-    writeFileSync(claudeMdPath, claudeMdContent, "utf-8");
-    console.log(`[UserManager] CLAUDE.md oluşturuldu (sync): ${claudeMdPath}`);
-  }
-
   /**
    * Close all database connections
    */
