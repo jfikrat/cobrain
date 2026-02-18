@@ -35,8 +35,8 @@ export function createStemTools(deps: {
       urgency: z.enum(["immediate", "soon"]).default("soon").describe("Aciliyet"),
     },
     async ({ reason, context, urgency }) => {
-      if (inbox.size() >= 10) {
-        return "Gelen kutusu dolu (max 10). Deftere not al ve sonra tekrar dene.";
+      if (inbox.size() >= 30) {
+        return "Gelen kutusu dolu (max 30). Deftere not al ve sonra tekrar dene.";
       }
 
       await inbox.push({

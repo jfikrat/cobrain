@@ -27,7 +27,7 @@ export interface InboxItem {
 
 // ── InboxService ──────────────────────────────────────────────────────────
 
-const MAX_PENDING = 10;
+const MAX_PENDING = 30;
 
 class InboxService {
   private items: InboxItem[] = [];
