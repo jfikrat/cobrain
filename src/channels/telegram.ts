@@ -862,6 +862,22 @@ bot.on("message:photo", async (ctx) => {
 
 // ============ KONUM MESAJI HANDLER ============
 
+async function handleLocationUpdate(userId: number, latitude: number, longitude: number, isLive: boolean, isUpdate: boolean) {
+  const locationType = isLive ? "canlı konum" : "konum";
+  const updateNote = isUpdate ? " (güncelleme)" : "";
+
+  const locationText = `Kullanıcı Telegram'dan ${locationType} paylaştı${updateNote}: latitude=${latitude}, longitude=${longitude}
+
+Bu konumu analiz et:
+1. Reverse geocode yaparak adresini bul
+2. Kullanıcıya kısaca nerede olduğunu söyle (sadece adres, kısa)
+3. Eğer bağlamda konum kaydetme/mesafe hesaplama varsa o bağlamda kullan`;
+
+  await userManager.ensureUser(userId);
+  const response = await think(userId, locationText);
+  return response.content;
+}
+
 bot.on("message:location", async (ctx) => {
   const userId = ctx.from?.id ?? 0;
 
@@ -870,32 +886,52 @@ bot.on("message:location", async (ctx) => {
     return;
   }
 
-  // Record interaction for Living Assistant
   recordInteraction(userId);
 
   try {
-    const { latitude, longitude } = ctx.message.location;
+    const { latitude, longitude, live_period } = ctx.message.location;
+    const isLive = !!live_period;
 
-    // Konum bilgisini metin olarak AI'a gönder
-    const locationText = `Kullanıcı Telegram'dan konum paylaştı: latitude=${latitude}, longitude=${longitude}
-
-Bu konumu analiz et:
-1. Reverse geocode yaparak adresini bul
-2. Kullanıcıya nerede olduğunu söyle
-3. Eğer kullanıcı daha önce bir bağlamda konuşuyorduysa (konum kaydetme, mesafe hesaplama vb.) bu konumu o bağlamda kullan`;
-
-    await userManager.ensureUser(userId);
-    const response = await think(userId, locationText);
+    const content = await handleLocationUpdate(userId, latitude, longitude, isLive, false);
 
     try {
-      await ctx.reply(response.content, { parse_mode: "HTML" });
+      await ctx.reply(content, { parse_mode: "HTML" });
     } catch {
-      await ctx.reply(response.content);
+      await ctx.reply(content);
     }
 
+    console.log(`[Location] ${userId}: ${latitude},${longitude} (live=${isLive})`);
   } catch (error) {
     console.error("Location handler error:", error);
     await ctx.reply("❌ Konum işlenirken hata oluştu!");
+  }
+});
+
+// Live location güncellemeleri
+bot.on("edited_message:location", async (ctx) => {
+  const userId = ctx.from?.id ?? 0;
+
+  if (!isAuthorized(userId)) return;
+
+  try {
+    const location = ctx.editedMessage.location;
+    if (!location) return;
+
+    const { latitude, longitude, live_period } = location;
+
+    // Sadece aktif live location güncellemelerini işle
+    if (!live_period) return;
+
+    // Live location güncellemelerini AI'a gönderme — sadece hafızaya kaydet
+    // Çok sık güncelleme olduğu için sessiz işle, sadece logla
+    console.log(`[LiveLocation] ${userId} update: ${latitude},${longitude}`);
+
+    // Agent'a son konumu kaydet (sessiz, Telegram'a mesaj gönderme)
+    await userManager.ensureUser(userId);
+    await think(userId, `[SİSTEM] Kullanıcının canlı konumu güncellendi: lat=${latitude}, lng=${longitude}. Bu konumu hafızanda güncelle ama kullanıcıya mesaj gönderme.`);
+
+  } catch (error) {
+    console.error("Live location update error:", error);
   }
 });
 
@@ -1028,7 +1064,7 @@ export async function startBot(): Promise<void> {
   const runner = run(bot, {
     runner: {
       fetch: {
-        allowed_updates: ["message", "callback_query", "inline_query"],
+        allowed_updates: ["message", "edited_message", "callback_query", "inline_query"],
       },
     },
   });
