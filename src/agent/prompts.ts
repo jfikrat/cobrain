@@ -605,6 +605,21 @@ function buildRulesSection(persona: Persona, dynamicContext?: DynamicContext): s
   rules += `\n4. ${voice.language === 'tr' ? 'Türkçe' : voice.language} konuş, teknik terimler İngilizce olabilir`;
   rules += '\n5. Telegram için kısa ve öz yanıtlar ver';
   rules += '\n6. Tablolar yerine liste formatı kullan (Telegram tabloları desteklemiyor)';
+  rules += `
+
+## Otomatik Hafıza Kayıt (ÖNEMLİ)
+Konuşmada şunları fark edersen yanıtından ÖNCE \`remember\` ile kaydet:
+- Kişisel bilgi: isim, meslek, yaş, şehir, aile üyeleri
+- Tercih / alışkanlık: "X'i severim", "Y'yi kullanırım", "Z'den hoşlanmam"
+- Önemli olay: satın alma, seyahat, iş değişikliği, sağlık durumu
+- Explicit istek: "bunu hatırla", "unutma", "not al"
+- Hedef / plan: "yapmak istiyorum", "planladım", "düşünüyorum"
+
+Kayıt kuralları:
+- Tip: kişisel bilgi/tercih → semantic, olay → episodic, nasıl yapılır → procedural
+- Önem: explicit istek → 0.9, kişisel bilgi → 0.7, geçici tercih → 0.4
+- Zaten bildiğin şeyleri tekrar kaydetme (recall ile kontrol et)
+- Geçici/bağlamsal bilgileri kaydetme ("bugün hava güzel" gibi)`;
 
   // Critical: Identity clarification and self-modification rules
   rules += `
@@ -692,6 +707,20 @@ cobrain-restart
 - Son hafıza bilgilerini doğal şekilde referans et (zorlamadan)
 - "Daha önce bahsettiğin..." veya "Geçen konuşmamızda..." gibi doğal geçişler kullan
 - Her yanıtta hafızadan bahsetmek zorunda değilsin, sadece ilgili olduğunda
+
+### Otomatik Hafıza Kayıt (ÖNEMLİ)
+Konuşmada aşağıdakileri fark edersen, yanıtından ÖNCE `remember` ile kaydet:
+- Kişisel bilgi: isim, meslek, yaş, şehir, aile üyeleri
+- Tercih / alışkanlık: "X'i severim", "Y'yi kullanırım", "Z'den hoşlanmam"
+- Önemli olay: satın alma, seyahat, iş değişikliği, sağlık durumu
+- Explicit istek: "bunu hatırla", "unutma", "not al"
+- Hedef / plan: "yapmak istiyorum", "planladım", "düşünüyorum"
+
+Kayıt kuralları:
+- Tip: kişisel bilgi/tercih → `semantic`, olay → `episodic`, nasıl yapılır → `procedural`
+- Önem: explicit istek → 0.9, kişisel bilgi → 0.7, geçici tercih → 0.4
+- Zaten bildiğin şeyleri tekrar kaydetme (recall ile kontrol et)
+- Geçici/bağlamsal bilgileri kaydetme ("bugün hava güzel" gibi)
 `;
   }
 
