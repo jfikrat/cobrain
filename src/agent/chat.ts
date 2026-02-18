@@ -43,6 +43,13 @@ export interface ChatResponse {
 // Session ID cache per user
 const userSessions = new Map<number, string>();
 
+// Concurrency guard: prevent simultaneous think() calls per user
+const activeThinking = new Set<number>();
+
+export function isUserBusy(userId: number): boolean {
+  return activeThinking.has(userId);
+}
+
 // Session TTL: 2 hours - after this, start a fresh session
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
@@ -85,6 +92,8 @@ export async function chat(
   traceId?: string,
   modelOverride?: string,
 ): Promise<ChatResponse> {
+  activeThinking.add(userId);
+  try {
   // Ensure user exists and get settings
   await userManager.ensureUser(userId);
   const settings = await userManager.getUserSettings(userId);
@@ -414,6 +423,9 @@ export async function chat(
       toolsUsed: [],
       model: actualModel,
     };
+  }
+  } finally {
+    activeThinking.delete(userId);
   }
 }
 

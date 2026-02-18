@@ -21,7 +21,7 @@ import { heartbeat } from "./heartbeat.ts";
 import { whatsappDB } from "./whatsapp-db.ts";
 import { getTaskQueue } from "./task-queue.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
-import type { Sentinel } from "../sentinel/sentinel.ts";
+import { chat, isUserBusy } from "../agent/chat.ts";
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -51,7 +51,6 @@ const PROJECT_ROOT = resolve(import.meta.dir, "../..");
 
 class BrainLoop {
   private bot: Bot | null = null;
-  private sentinel: Sentinel | null = null;
   private fastIntervalId: ReturnType<typeof setInterval> | null = null;
   private slowIntervalId: ReturnType<typeof setInterval> | null = null;
   private codeReviewIndex = 0;
@@ -59,9 +58,8 @@ class BrainLoop {
 
   // ── Lifecycle ────────────────────────────────────────────────────────
 
-  start(botInstance: Bot, sentinel: Sentinel): void {
+  start(botInstance: Bot): void {
     this.bot = botInstance;
-    this.sentinel = sentinel;
     if (!config.MINIMAL_AUTONOMY) {
       this.restoreState();
     }
@@ -115,16 +113,16 @@ class BrainLoop {
   private async slowTick(): Promise<void> {
     heartbeat("brain_loop", { event: "slow_tick" });
 
-    // Periodic check via sentinel
-    if (this.sentinel) {
+    // Periodic check via main agent
+    const userId = config.MY_TELEGRAM_ID;
+    if (!isUserBusy(userId)) {
       try {
-        await this.sentinel.feedEvent({
-          type: "periodic_check",
-          payload: {},
-          timestamp: Date.now(),
-        });
+        await chat(
+          userId,
+          `🔄 Periyodik kontrol — ${new Date().toLocaleString("tr-TR")}. Takip etmeni gerektiren bir şey var mı?`,
+        );
       } catch (err) {
-        console.error("[BrainLoop] sentinel periodic_check error:", err);
+        console.error("[BrainLoop] periodic_check error:", err);
       }
     }
 
@@ -205,8 +203,8 @@ class BrainLoop {
     const dms = notifications.filter(n => !n.is_group);
     const groupMsgs = notifications.filter(n => n.is_group);
 
-    // ── Feed DMs to Sentinel ──────────────────────────────────────────
-    if (dms.length > 0 && this.sentinel) {
+    // ── Feed DMs to main agent ────────────────────────────────────────
+    if (dms.length > 0) {
       const bySender = new Map<string, typeof dms>();
       for (const notif of dms) {
         const key = notif.chat_jid;
@@ -215,21 +213,17 @@ class BrainLoop {
       }
 
       for (const [chatJid, msgs] of bySender) {
+        if (isUserBusy(userId)) {
+          console.log(`[BrainLoop] User busy, deferring DM from ${chatJid}`);
+          continue;
+        }
         try {
-          await this.sentinel.feedEvent({
-            type: "whatsapp_dm",
-            payload: {
-              chatJid,
-              senderName: msgs[0]!.sender_name || chatJid.split("@")[0] || "?",
-              messages: msgs.map(m => ({
-                content: m.content,
-                message_type: m.message_type,
-                sender_name: m.sender_name,
-              })),
-              isGroup: false,
-            },
-            timestamp: Date.now(),
-          });
+          const senderName = msgs[0]!.sender_name || chatJid.split("@")[0] || "?";
+          const msgTexts = msgs.map(m => m.content || "[medya]").join("\n");
+          await chat(
+            userId,
+            `📱 WhatsApp DM — ${senderName} (${chatJid}):\n${msgTexts}`,
+          );
           const chatIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(chatIds);
           for (const id of chatIds) processedIds.add(id);
@@ -239,8 +233,8 @@ class BrainLoop {
       }
     }
 
-    // ── Feed Group Messages to Sentinel ───────────────────────────────
-    if (groupMsgs.length > 0 && this.sentinel) {
+    // ── Feed Group Messages to main agent ─────────────────────────────
+    if (groupMsgs.length > 0) {
       const byGroup = new Map<string, typeof groupMsgs>();
       for (const notif of groupMsgs) {
         const key = notif.chat_jid;
@@ -249,23 +243,18 @@ class BrainLoop {
       }
 
       for (const [groupJid, msgs] of byGroup) {
+        if (isUserBusy(userId)) {
+          console.log(`[BrainLoop] User busy, deferring group ${groupJid}`);
+          continue;
+        }
         try {
           const replyAllowed = allowedGroupJids.length > 0 && allowedGroupJids.includes(groupJid);
-          await this.sentinel.feedEvent({
-            type: "whatsapp_group",
-            payload: {
-              chatJid: groupJid,
-              groupName: msgs[0]!.sender_name?.split(" @ ")[1] || groupJid,
-              messages: msgs.map(m => ({
-                content: m.content,
-                message_type: m.message_type,
-                sender_name: m.sender_name,
-              })),
-              isGroup: true,
-              replyAllowed,
-            },
-            timestamp: Date.now(),
-          });
+          const groupName = msgs[0]!.sender_name?.split(" @ ")[1] || groupJid;
+          const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
+          await chat(
+            userId,
+            `📱 WhatsApp Grup — ${groupName} (${groupJid}, cevap: ${replyAllowed ? "evet" : "hayır"}):\n${msgTexts}`,
+          );
           const groupIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(groupIds);
           for (const id of groupIds) processedIds.add(id);
@@ -294,29 +283,14 @@ class BrainLoop {
       const dueReminders = goalsService.getDueReminders();
 
       for (const reminder of dueReminders) {
-        if (this.sentinel) {
-          await this.sentinel.feedEvent({
-            type: "reminder_due",
-            payload: {
-              reminderId: reminder.id,
-              title: reminder.title,
-              message: reminder.message,
-            },
-            timestamp: Date.now(),
-          });
-        } else if (!config.MINIMAL_AUTONOMY) {
-          // Fallback: enqueue to task queue
-          const taskQueue = getTaskQueue();
-          taskQueue.enqueue(
+        if (!isUserBusy(userId)) {
+          await chat(
             userId,
-            "reminder",
-            { reminderId: reminder.id, title: reminder.title, message: reminder.message },
-            5,
-            `reminder:${reminder.id}`,
+            `⏰ Hatırlatıcı: ${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}`,
           );
-        } else {
-          console.warn(`[BrainLoop] Reminder due but sentinel is unavailable (reminderId=${reminder.id})`);
         }
+        // Always mark as sent to prevent infinite loop (regardless of busy state)
+        goalsService.markReminderSent(reminder.id);
       }
     } catch (err) {
       console.error("[BrainLoop] checkDueReminders error:", err);

@@ -119,8 +119,8 @@ if (config.ENABLE_AUTONOMOUS) {
       console.log("[Startup] Sentinel started");
     }
 
-    // Start BrainLoop with sentinel
-    brainLoop.start(bot, sentinel!);
+    // Start BrainLoop (events routed directly to main agent)
+    brainLoop.start(bot);
     console.log("[Startup] BrainLoop started");
   }, 1000);
 }
