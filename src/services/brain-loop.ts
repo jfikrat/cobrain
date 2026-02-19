@@ -192,7 +192,10 @@ class BrainLoop {
     if (!this.bot || !whatsappDB.isAvailable()) return;
 
     const allNotifications = whatsappDB.getPendingNotifications(10);
-    if (allNotifications.length === 0) return;
+    if (allNotifications.length === 0) {
+      heartbeat("whatsapp_notifications", { sent: 0, dms: 0, groups: 0, stale: 0 });
+      return;
+    }
 
     const processedIds = new Set<number>();
     const userId = config.MY_TELEGRAM_ID;
