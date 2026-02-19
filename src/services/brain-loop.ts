@@ -168,6 +168,12 @@ class BrainLoop {
       console.error("[BrainLoop] checkMorningDigest error:", err);
     }
 
+    try {
+      await this.checkExpiredExpectations();
+    } catch (err) {
+      console.error("[BrainLoop] checkExpiredExpectations error:", err);
+    }
+
     // Code review cycle is disabled in minimal autonomy mode.
     if (!config.MINIMAL_AUTONOMY) {
       try {
@@ -257,6 +263,16 @@ class BrainLoop {
       for (const [chatJid, msgs] of bySender) {
         const senderName = msgs[0]!.sender_name || chatJid.split("@")[0] || "?";
         try {
+          // Bekleyen whatsapp_reply expectation var mı? → resolve et
+          const pendingExp = expectations
+            .pendingForUser(userId)
+            .find(e => e.target === chatJid && e.type === "whatsapp_reply");
+          if (pendingExp) {
+            const replyContent = msgs.map(m => m.content || "[medya]").join("\n");
+            await expectations.resolve(pendingExp.id, { reply: replyContent.slice(0, 200) });
+            console.log(`[BrainLoop] Expectation resolved: whatsapp_reply from ${senderName}`);
+          }
+
           const stem = stemRef.get();
           if (stem) {
             const stemResult = await stem.feedEvent({
@@ -428,6 +444,31 @@ class BrainLoop {
     console.log(`[BrainLoop] Morning digest pushed: ${count} quiet-hours events`);
     this.quietHoursBuffer = [];
     this.digestSentDate = today;
+  }
+
+  // ── Expired Expectations → Stem Events ───────────────────────────────
+
+  private async checkExpiredExpectations(): Promise<void> {
+    const expired = expectations.cleanExpired();
+    if (expired.length === 0) return;
+
+    const stem = stemRef.get();
+    if (!stem) return;
+
+    for (const exp of expired) {
+      await stem.feedEvent({
+        type: "expectation_timeout",
+        payload: {
+          id: exp.id,
+          type: exp.type,
+          target: exp.target,
+          context: exp.context,
+          onResolved: exp.onResolved,
+        },
+        timestamp: Date.now(),
+      });
+      console.log(`[BrainLoop] Expectation timeout → Stem: [${exp.type}] ${exp.target}`);
+    }
   }
 
   // ── Inbox Processing ─────────────────────────────────────────────────
