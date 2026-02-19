@@ -75,12 +75,22 @@ const PROJECT_ROOT = resolve(import.meta.dir, "../..");
 
 // ── BrainLoop Class ──────────────────────────────────────────────────────
 
+// ── Quiet Hours Digest Buffer ─────────────────────────────────────────────
+
+interface DigestEntry {
+  sender: string;
+  preview: string;
+  time: string;
+}
+
 class BrainLoop {
   private bot: Bot | null = null;
   private fastIntervalId: ReturnType<typeof setInterval> | null = null;
   private slowIntervalId: ReturnType<typeof setInterval> | null = null;
   private codeReviewIndex = 0;
   private lastCodeReviewDate: string | null = null;
+  private quietHoursBuffer: DigestEntry[] = [];
+  private digestSentDate: string | null = null;
 
   // ── Lifecycle ────────────────────────────────────────────────────────
 
@@ -150,6 +160,12 @@ class BrainLoop {
       mneme.run(config.MY_TELEGRAM_ID, this.bot).catch(err =>
         console.error("[BrainLoop] mneme error:", err)
       );
+    }
+
+    try {
+      await this.checkMorningDigest();
+    } catch (err) {
+      console.error("[BrainLoop] checkMorningDigest error:", err);
     }
 
     // Code review cycle is disabled in minimal autonomy mode.
@@ -243,7 +259,7 @@ class BrainLoop {
         try {
           const stem = stemRef.get();
           if (stem) {
-            await stem.feedEvent({
+            const stemResult = await stem.feedEvent({
               type: "whatsapp_dm",
               payload: {
                 chatJid,
@@ -253,6 +269,13 @@ class BrainLoop {
               timestamp: Date.now(),
             });
             console.log(`[BrainLoop] WA DM → Stem: ${senderName}`);
+
+            // Quiet hours + action=none → digest buffer'a ekle
+            if (stemResult.action === "none" && this.isQuietHours()) {
+              const time = new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+              const preview = msgs.slice(0, 2).map(m => (m.content || "[medya]").slice(0, 80)).join(" / ");
+              this.quietHoursBuffer.push({ sender: senderName, preview, time });
+            }
           } else {
             // Stem disabled — fallback to Cortex
             const msgTexts = msgs.map(m => m.content || "[medya]").join("\n");
@@ -367,6 +390,38 @@ class BrainLoop {
     } catch (err) {
       console.error("[BrainLoop] checkDueReminders error:", err);
     }
+  }
+
+  // ── Quiet Hours Helpers ───────────────────────────────────────────────
+
+  private isQuietHours(): boolean {
+    const hour = new Date().getHours();
+    return hour >= 22 || hour < 8;
+  }
+
+  private async checkMorningDigest(): Promise<void> {
+    const hour = new Date().getHours();
+    const today = new Date().toISOString().slice(0, 10);
+
+    // 07:00-07:59 arasında, günde bir kez
+    if (hour !== 7) return;
+    if (this.digestSentDate === today) return;
+    if (this.quietHoursBuffer.length === 0) return;
+
+    const lines = this.quietHoursBuffer.map(e => `- ${e.time} — ${e.sender}: "${e.preview}"`);
+    const count = this.quietHoursBuffer.length;
+
+    await inbox.push({
+      from: "stem",
+      subject: `Gece özeti — ${count} mesaj sessizce geçti`,
+      body: `Gece boyunca şu mesajlar geldi, aksiyon alınmadı:\n\n${lines.join("\n")}\n\nGerekirse takip et.`,
+      priority: "normal",
+      ttlMs: 8 * 60 * 60 * 1000, // 8 saat
+    });
+
+    console.log(`[BrainLoop] Morning digest pushed: ${count} quiet-hours events`);
+    this.quietHoursBuffer = [];
+    this.digestSentDate = today;
   }
 
   // ── Inbox Processing ─────────────────────────────────────────────────
