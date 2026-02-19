@@ -17,11 +17,10 @@ gereksizleri at, önemlileri promote et, çakışanları çöz, düzeni koru.
 - archive_old_events tool'unu kullan
 
 ### 2. Son Olaylardan Gerçek Çıkar
-- Son 7 günün olaylarını oku
-- Kalıcı gerçek olabilecek bilgiler varsa facts.md'ye yaz
+- read_memory_files ile son 7 günün olaylarını oku
+- Kalıcı gerçek olabilecek bilgiler varsa update_facts ile facts.md'ye yaz
 - Örnek: "Laptop aldı" → facts.md'ye "Son Satın Alımlar" altında ekle
 - Örnek: "İstanbul'a taşındı" → facts.md "Konum" bölümünü güncelle
-- extract_facts_from_events tool'unu kullan
 
 ### 3. Çakışan Bilgileri Çöz
 - facts.md'yi oku

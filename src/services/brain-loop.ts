@@ -51,8 +51,8 @@ async function sendRawLog(bot: Bot, msg: string): Promise<void> {
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-const FAST_TICK_MS = 30_000;     // 30 seconds
-const SLOW_TICK_MS = 300_000;    // 5 minutes
+const FAST_TICK_MS = config.BRAIN_LOOP_FAST_TICK_MS;
+const SLOW_TICK_MS = config.BRAIN_LOOP_SLOW_TICK_MS;
 
 const CODE_REVIEW_FILES = [
   "src/agent/chat.ts",
@@ -270,6 +270,12 @@ class BrainLoop {
             });
             console.log(`[BrainLoop] WA DM → Stem: ${senderName}`);
 
+            // Kuyruk doluysa notifikasyonu okunmuş işaretleme — sonraki tick'te tekrar denensin
+            if (stemResult.details === "queue_full") {
+              console.warn(`[BrainLoop] Stem queue full — skipping markRead for ${senderName}`);
+              continue;
+            }
+
             // Quiet hours + action=none → digest buffer'a ekle
             if (stemResult.action === "none" && this.isQuietHours()) {
               const time = new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
@@ -396,7 +402,7 @@ class BrainLoop {
 
   private isQuietHours(): boolean {
     const hour = new Date().getHours();
-    return hour >= 22 || hour < 8;
+    return hour >= 23 || hour < 8;
   }
 
   private async checkMorningDigest(): Promise<void> {
@@ -431,8 +437,6 @@ class BrainLoop {
     if (!pendingItem) return;
     if (isUserBusy(config.MY_TELEGRAM_ID)) return;
 
-    await inbox.markProcessed(pendingItem.id);
-
     const prompt = [
       `[GELEN KUTUSU — ${pendingItem.from.toUpperCase()}]`,
       `Konu: ${pendingItem.subject}`,
@@ -443,7 +447,8 @@ class BrainLoop {
     console.log(`[BrainLoop] Inbox item işleniyor: "${pendingItem.subject}"`);
 
     chat(config.MY_TELEGRAM_ID, prompt)
-      .then(response => {
+      .then(async response => {
+        await inbox.markProcessed(pendingItem.id);
         if (this.bot) sendLogToChannel(this.bot, `📬 Inbox [${pendingItem.from}] — ${pendingItem.subject.slice(0, 60)}`, response);
       })
       .catch(err => console.error("[BrainLoop] Inbox işleme hatası:", err));
