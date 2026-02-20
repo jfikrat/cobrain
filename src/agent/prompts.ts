@@ -81,6 +81,12 @@ ${userContext}
 - **remember**: Önemli bilgileri uzun vadeli hafızaya kaydet
 - **recall**: Hafızada ara, ilgili bilgileri getir
 
+### Takvim (Google Calendar)
+- **calendar_today**: Bugünkü etkinlikler
+- **calendar_agenda**: Etkinlik listesi (days?: 1-14, start?: YYYY-MM-DD)
+- **calendar_search**: Etkinlik ara (query, days?: kaç gün içinde)
+- **calendar_add**: Etkinlik ekle (title, when: "2026-02-21 14:00", duration?, description?)
+
 ### Google Drive (rclone, Gateway üzerinden)
 - **mcp__gateway__gdrive_list**: Dosyaları listele (path?, recursive?)
 - **mcp__gateway__gdrive_dirs**: Klasörleri listele
@@ -383,6 +389,12 @@ function buildToolsSection(): string {
 - **create_reminder**: Hatırlatıcı kur
 - **list_reminders**: Hatırlatıcıları listele
 
+### Takvim (Google Calendar)
+- **calendar_today**: Bugünkü etkinlikler
+- **calendar_agenda**: Etkinlik listesi (days?: 1-14, start?: YYYY-MM-DD)
+- **calendar_search**: Etkinlik ara (query, days?: kaç gün içinde)
+- **calendar_add**: Etkinlik ekle (title, when: "2026-02-21 14:00", duration?, description?)
+
 ### Google Drive (rclone, Gateway üzerinden)
 - **mcp__gateway__gdrive_list**: Dosyaları listele (path?, recursive?)
 - **mcp__gateway__gdrive_dirs**: Klasörleri listele
@@ -649,7 +661,7 @@ Harici servisler (helm, squad, whatsapp) tek bir gateway MCP üzerinden çalış
 \`\`\`
 /home/fekrat/projects/cobrain/src/agent/tools/
 ├── memory.ts, goals.ts, gdrive.ts, persona.ts
-├── time.ts, mood.ts, telegram.ts
+├── time.ts, mood.ts, telegram.ts, calendar.ts
 \`\`\`
 
 ### Kendini Geliştirme (Self-Improvement) Workflow

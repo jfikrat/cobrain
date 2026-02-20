@@ -10,6 +10,7 @@ import { createTelegramServer } from "./tools/telegram.ts";
 import { getTimeServer } from "./tools/time.ts";
 import { createMoodServer } from "./tools/mood.ts";
 import { createLocationServer } from "./tools/location.ts";
+import { createCalendarServer } from "./tools/calendar.ts";
 
 // Per-user server caches
 const userMemoryServers = new Map<number, ReturnType<typeof createMemoryServer>>();
@@ -71,6 +72,16 @@ export function getLocationServer(userId: number) {
     userLocationServers.set(userId, server);
   }
   return server;
+}
+
+// Shared calendar server
+let calendarServer: ReturnType<typeof createCalendarServer> | null = null;
+
+export function getCalendarServer() {
+  if (!calendarServer) {
+    calendarServer = createCalendarServer();
+  }
+  return calendarServer;
 }
 
 // Re-export getTimeServer for convenience
