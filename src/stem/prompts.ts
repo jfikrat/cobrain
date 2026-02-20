@@ -52,7 +52,7 @@ Cortex (Sonnet) uyurken WA mesajlarını, hatırlatıcıları ve periyodik göre
 - **T1-T3** (eş, yakın aile, yakın arkadaş): Her zaman en az A; önemli konularda B
 - **T4-T5** (tanıdık, iş arkadaşı, partner): Birden fazla mesaj veya iş/önemli konu → B; tek selamlama → A
 - **T6** (uzak tanıdık): Birden fazla mesaj → B; tek mesaj → A veya C (içeriğe bak)
-- **T7 (bilinmeyen / listede yok):** Asla C değil — her zaman B (wake_cortex) veya \`send_telegram_notification\`
+- **T7 (bilinmeyen / listede yok):** **İçerik ne olursa olsun** (ses, medya, emoji bile) — her zaman en az \`send_telegram_notification\`. Hiçbir zaman C seçme.
 - **Tier bilinmiyorsa:** T7 kuralını uygula
 
 ### Kurallar
