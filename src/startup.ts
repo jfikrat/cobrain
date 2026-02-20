@@ -40,7 +40,7 @@ console.log(`
   Base: ${config.COBRAIN_BASE_PATH}
   Mode: ${config.USE_AGENT_SDK ? "Agent SDK" : "CLI (tmux)"}
   Autonomous: ${config.ENABLE_AUTONOMOUS ? "Enabled" : "Disabled"}
-  Stem: ${config.FF_SENTINEL ? `Enabled (${config.SENTINEL_MODEL})` : "Disabled"}
+  Stem: ${config.FF_STEM ? `Enabled (${config.STEM_MODEL})` : "Disabled"}
   Web UI: ${config.ENABLE_WEB_UI ? `Enabled (port ${config.WEB_PORT})` : "Disabled"}
 `);
 
@@ -111,13 +111,13 @@ if (config.ENABLE_AUTONOMOUS) {
     }
 
     // Create and start Stem
-    if (config.FF_SENTINEL) {
+    if (config.FF_STEM) {
       stem = new Stem({
-        model: config.SENTINEL_MODEL,
+        model: config.STEM_MODEL,
         notebookPath: join(userFolder, "stem-notebook.md"),
-        maxTurns: config.SENTINEL_MAX_TURNS,
-        consolidationThreshold: config.SENTINEL_CONSOLIDATION_THRESHOLD,
-        maxWakesPerHour: config.SENTINEL_MAX_WAKES_PER_HOUR,
+        maxTurns: config.STEM_MAX_TURNS,
+        consolidationThreshold: config.STEM_CONSOLIDATION_THRESHOLD,
+        maxWakesPerHour: config.STEM_MAX_WAKES_PER_HOUR,
         userId: config.MY_TELEGRAM_ID,
         userFolder,
       });
