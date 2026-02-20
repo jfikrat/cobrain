@@ -283,7 +283,7 @@ class BrainLoop {
               payload: {
                 chatJid,
                 senderName,
-                messages: msgs.map(m => ({ content: m.content || "[medya]", message_type: "text" })),
+                messages: msgs.map(m => ({ content: m.content || "[medya]", message_type: m.message_type || "text" })),
               },
               timestamp: Date.now(),
             });

@@ -113,6 +113,7 @@ export class Stem {
       let lastContent = "";
       let inputTokens = 0;
       let outputTokens = 0;
+      const toolsCalled: string[] = [];
 
       const queryResult = query({
         prompt: eventMessage,
@@ -138,11 +139,13 @@ export class Stem {
             break;
 
           case "assistant":
-            // Extract text from assistant message
             if (msg.message?.content) {
               for (const block of msg.message.content) {
-                if (typeof block === "object" && "text" in block) {
-                  lastContent = block.text;
+                if (typeof block === "object") {
+                  if ("text" in block) lastContent = block.text;
+                  if ("type" in block && block.type === "tool_use" && "name" in block) {
+                    toolsCalled.push(block.name as string);
+                  }
                 }
               }
             }
@@ -167,7 +170,7 @@ export class Stem {
       // Update token estimate
       this.estimatedTokens += inputTokens;
 
-      const action = this.inferAction(lastContent);
+      const action = this.inferAction(toolsCalled, lastContent);
       console.log(`[Stem] Completed: action=${action} tokens=${inputTokens}in/${outputTokens}out estimated=${this.estimatedTokens}`);
 
       // Check consolidation threshold
@@ -283,12 +286,19 @@ export class Stem {
     }
   }
 
-  /** Infer action from stem's response text */
-  private inferAction(content: string): StemResult["action"] {
+  /** Infer action from tool calls (primary) with text fallback */
+  private inferAction(toolsCalled: string[], content: string): StemResult["action"] {
+    // Primary: tool-call based (reliable)
+    if (toolsCalled.includes("wake_cortex")) return "woke_cortex";
+    if (toolsCalled.includes("send_whatsapp_reply")) return "replied";
+    if (toolsCalled.includes("send_telegram_notification")) return "notified";
+    if (toolsCalled.includes("update_notebook") || toolsCalled.includes("store_memory")) return "noted";
+
+    // Fallback: text matching
     const lower = content.toLowerCase();
     if (lower.includes("wake_cortex") || lower.includes("opus'u uyandır")) return "woke_cortex";
-    if (lower.includes("mesaj gönderildi") || lower.includes("cevap gönderildi") || lower.includes("send_whatsapp_reply")) return "replied";
-    if (lower.includes("telegram bildirimi") || lower.includes("send_telegram")) return "notified";
+    if (lower.includes("mesaj gönderildi") || lower.includes("cevap gönderildi")) return "replied";
+    if (lower.includes("telegram bildirimi") || lower.includes("cortex'e iletildi")) return "notified";
     if (lower.includes("defter güncellendi") || lower.includes("not al")) return "noted";
     return "none";
   }
