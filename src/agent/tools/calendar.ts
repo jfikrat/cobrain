@@ -61,8 +61,13 @@ export const calendarAgendaTool = tool(
     start: z.string().optional().describe("Başlangıç tarihi (YYYY-MM-DD). Boş bırakılırsa bugün."),
   },
   async ({ days, start }) => {
-    const args = ["agenda", "--tsv", "--details", "length", "--days", String(days)];
-    if (start) args.push(start);
+    // Compute end date = start + days
+    const startDate = start ? new Date(start) : new Date();
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + days);
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+    const args = ["agenda", "--tsv", fmt(startDate), fmt(endDate)];
 
     const { output, error } = await gcalcli(args);
 
@@ -79,13 +84,12 @@ export const calendarAgendaTool = tool(
       };
     }
 
-    // TSV formatını okunabilir hale getir
-    const lines = output.split("\n").filter(Boolean);
+    // TSV: start_date, start_time, end_date, end_time, title
+    const lines = output.split("\n").filter(l => l && !l.startsWith("start_date"));
     const formatted = lines.map((line) => {
       const cols = line.split("\t");
-      // TSV: date, time, duration, title, location, description
-      const [date, time, , title] = cols;
-      return `• ${date} ${time} — ${title}`;
+      const [date, time, , , title] = cols;
+      return `• ${date}${time ? " " + time : ""} — ${title}`;
     });
 
     return {
@@ -110,7 +114,11 @@ export const calendarSearchTool = tool(
     days: z.number().min(1).max(90).default(30).describe("Kaç gün içinde ara (varsayılan: 30)"),
   },
   async ({ query, days }) => {
-    const { output, error } = await gcalcli(["search", query, "--days", String(days)]);
+    const today = new Date();
+    const end = new Date(today);
+    end.setDate(end.getDate() + days);
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    const { output, error } = await gcalcli(["search", query, fmt(today), fmt(end)]);
 
     if (error) {
       return {
