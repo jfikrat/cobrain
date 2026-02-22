@@ -357,6 +357,64 @@ export const gmailSendTool = (userId: number) =>
     }
   );
 
+export const gmailReplyTool = (userId: number) =>
+  tool(
+    "gmail_reply",
+    "Mevcut bir maile cevap yazar. messageId ile orijinal maili bulur, thread'e ekler.",
+    {
+      messageId: z.string().describe("Cevap verilecek mailin ID'si (gmail_inbox'tan alınan ID)"),
+      body: z.string().describe("Cevap içeriği (plain text)"),
+    },
+    async ({ messageId, body }) => {
+      try {
+        // Orijinal maili al — Message-ID, thread, gönderen için
+        const original = await gmailGet(userId, `/messages/${messageId}`, {
+          format: "metadata",
+          metadataHeaders: ["From", "Subject", "Message-ID", "References"],
+        }) as {
+          id: string;
+          threadId: string;
+          payload: { headers: Array<{ name: string; value: string }> };
+        };
+
+        const h = parseHeaders(original.payload?.headers ?? []);
+        const replyTo = h.from || "";
+        const subject = h.subject?.startsWith("Re:") ? h.subject : `Re: ${h.subject || ""}`;
+        const messageIdHeader = h["message-id"] || "";
+        const references = h["references"] ? `${h["references"]} ${messageIdHeader}` : messageIdHeader;
+
+        const lines = [
+          `To: ${replyTo}`,
+          `Subject: ${subject}`,
+          `In-Reply-To: ${messageIdHeader}`,
+          references ? `References: ${references}` : null,
+          `Content-Type: text/plain; charset=utf-8`,
+          ``,
+          body,
+        ].filter(Boolean).join("\r\n");
+
+        const encoded = Buffer.from(lines).toString("base64url");
+
+        await gmailPost(userId, "/messages/send", {
+          raw: encoded,
+          threadId: original.threadId,
+        });
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: `✅ Cevap gönderildi: "${subject}" → ${replyTo}`,
+          }],
+        };
+      } catch (err) {
+        return {
+          content: [{ type: "text" as const, text: `Cevap gönderilemedi: ${err instanceof Error ? err.message : String(err)}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
 // ========== SERVER ==========
 
 export function createGmailServer(userId: number) {
@@ -368,6 +426,7 @@ export function createGmailServer(userId: number) {
       gmailReadTool(userId),
       gmailSearchTool(userId),
       gmailSendTool(userId),
+      gmailReplyTool(userId),
     ],
   });
 }
