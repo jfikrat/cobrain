@@ -21,7 +21,10 @@ import { heartbeat } from "./heartbeat.ts";
 import { whatsappDB } from "./whatsapp-db.ts";
 import { getTaskQueue } from "./task-queue.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
-import { chat } from "../agent/chat.ts";
+import { chat, isUserBusy } from "../agent/chat.ts";
+import { mneme } from "../mneme/mneme.ts";
+import { stemRef } from "./stem-ref.ts";
+import { inbox } from "./inbox.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -48,8 +51,8 @@ async function sendRawLog(bot: Bot, msg: string): Promise<void> {
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-const FAST_TICK_MS = 30_000;     // 30 seconds
-const SLOW_TICK_MS = 300_000;    // 5 minutes
+const FAST_TICK_MS = config.BRAIN_LOOP_FAST_TICK_MS;
+const SLOW_TICK_MS = config.BRAIN_LOOP_SLOW_TICK_MS;
 
 const CODE_REVIEW_FILES = [
   "src/agent/chat.ts",
@@ -72,12 +75,25 @@ const PROJECT_ROOT = resolve(import.meta.dir, "../..");
 
 // ── BrainLoop Class ──────────────────────────────────────────────────────
 
+// ── Quiet Hours Digest Buffer ─────────────────────────────────────────────
+
+interface DigestEntry {
+  sender: string;
+  preview: string;
+  time: string;
+}
+
 class BrainLoop {
   private bot: Bot | null = null;
   private fastIntervalId: ReturnType<typeof setInterval> | null = null;
   private slowIntervalId: ReturnType<typeof setInterval> | null = null;
   private codeReviewIndex = 0;
   private lastCodeReviewDate: string | null = null;
+  private quietHoursBuffer: DigestEntry[] = [];
+  private digestSentDate: string | null = null;
+  private morningBriefingSentDate: string | null = null;
+  private notifiedEventIds: Set<string> = new Set();
+  private lastProactiveCheckHour: string | null = null;
 
   // ── Lifecycle ────────────────────────────────────────────────────────
 
@@ -129,6 +145,12 @@ class BrainLoop {
     } catch (err) {
       console.error("[BrainLoop] checkDueReminders error:", err);
     }
+
+    try {
+      await this.processInbox();
+    } catch (err) {
+      console.error("[BrainLoop] processInbox error:", err);
+    }
   }
 
   // ── Slow Tick (5min) ────────────────────────────────────────────────
@@ -136,17 +158,35 @@ class BrainLoop {
   private async slowTick(): Promise<void> {
     heartbeat("brain_loop", { event: "slow_tick" });
 
-    // Periodic check via Cortex — chat() queue handles busy state automatically
-    const userId = config.MY_TELEGRAM_ID;
-    try {
-      const periodicResponse = await chat(
-        userId,
-        `[OTONOM OLAY — Periyodik kontrol]\nSaat: ${new Date().toLocaleString("tr-TR")}\n\n---\nBekleyen görevleri, hedefleri veya takip gerektiren bir şey varsa Telegram'dan bildir. Yoksa sessiz kal.`,
+    // Mneme: memory consolidation during sleep hours (03:00-03:59)
+    if (mneme.shouldRun() && this.bot) {
+      mneme.run(config.MY_TELEGRAM_ID, this.bot).catch(err =>
+        console.error("[BrainLoop] mneme error:", err)
       );
-      if (this.bot) await sendLogToChannel(this.bot, `🔄 Periyodik kontrol`, periodicResponse);
+    }
+
+    try {
+      await this.checkMorningDigest();
     } catch (err) {
-      console.error("[BrainLoop] periodic_check error:", err);
-      if (this.bot) await sendRawLog(this.bot, `❌ <b>Periyodik kontrol hata</b>\n<code>${String(err).slice(0, 200)}</code>`);
+      console.error("[BrainLoop] checkMorningDigest error:", err);
+    }
+
+    try {
+      await this.checkUpcomingEvents();
+    } catch (err) {
+      console.error("[BrainLoop] checkUpcomingEvents error:", err);
+    }
+
+    try {
+      await this.checkExpiredExpectations();
+    } catch (err) {
+      console.error("[BrainLoop] checkExpiredExpectations error:", err);
+    }
+
+    try {
+      await this.checkProactiveBehaviors();
+    } catch (err) {
+      console.error("[BrainLoop] checkProactiveBehaviors error:", err);
     }
 
     // Code review cycle is disabled in minimal autonomy mode.
@@ -167,7 +207,10 @@ class BrainLoop {
     if (!this.bot || !whatsappDB.isAvailable()) return;
 
     const allNotifications = whatsappDB.getPendingNotifications(10);
-    if (allNotifications.length === 0) return;
+    if (allNotifications.length === 0) {
+      heartbeat("whatsapp_notifications", { sent: 0, dms: 0, groups: 0, stale: 0 });
+      return;
+    }
 
     const processedIds = new Set<number>();
     const userId = config.MY_TELEGRAM_ID;
@@ -226,7 +269,7 @@ class BrainLoop {
     const dms = notifications.filter(n => !n.is_group);
     const groupMsgs = notifications.filter(n => n.is_group);
 
-    // ── Feed DMs to Cortex ────────────────────────────────────────
+    // ── Feed DMs to Stem (fallback: Cortex) ──────────────────────
     if (dms.length > 0) {
       const bySender = new Map<string, typeof dms>();
       for (const notif of dms) {
@@ -238,23 +281,61 @@ class BrainLoop {
       for (const [chatJid, msgs] of bySender) {
         const senderName = msgs[0]!.sender_name || chatJid.split("@")[0] || "?";
         try {
-          const msgTexts = msgs.map(m => m.content || "[medya]").join("\n");
-          const dmResponse = await chat(
-            userId,
-            `[OTONOM OLAY — WhatsApp DM]\nGönderen: ${senderName} (${chatJid})\n\n${msgTexts}\n\n---\nBu mesajı değerlendir: Telegram'dan beni bilgilendir ve/veya gerekirse WhatsApp'tan cevap ver.`,
-          );
-          if (this.bot) await sendLogToChannel(this.bot, `📱 WA DM — ${senderName}`, dmResponse);
+          // Bekleyen whatsapp_reply expectation var mı? → resolve et
+          const pendingExp = expectations
+            .pendingForUser(userId)
+            .find(e => e.target === chatJid && e.type === "whatsapp_reply");
+          if (pendingExp) {
+            const replyContent = msgs.map(m => m.content || "[medya]").join("\n");
+            await expectations.resolve(pendingExp.id, { reply: replyContent.slice(0, 200) });
+            console.log(`[BrainLoop] Expectation resolved: whatsapp_reply from ${senderName}`);
+          }
+
+          const stem = stemRef.get();
+          if (stem) {
+            const stemResult = await stem.feedEvent({
+              type: "whatsapp_dm",
+              payload: {
+                chatJid,
+                senderName,
+                messages: msgs.map(m => ({ content: m.content || "[medya]", message_type: m.message_type || "text" })),
+              },
+              timestamp: Date.now(),
+            });
+            console.log(`[BrainLoop] WA DM → Stem: ${senderName}`);
+
+            // Kuyruk doluysa notifikasyonu okunmuş işaretleme — sonraki tick'te tekrar denensin
+            if (stemResult.details === "queue_full") {
+              console.warn(`[BrainLoop] Stem queue full — skipping markRead for ${senderName}`);
+              continue;
+            }
+
+            // Quiet hours + action=none → digest buffer'a ekle
+            if (stemResult.action === "none" && this.isQuietHours()) {
+              const time = new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+              const preview = msgs.slice(0, 2).map(m => (m.content || "[medya]").slice(0, 80)).join(" / ");
+              this.quietHoursBuffer.push({ sender: senderName, preview, time });
+            }
+          } else {
+            // Stem disabled — fallback to Cortex
+            const msgTexts = msgs.map(m => m.content || "[medya]").join("\n");
+            const dmResponse = await chat(
+              userId,
+              `[OTONOM OLAY — WhatsApp DM]\nGönderen: ${senderName} (${chatJid})\n\n${msgTexts}\n\n---\nBu mesajı değerlendir: Telegram'dan beni bilgilendir ve/veya gerekirse WhatsApp'tan cevap ver.`,
+            );
+            if (this.bot) await sendLogToChannel(this.bot, `📱 WA DM — ${senderName}`, dmResponse);
+          }
           const chatIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(chatIds);
           for (const id of chatIds) processedIds.add(id);
         } catch (chatError) {
-          console.error(`[BrainLoop] DM chat ${chatJid} error:`, chatError);
+          console.error(`[BrainLoop] DM ${chatJid} error:`, chatError);
           if (this.bot) await sendRawLog(this.bot, `❌ <b>WA DM hata</b> — ${escapeHtml(senderName)}\n<code>${String(chatError).slice(0, 200)}</code>`);
         }
       }
     }
 
-    // ── Feed Group Messages to Cortex ─────────────────────────────
+    // ── Feed Group Messages to Stem (fallback: Cortex) ────────────
     if (groupMsgs.length > 0) {
       const byGroup = new Map<string, typeof groupMsgs>();
       for (const notif of groupMsgs) {
@@ -267,12 +348,32 @@ class BrainLoop {
         const groupName = msgs[0]!.sender_name?.split(" @ ")[1] || groupJid;
         try {
           const replyAllowed = allowedGroupJids.length > 0 && allowedGroupJids.includes(groupJid);
-          const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
-          const grpResponse = await chat(
-            userId,
-            `[OTONOM OLAY — WhatsApp Grup]\nGrup: ${groupName} (${groupJid})\nCevap izni: ${replyAllowed ? "evet" : "hayır"}\n\n${msgTexts}\n\n---\nBu grup mesajını değerlendir: Önemliyse Telegram'dan beni bilgilendir.`,
-          );
-          if (this.bot) await sendLogToChannel(this.bot, `👥 WA Grup — ${groupName}`, grpResponse);
+          const stem = stemRef.get();
+          if (stem) {
+            await stem.feedEvent({
+              type: "whatsapp_group",
+              payload: {
+                chatJid: groupJid,
+                groupName,
+                replyAllowed,
+                messages: msgs.map(m => ({
+                  content: m.content || "[medya]",
+                  sender_name: m.sender_name || "?",
+                  message_type: "text",
+                })),
+              },
+              timestamp: Date.now(),
+            });
+            console.log(`[BrainLoop] WA Grup → Stem: ${groupName}`);
+          } else {
+            // Stem disabled — fallback to Cortex
+            const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
+            const grpResponse = await chat(
+              userId,
+              `[OTONOM OLAY — WhatsApp Grup]\nGrup: ${groupName} (${groupJid})\nCevap izni: ${replyAllowed ? "evet" : "hayır"}\n\n${msgTexts}\n\n---\nBu grup mesajını değerlendir: Önemliyse Telegram'dan beni bilgilendir.`,
+            );
+            if (this.bot) await sendLogToChannel(this.bot, `👥 WA Grup — ${groupName}`, grpResponse);
+          }
           const groupIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(groupIds);
           for (const id of groupIds) processedIds.add(id);
@@ -303,13 +404,24 @@ class BrainLoop {
 
       for (const reminder of dueReminders) {
         try {
-          const remResponse = await chat(
-            userId,
-            `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}\n\n---\nBu hatırlatıcıyı Telegram'dan bana ilet.`,
-          );
-          if (this.bot) await sendLogToChannel(this.bot, `⏰ Hatırlatıcı — ${reminder.title}`, remResponse);
+          const stem = stemRef.get();
+          if (stem) {
+            await stem.feedEvent({
+              type: "reminder_due",
+              payload: { title: reminder.title, message: reminder.message || "" },
+              timestamp: Date.now(),
+            });
+            console.log(`[BrainLoop] Hatırlatıcı → Stem: ${reminder.title}`);
+          } else {
+            // Stem disabled — fallback to Cortex
+            const remResponse = await chat(
+              userId,
+              `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}\n\n---\nBu hatırlatıcıyı Telegram'dan bana ilet.`,
+            );
+            if (this.bot) await sendLogToChannel(this.bot, `⏰ Hatırlatıcı — ${reminder.title}`, remResponse);
+          }
         } catch (err) {
-          console.error("[BrainLoop] reminder chat error:", err);
+          console.error("[BrainLoop] reminder error:", err);
           if (this.bot) await sendRawLog(this.bot, `❌ <b>Hatırlatıcı hata</b> — ${escapeHtml(reminder.title)}\n<code>${String(err).slice(0, 200)}</code>`);
         }
         // Başarı veya hata — mark et (hata durumunda sonsuz döngüyü önle)
@@ -318,6 +430,206 @@ class BrainLoop {
     } catch (err) {
       console.error("[BrainLoop] checkDueReminders error:", err);
     }
+  }
+
+  // ── Quiet Hours Helpers ───────────────────────────────────────────────
+
+  private isQuietHours(): boolean {
+    const hour = new Date().getHours();
+    return hour >= 23 || hour < 8;
+  }
+
+  private async checkMorningDigest(): Promise<void> {
+    const hour = new Date().getHours();
+    const today = new Date().toISOString().slice(0, 10);
+
+    // 07:00-07:59 arasında, günde bir kez
+    if (hour !== 7) return;
+    if (this.digestSentDate === today) return;
+
+    // Gece mesajları varsa → Inbox'a push ET ve Telegram'a da bildir
+    if (this.quietHoursBuffer.length > 0) {
+      const lines = this.quietHoursBuffer.map(e => `- ${e.time} — ${e.sender}: "${e.preview}"`);
+      const count = this.quietHoursBuffer.length;
+
+      await inbox.push({
+        from: "stem",
+        subject: `Gece özeti — ${count} mesaj sessizce geçti`,
+        body: `Gece boyunca şu mesajlar geldi, aksiyon alınmadı:\n\n${lines.join("\n")}\n\nGerekirse takip et.`,
+        priority: "normal",
+        ttlMs: 8 * 60 * 60 * 1000,
+      });
+
+      // Telegram'a da kısa rapor gönder
+      if (this.bot) {
+        const senderList = lines.join("\n");
+        await this.bot.api.sendMessage(
+          config.MY_TELEGRAM_ID,
+          `Gece özeti: ${count} mesaj sessizce geçti.\n\n${senderList}\n\nSabah bakman yeterli.`
+        );
+      }
+
+      console.log(`[BrainLoop] Morning digest pushed: ${count} quiet-hours events`);
+      this.quietHoursBuffer = [];
+    }
+
+    // Buffer boş olsa bile sabah takvim+mail özeti push et
+    if (this.morningBriefingSentDate !== today) {
+      await inbox.push({
+        from: "system",
+        subject: "Sabah özeti",
+        body: "Günaydın. Takvime bak (calendar_today), önemli okunmamış mailleri kontrol et (gmail_inbox, query: is:unread is:important, limit:5). Kısa özet hazırla ve Telegram'a gönder. Etkinlik ve önemli mail yoksa sadece 'Günaydın, temiz bir gün' de.",
+        priority: "normal",
+        ttlMs: 4 * 60 * 60 * 1000, // 4 saat
+      });
+      this.morningBriefingSentDate = today;
+      console.log(`[BrainLoop] Morning briefing pushed`);
+    }
+
+    this.digestSentDate = today;
+  }
+
+  // ── Upcoming Events (30dk öncesi uyarı) ──────────────────────────────
+
+  private async checkUpcomingEvents(): Promise<void> {
+    // Gece saatlerinde çalışma
+    const hour = new Date().getHours();
+    if (hour < 7 || hour >= 23) return;
+
+    try {
+      const { $ } = await import("bun");
+      const now = new Date();
+      const in35 = new Date(now.getTime() + 35 * 60 * 1000);
+      const in25 = new Date(now.getTime() + 25 * 60 * 1000);
+
+      // gcalcli TSV: start_date, start_time, end_date, end_time, title
+      const result = await $`gcalcli agenda --tsv ${now.toISOString().slice(0, 10)} ${in35.toISOString().slice(0, 10)}`.quiet().nothrow();
+      const output = result.stdout.toString().trim();
+      if (!output) return;
+
+      const lines = output.split("\n").filter(l => l && !l.startsWith("start_date"));
+      for (const line of lines) {
+        const cols = line.split("\t");
+        if (cols.length < 5) continue;
+        const [dateStr, timeStr, , , title] = cols;
+        if (!dateStr || !timeStr || !title) continue;
+
+        // Etkinlik zamanını parse et
+        const eventTime = new Date(`${dateStr}T${timeStr}`);
+        if (isNaN(eventTime.getTime())) continue;
+
+        // 25-35 dakika aralığında mı?
+        if (eventTime >= in25 && eventTime <= in35) {
+          const eventId = `${dateStr}-${timeStr}-${title}`;
+          if (this.notifiedEventIds.has(eventId)) continue;
+
+          this.notifiedEventIds.add(eventId);
+
+          // Eski bildirimleri temizle (Set büyümesin)
+          if (this.notifiedEventIds.size > 50) {
+            const arr = [...this.notifiedEventIds];
+            this.notifiedEventIds = new Set(arr.slice(-25));
+          }
+
+          const minutesLeft = Math.round((eventTime.getTime() - now.getTime()) / 60000);
+          const timeDisplay = eventTime.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+
+          if (this.bot) {
+            await this.bot.api.sendMessage(
+              config.MY_TELEGRAM_ID,
+              `Randevu hatırlatma: "${title}" — ${timeDisplay} (${minutesLeft} dakika kaldı)`
+            );
+            console.log(`[BrainLoop] Upcoming event notified: ${title} at ${timeDisplay}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[BrainLoop] checkUpcomingEvents error:", err);
+    }
+  }
+
+  // ── Expired Expectations → Stem Events ───────────────────────────────
+
+  private async checkExpiredExpectations(): Promise<void> {
+    const expired = expectations.cleanExpired();
+    if (expired.length === 0) return;
+
+    const stem = stemRef.get();
+    if (!stem) return;
+
+    for (const exp of expired) {
+      await stem.feedEvent({
+        type: "expectation_timeout",
+        payload: {
+          id: exp.id,
+          type: exp.type,
+          target: exp.target,
+          context: exp.context,
+          onResolved: exp.onResolved,
+        },
+        timestamp: Date.now(),
+      });
+      console.log(`[BrainLoop] Expectation timeout → Stem: [${exp.type}] ${exp.target}`);
+    }
+  }
+
+  // ── Proactive Behaviors Check ─────────────────────────────────────────
+  //
+  // Saatte bir, aktif saatlerde (07-23) Cortex'e "behaviors.md'ini kontrol et"
+  // mesajı gönderir. Hangi davranışın ne zaman çalışacağı tamamen behaviors.md'de
+  // tanımlı — bu kod sadece tetikleyicidir, hiçbir davranış hardcode değil.
+
+  private async checkProactiveBehaviors(): Promise<void> {
+    const now = new Date();
+    const hour = now.getHours();
+
+    // Sadece aktif saatlerde (07:00-23:00)
+    if (hour < 7 || hour >= 23) return;
+
+    // Saatte bir kez
+    const hourKey = `${now.toISOString().slice(0, 10)}-${String(hour).padStart(2, "0")}`;
+    if (this.lastProactiveCheckHour === hourKey) return;
+
+    this.lastProactiveCheckHour = hourKey;
+
+    const dayNames = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+    const dayName = dayNames[now.getDay()];
+    const timeStr = `${String(hour).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const dateStr = now.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
+
+    await inbox.push({
+      from: "system",
+      subject: `Proaktif kontrol — ${timeStr}`,
+      body: `Saat: ${timeStr} (${dayName}, ${dateStr})\n\nbehaviors.md'ini oku. Şu an yapman gereken proaktif bir şey var mı?\n\nEvet → yap ve gerekirse Telegram'a bildir.\nHayır → sessiz kal, bu mesajı işaretlenmiş say.`,
+      priority: "low",
+      ttlMs: 55 * 60 * 1000, // 55 dakikada expire — bir sonraki tick'te yenisi gelir
+    });
+
+    console.log(`[BrainLoop] Proactive check pushed: ${hourKey}`);
+  }
+
+  // ── Inbox Processing ─────────────────────────────────────────────────
+
+  private async processInbox(): Promise<void> {
+    const pendingItem = inbox.pending()[0];
+    if (!pendingItem) return;
+    if (isUserBusy(config.MY_TELEGRAM_ID)) return;
+
+    const prompt = [
+      `[GELEN KUTUSU — ${pendingItem.from.toUpperCase()}]`,
+      `Konu: ${pendingItem.subject}`,
+      ``,
+      pendingItem.body,
+    ].join("\n");
+
+    console.log(`[BrainLoop] Inbox item işleniyor: "${pendingItem.subject}"`);
+
+    chat(config.MY_TELEGRAM_ID, prompt)
+      .then(async response => {
+        await inbox.markProcessed(pendingItem.id);
+        if (this.bot) sendLogToChannel(this.bot, `📬 Inbox [${pendingItem.from}] — ${pendingItem.subject.slice(0, 60)}`, response);
+      })
+      .catch(err => console.error("[BrainLoop] Inbox işleme hatası:", err));
   }
 
   // ── Code Review Cycle ──────────────────────────────────────────────
@@ -433,6 +745,7 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
       const state = getSessionState(config.MY_TELEGRAM_ID);
       this.lastCodeReviewDate = state.lastCodeReviewDate;
       this.codeReviewIndex = state.codeReviewIndex;
+      this.lastProactiveCheckHour = state.lastProactiveCheckHour ?? null;
       console.log(`[BrainLoop] State restored: codeReviewIdx=${this.codeReviewIndex}`);
     } catch (err) {
       console.warn("[BrainLoop] State restore failed:", err);
@@ -444,6 +757,7 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
       updateSessionState(config.MY_TELEGRAM_ID, {
         codeReviewIndex: this.codeReviewIndex,
         lastCodeReviewDate: this.lastCodeReviewDate,
+        lastProactiveCheckHour: this.lastProactiveCheckHour,
       });
     } catch (err) {
       console.warn("[BrainLoop] State persist failed:", err);
