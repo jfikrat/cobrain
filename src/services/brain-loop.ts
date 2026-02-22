@@ -14,7 +14,7 @@ import { Bot } from "grammy";
 import { config } from "../config.ts";
 import { userManager } from "./user-manager.ts";
 import { getGoalsService } from "./goals.ts";
-import { SmartMemory } from "../memory/smart-memory.ts";
+import { FileMemory } from "../memory/file-memory.ts";
 import { getSessionState, updateSessionState } from "./session-state.ts";
 import { expectations } from "./expectations.ts";
 import { heartbeat } from "./heartbeat.ts";
@@ -58,7 +58,7 @@ const CODE_REVIEW_FILES = [
   "src/agent/chat.ts",
   "src/services/brain-loop.ts",
   "src/brain/index.ts",
-  "src/memory/smart-memory.ts",
+  "src/memory/file-memory.ts",
   "sr./stem/stem.ts",
   "src/channels/telegram.ts",
   "src/agent/prompts.ts",
@@ -623,26 +623,18 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
       }
 
       const userFolder = userManager.getUserFolder(userId);
-      const memory = new SmartMemory(userFolder, userId);
+      const fileMemory = new FileMemory(userFolder);
       const highPriorityBugs: string[] = [];
 
       for (const obs of observations) {
-        const memContent = `[code-obs] [${obs.type}] [${obs.priority}] Dosya: ${filePath}\nGözlem: ${obs.observation}\nÖneri: ${obs.suggestion}`;
-        await memory.store({
-          type: "semantic",
-          content: memContent,
-          summary: `[code-obs] ${filePath}: ${obs.observation.slice(0, 80)}`,
-          importance: obs.priority === "high" ? 0.9 : obs.priority === "medium" ? 0.7 : 0.5,
-          source: "code-review-cycle",
-          metadata: { file: filePath, obsType: obs.type, priority: obs.priority, date: today },
-        });
+        const entry = `[code-obs] [${obs.type}/${obs.priority}] ${filePath}: ${obs.observation} → ${obs.suggestion}`;
+        await fileMemory.logEvent(entry);
 
         if (obs.priority === "high" && obs.type === "bug") {
           highPriorityBugs.push(`${filePath}: ${obs.observation}`);
         }
       }
 
-      memory.close();
       console.log(`[BrainLoop:CodeReview] ${observations.length} observation(s) saved for ${filePath}`);
 
       if (highPriorityBugs.length > 0 && this.bot) {

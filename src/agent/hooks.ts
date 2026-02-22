@@ -9,7 +9,7 @@ import { needsPermission, askToolPermission, type PermissionMode } from "./permi
 import { config } from "../config.ts";
 import { getEventStore } from "../brain/event-store.ts";
 import { userManager } from "../services/user-manager.ts";
-import { SmartMemory } from "../memory/smart-memory.ts";
+import { FileMemory } from "../memory/file-memory.ts";
 import { UserMemory } from "../memory/sqlite.ts";
 import { isHaikuAvailable } from "../services/haiku.ts";
 
@@ -201,62 +201,60 @@ async function flushMemoryBeforeCompact(userId: number) {
   if (history.length < 3) return;
 
   const userFolder = userManager.getUserFolder(userId);
-  const smartMemory = new SmartMemory(userFolder, userId);
 
-  try {
-    const conversationText = history
-      .map(m => `${m.role}: ${m.content.slice(0, 300)}`)
-      .join("\n");
+  const conversationText = history
+    .map(m => `${m.role}: ${m.content.slice(0, 300)}`)
+    .join("\n");
 
-    const { GoogleGenerativeAI } = await import("@google/generative-ai");
-    const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY || process.env.GEMINI_API_KEY || "");
-    const model = genAI.getGenerativeModel({
-      model: "gemini-3-flash-preview",
-      generationConfig: { maxOutputTokens: 400 },
-      systemInstruction: "Konuşmadan kalıcı değerli bilgileri çıkar. Her bilgiyi ayrı satırda yaz. Geçici/selamlama bilgilerini ATLA. Sadece bilgi satırları yaz, başka bir şey yazma. Bilgi yoksa BOŞ yaz.",
-    });
+  const { GoogleGenerativeAI } = await import("@google/generative-ai");
+  const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY || process.env.GEMINI_API_KEY || "");
+  const model = genAI.getGenerativeModel({
+    model: "gemini-3-flash-preview",
+    generationConfig: { maxOutputTokens: 400 },
+    systemInstruction: "Konuşmadan kalıcı değerli bilgileri çıkar. Format: 'Kategori: bilgi' (her satırda). Kategori: Tercih, Konum, İlişki, Karar, Yetenek, Hedef, Genel. Geçici bilgileri ATLA. Bilgi yoksa BOŞ yaz.",
+  });
 
-    const prompt = `Bu konuşmadan kullanıcı hakkında kalıcı değerli bilgileri (tercihler, kişisel bilgi, öğrenilmiş şeyler, kararlar) çıkar:
+  const prompt = `Bu konuşmadan kullanıcı hakkında kalıcı değerli bilgileri çıkar:
 
 ${conversationText}
 
-Bilgiler (her satırda bir tane):`;
+Bilgiler ('Kategori: bilgi' formatında, her satırda bir tane):`;
 
-    const TIMEOUT_MS = 15_000;
-    let timeoutId: ReturnType<typeof setTimeout>;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error("[PreCompact] Gemini timed out")), TIMEOUT_MS);
-    });
+  const TIMEOUT_MS = 15_000;
+  let timeoutId: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error("[PreCompact] Gemini timed out")), TIMEOUT_MS);
+  });
 
-    const result = await Promise.race([
-      model.generateContent(prompt),
-      timeoutPromise,
-    ]).finally(() => clearTimeout(timeoutId!));
+  const result = await Promise.race([
+    model.generateContent(prompt),
+    timeoutPromise,
+  ]).finally(() => clearTimeout(timeoutId!));
 
-    const text = result.response.text().trim();
-    if (!text || text === "BOŞ" || text.length < 10) return;
+  const text = result.response.text().trim();
+  if (!text || text === "BOŞ" || text.length < 10) return;
 
-    const facts = text.split("\n")
-      .map(line => line.replace(/^[-•*]\s*/, "").trim())
-      .filter(line => line.length > 10 && line.length < 500);
+  const facts = text.split("\n")
+    .map(line => line.replace(/^[-•*]\s*/, "").trim())
+    .filter(line => line.length > 5 && line.length < 500);
 
-    let stored = 0;
-    for (const fact of facts.slice(0, 5)) {
-      try {
-        await smartMemory.store({
-          type: "semantic",
-          content: fact,
-          importance: 0.6,
-          source: "pre-compact-flush",
-        });
-        stored++;
-      } catch {}
+  const fileMemory = new FileMemory(userFolder);
+  let stored = 0;
+  for (const line of facts.slice(0, 5)) {
+    const colonIdx = line.indexOf(":");
+    if (colonIdx > 0) {
+      const section = line.slice(0, colonIdx).trim();
+      const content = line.slice(colonIdx + 1).trim();
+      if (content.length > 5) {
+        try {
+          await fileMemory.storeFact(section, content);
+          stored++;
+        } catch {}
+      }
     }
+  }
 
-    if (stored > 0) {
-      console.log(`[PreCompact] Flushed ${stored} facts to memory for user ${userId}`);
-    }
-  } finally {
-    smartMemory.close();
+  if (stored > 0) {
+    console.log(`[PreCompact] Stored ${stored} facts to FileMemory for user ${userId}`);
   }
 }

@@ -8,11 +8,10 @@ import { getScheduler } from "./scheduler.ts";
 import { getTaskQueue } from "./task-queue.ts";
 import { getGoalsService } from "./goals.ts";
 import { userManager } from "./user-manager.ts";
-import { pruneMemories, think } from "../brain/index.ts";
+import { think } from "../brain/index.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
 import type { ScheduledTask, QueuedTask, TaskResult } from "../types/autonomous.ts";
 import { config as appConfig } from "../config.ts";
-import { consolidateMemories } from "./memory-consolidation.ts";
 import { recordInteraction, recordUserActivity } from "./interaction-tracker.ts";
 
 let bot: Bot | null = null;
@@ -43,11 +42,6 @@ export function initProactiveInfra(botInstance: Bot): void {
   taskQueue.registerHandler("goal_check", handleGoalCheckTask);
   taskQueue.registerHandler("memory_prune", handleMemoryPruneTask);
   taskQueue.registerHandler("memory_consolidation", handleMemoryConsolidationTask);
-
-  // Backfill: ensure memory_consolidation task exists for the primary user
-  if (appConfig.FF_MEMORY_CONSOLIDATION) {
-    scheduler.ensureTask(appConfig.MY_TELEGRAM_ID, "memory_consolidation", "0 4 * * 0", { enabled: true });
-  }
 
   // Start services
   scheduler.start();
@@ -243,37 +237,12 @@ async function handleReminderTask(task: QueuedTask): Promise<TaskResult> {
   }
 }
 
-async function handleMemoryPruneTask(task: QueuedTask): Promise<TaskResult> {
-  try {
-    const prunedCount = await pruneMemories(task.userId);
-
-    return {
-      success: true,
-      message: `Pruned ${prunedCount} expired memories`,
-      data: { prunedCount },
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    };
-  }
+async function handleMemoryPruneTask(_task: QueuedTask): Promise<TaskResult> {
+  // SmartMemory removed — FileMemory has no TTL-based pruning
+  return { success: true, message: "Memory prune skipped (FileMemory)" };
 }
 
-async function handleMemoryConsolidationTask(task: QueuedTask): Promise<TaskResult> {
-  try {
-    const result = await consolidateMemories(task.userId);
-
-    return {
-      success: result.errors.length === 0,
-      message: `Consolidation: promoted=${result.promoted} merged=${result.merged} conflicts=${result.conflictsResolved} rebalance=${result.rebalanced.up}↑/${result.rebalanced.down}↓ (${result.durationMs}ms)`,
-      data: result,
-      error: result.errors.length > 0 ? result.errors.join("; ") : undefined,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    };
-  }
+async function handleMemoryConsolidationTask(_task: QueuedTask): Promise<TaskResult> {
+  // SmartMemory consolidation removed — Mneme handles FileMemory consolidation
+  return { success: true, message: "Memory consolidation skipped (FileMemory)" };
 }
