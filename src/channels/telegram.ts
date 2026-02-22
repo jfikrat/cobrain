@@ -742,6 +742,11 @@ bot.callbackQuery(/.+/, async (ctx) => {
 
   console.log(`[Telegram] Unhandled callback from ${userId}: "${data}"`);
 
+  // Button'ları kaldır — tıklandıktan sonra kaybolsun
+  try {
+    await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+  } catch { /* mesaj zaten silinmiş veya düzenlenemiyor */ }
+
   recordInteraction(userId);
 
   const response = await think(userId, data);
