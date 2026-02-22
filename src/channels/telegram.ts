@@ -1122,8 +1122,8 @@ export async function startBot(): Promise<void> {
   getStartupContext(userId)
     .then((contextSummary) => {
       const startupMsg = contextSummary
-        ? `[SYSTEM] Bot yeniden başlatıldı.\n\nSon konuşma özeti:\n${contextSummary}\n\nKullanıcıya geri döndüğünü ve kaldığınız yerden devam edebileceğinizi bildir.`
-        : "[SYSTEM] Bot yeniden başlatıldı. Kullanıcıya kısaca geri döndüğünü bildir.";
+        ? `[SYSTEM] Bot yeniden başlatıldı.\n\nSon konuşma özeti:\n${contextSummary}\n\nbehaviors.md'deki restart prosedürünü uygula: list_reminders, list_goals, recall("son bağlam") çağır. Sonra kullanıcıya kısa özet sun.`
+        : "[SYSTEM] Bot yeniden başlatıldı. behaviors.md'deki restart prosedürünü uygula: list_reminders, list_goals, recall(\"son bağlam\") çağır. Sonra kullanıcıya kısa özet sun.";
       return think(userId, startupMsg);
     })
     .then((response) => {

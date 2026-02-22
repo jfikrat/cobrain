@@ -110,17 +110,6 @@ class BrainLoop {
     }, SLOW_TICK_MS);
 
     console.log(`[BrainLoop] Started (fast: ${FAST_TICK_MS}ms, slow: ${SLOW_TICK_MS}ms)`);
-
-    // Notify Cortex about restart so behaviors.md trigger fires
-    if (!config.MINIMAL_AUTONOMY) {
-      inbox.push({
-        from: "system",
-        subject: "Bot yeniden başlatıldı",
-        body: "[SYSTEM] Bot yeniden başlatıldı. behaviors.md'deki restart prosedürünü uygula: list_reminders, list_goals, recall(\"son bağlam\") çağır ve kullanıcıya kısa özet sun.",
-        priority: "high",
-        ttlMs: 5 * 60 * 1000, // 5 dakika içinde işlenmezse düş
-      }).catch(err => console.error("[BrainLoop] restart inbox push error:", err));
-    }
   }
 
   stop(): void {
