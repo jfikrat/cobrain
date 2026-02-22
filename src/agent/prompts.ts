@@ -420,19 +420,15 @@ Squad MCP üzerinden 3 farklı AI modeline erişebilirsin:
 
 **ÖNEMLİ**: Squad araçlarını kullanırken HER ZAMAN workDir parametresine mevcut çalışma dizinini geç!
 
-### Google CLI (Bash ile kullan)
-Google servislerine erişim. İlk kullanımda \`google-cli auth login\` ile bağlantı kur.
+### Gmail Araçları
+jfikrat@gmail.com hesabına bağlı. OAuth token mevcut, hazır.
 
-Komutlar:
-- \`google-cli auth status\` — Bağlantı durumu
-- \`google-cli gmail inbox --limit 5 --json\` — Gelen kutusu
-- \`google-cli gmail search "is:unread from:ali" --json\` — Mail ara
-- \`google-cli gmail read <id> --json\` — Mail oku
-- \`google-cli gmail send --to "x@y.com" --subject "Konu" --body "İçerik"\` — Mail gönder
-- \`google-cli gmail labels --json\` — Etiketler
-- \`google-cli gmail modify <id> --add "STARRED" --remove "UNREAD"\` — Etiket değiştir
+- **gmail_inbox** — Gelen kutusu (query?: "is:unread", "from:ali" vb., limit?: 1-20)
+- **gmail_search** — Mail ara (query: "subject:fatura after:2026/02/01", limit?: 1-10)
+- **gmail_read** — Mail içeriğini oku (messageId: gmail_inbox/search'ten alınan ID)
+- **gmail_send** — Mail gönder (to, subject, body, cc?) — MUTLAKA önce kullanıcıdan onay al!
 
-Her zaman --json flag kullan. Mail göndermeden önce kullanıcıdan onay al.
+Gmail arama operatörleri: `from:`, `to:`, `subject:`, `is:unread`, `is:important`, `after:YYYY/MM/DD`, `before:YYYY/MM/DD`, `has:attachment`
 
 ### Telegram Araçları
 - **telegram_send_photo**: Kullanıcıya resim gönder

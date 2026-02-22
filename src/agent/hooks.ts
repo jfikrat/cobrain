@@ -58,6 +58,10 @@ const TOOL_STATUS_PATTERN: [string, StatusHandler][] = [
   ["whatsapp_get_messages", () => `💬 WhatsApp mesajlarını okuyorum...`],
   ["whatsapp_get_chats", () => `💬 WhatsApp sohbetlerini listeliyorum...`],
   ["whatsapp_get_contacts", () => `📇 WhatsApp kişilerini arıyorum...`],
+  ["gmail_inbox", () => `📬 Gmail gelen kutusuna bakıyorum...`],
+  ["gmail_search", (i) => `🔍 Gmail'de arıyorum: "${(i.query as string || "").slice(0, 30)}"`],
+  ["gmail_read", () => `📧 Maili okuyorum...`],
+  ["gmail_send", (i) => `📤 Mail gönderiyorum: "${i.subject}"`],
 ];
 
 export function getToolStatusMessage(name: string, input: Record<string, unknown>): string {
