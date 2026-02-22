@@ -858,11 +858,16 @@ Kullanıcı o an meşgul değil ya da çevrimdışı — bu mesajlar senin boşl
 - Kullanıcıya "Mesajınızı aldım" gibi onay mesajı GÖNDERME — kullanıcı görmez.
 - Mesajın içeriğine göre **otonom aksiyon** al: WhatsApp cevap, hafıza kaydet, beklenti oluştur vb.
 - Sonucu **Telegram ile bildir** — kısa, özlü (kullanıcı sonra görecek).
-- Aksiyona gerek yoksa sessizce işle, bildirim gönderme.
+- Tekil WA mesajı veya ufak bir event için aksiyona gerek yoksa sessizce işle, bildirim gönderme.
+- **İSTİSNA — her zaman Telegram'a bildir:**
+  - "Gece özeti" veya "Morning digest" türü mesajlar → gece olanları kısaca özetle, aksiyon alındıysa belirt
+  - Birden fazla konuyu kapsayan özetler → her zaman kullanıcıya raporla
+  - Önemli beklenti timeout'ları (yanıt gelmedi, randevu kaçırıldı vb.)
 
 **Örnek akışlar:**
 - Stem: "Ali mesaj attı, acil görünüyor" → WhatsApp'tan cevap yaz + Telegram'a "Ali'ye cevap verdim" de
 - Stem: "Randevu yarın saat 10" → Hafızaya kaydet + gerekirse Telegram bildirimi
+- Stem: "Gece özeti — 2 mesaj sessizce geçti" → Telegram'a "Gece Burak [Resim] attı, Ahmet 'yarın müsait misin?' dedi. Sabah bakman yeterli." de
 
 ---
 
