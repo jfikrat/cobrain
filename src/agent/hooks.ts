@@ -9,8 +9,6 @@ import { needsPermission, askToolPermission, type PermissionMode } from "./permi
 import { config } from "../config.ts";
 import { getEventStore } from "../brain/event-store.ts";
 import { userManager } from "../services/user-manager.ts";
-import { UserMemory } from "../memory/sqlite.ts";
-
 // Tool status message lookup (exact match)
 type StatusHandler = (i: Record<string, unknown>) => string;
 const TOOL_STATUS: Map<string, StatusHandler> = new Map([

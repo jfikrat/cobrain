@@ -3,10 +3,7 @@
  * Consolidates user interaction tracking functions.
  */
 
-export { extractMoodFromMessage } from "./mood-extraction.ts";
-
 import { updateSessionState } from "./session-state.ts";
-import { getActivityPatternService } from "./activity-patterns.ts";
 
 /**
  * Record user interaction — update lastInteractionTime in session state.
@@ -18,13 +15,20 @@ export function recordInteraction(userId: number): void {
 
 /**
  * Record user activity for pattern learning.
- * Called alongside recordInteraction to build activity heatmaps.
+ * No-op: activity-patterns service removed.
  */
-export async function recordUserActivity(userId: number): Promise<void> {
-  try {
-    const patternService = await getActivityPatternService(userId);
-    patternService.recordInteraction();
-  } catch (error) {
-    console.warn("[InteractionTracker] Activity recording failed:", error);
-  }
+export async function recordUserActivity(_userId: number): Promise<void> {
+  // activity-patterns.ts removed
+}
+
+/**
+ * Extract mood from message.
+ * No-op: mood-extraction service removed.
+ */
+export async function extractMoodFromMessage(
+  _userId: number,
+  _userMessage: string,
+  _aiResponse: string
+): Promise<void> {
+  // mood-extraction.ts removed
 }

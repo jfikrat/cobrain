@@ -847,16 +847,3 @@ Kullanıcı o an meşgul değil ya da çevrimdışı — bu mesajlar senin boşl
   return `${preamble}${mindContent}${dynamic}`;
 }
 
-/**
- * Memory extraction için prompt
- */
-export const MEMORY_EXTRACTION_PROMPT = `
-Aşağıdaki konuşmadan önemli bilgileri çıkar:
-- Kişisel bilgiler (isim, meslek, tercihler)
-- Öğrenilen gerçekler
-- Verilen talimatlar
-- Hatırlanması istenen şeyler
-
-Sadece gerçekten önemli ve kalıcı bilgileri çıkar.
-Geçici veya bağlamsal bilgileri atla.
-`;

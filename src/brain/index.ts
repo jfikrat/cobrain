@@ -19,11 +19,6 @@ import { routeLite } from "./router-lite.ts";
 // Session state persistence
 import { updateSessionState, detectPhase, detectTopic } from "../services/session-state.ts";
 
-// Initialize Haiku on module load (for fallback CLI mode)
-if (!config.USE_AGENT_SDK) {
-  initHaiku();
-}
-
 // Initialize Claude Session Manager (tmux-based)
 // Uses per-user folders so each user gets their own CLAUDE.md context
 const claudeSessionManager = new ClaudeSessionManager(
@@ -259,7 +254,7 @@ async function thinkWithCLI(userId: number, message: string): Promise<ThinkRespo
   // Save to per-user history
   memory.addMessage("user", message, {
     tokensIn: 0, // tmux mode doesn't track tokens
-    metadata: { memoriesUsed: memories.length },
+    metadata: { memoriesUsed: 0 },
   });
 
   memory.addMessage("assistant", response.content, {
@@ -278,7 +273,7 @@ async function thinkWithCLI(userId: number, message: string): Promise<ThinkRespo
     costUsd: 0,
     sessionId,
     historyLength: history.length,
-    memoriesUsed: memories.length,
+    memoriesUsed: 0,
   };
 }
 

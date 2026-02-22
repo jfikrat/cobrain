@@ -59,7 +59,7 @@ const CODE_REVIEW_FILES = [
   "src/services/brain-loop.ts",
   "src/brain/index.ts",
   "src/memory/file-memory.ts",
-  "sr./stem/stem.ts",
+  "src/stem/stem.ts",
   "src/channels/telegram.ts",
   "src/agent/prompts.ts",
   "src/brain/router-lite.ts",
@@ -506,10 +506,10 @@ class BrainLoop {
     const dateStr = now.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 
     await inbox.push({
-      from: "system",
+      from: "scheduler",
       subject: `Proaktif kontrol — ${timeStr}`,
       body: `Saat: ${timeStr} (${dayName}, ${dateStr})\n\nbehaviors.md'ini oku. Şu an yapman gereken proaktif bir şey var mı?\n\nEvet → yap ve gerekirse Telegram'a bildir.\nHayır → sessiz kal, bu mesajı işaretlenmiş say.`,
-      priority: "low",
+      priority: "normal",
       ttlMs: 55 * 60 * 1000, // 55 dakikada expire — bir sonraki tick'te yenisi gelir
     });
 

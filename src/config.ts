@@ -102,18 +102,13 @@ const envSchema = z.object({
   // v0.8: WhatsApp notification settings
   WHATSAPP_STALE_MAX_AGE_SEC: z.coerce.number().default(3600),
   WHATSAPP_ALLOWED_GROUP_JIDS: z.string().default(""),
-  WHATSAPP_MAX_REPLY_LENGTH: z.coerce.number().default(500),
 
   // v1.0: REST API
   COBRAIN_API_KEY: z.string().default(""),
 
   // v1.1: Cortex tuning
-  CORTEX_SALIENCE_THRESHOLD: z.coerce.number().default(0.3),
-  CORTEX_AI_TIMEOUT_MS: z.coerce.number().default(30_000),
-  CORTEX_MAX_QUEUE_SIZE: z.coerce.number().default(50),
   CORTEX_EXPECTATION_TIMEOUT_MS: z.coerce.number().default(30 * 60 * 1000),
   CORTEX_EXPECTATION_CLEANUP_INTERVAL_MS: z.coerce.number().default(60_000),
-  CORTEX_MODEL: z.string().default("gemini-3-flash-preview"),
 
   // Log channel: autonomous event logs sent here
   LOG_CHANNEL_ID: z.coerce.number().optional(),
@@ -124,14 +119,6 @@ const envSchema = z.object({
   STEM_MAX_TURNS: z.coerce.number().default(5),
   STEM_CONSOLIDATION_THRESHOLD: z.coerce.number().default(170_000),
   STEM_MAX_WAKES_PER_HOUR: z.coerce.number().default(10),
-
-  // v1.2: Vector search
-  FF_VECTOR_SEARCH: z.coerce.boolean().default(true),
-  VECTOR_WEIGHT: z.coerce.number().default(0.7),
-  FTS_WEIGHT: z.coerce.number().default(0.3),
-  EMBEDDING_MODEL: z.string().default("gemini-embedding-001"),
-  CHUNK_SIZE: z.coerce.number().default(400),
-  CHUNK_OVERLAP: z.coerce.number().default(80),
 
   // Legacy (kept for migration)
   DB_PATH: z.string().default("./data/cobrain.db"),
