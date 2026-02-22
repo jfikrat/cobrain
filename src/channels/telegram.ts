@@ -927,7 +927,15 @@ bot.on("message:location", async (ctx) => {
     const { latitude, longitude, live_period } = ctx.message.location;
     const isLive = !!live_period;
 
-    const content = await handleLocationUpdate(userId, latitude, longitude, isLive, false);
+    if (isLive) {
+      // Live location — sadece cache'e yaz, agent'ı meşgul etme
+      liveLocationCache.set(userId, { latitude, longitude, updatedAt: new Date() });
+      console.log(`[LiveLocation] ${userId} started: ${latitude},${longitude}`);
+      return;
+    }
+
+    // Normal tek seferlik konum — AI'a gönder
+    const content = await handleLocationUpdate(userId, latitude, longitude, false, false);
 
     try {
       await ctx.reply(content, { parse_mode: "HTML" });
@@ -935,7 +943,7 @@ bot.on("message:location", async (ctx) => {
       await ctx.reply(content);
     }
 
-    console.log(`[Location] ${userId}: ${latitude},${longitude} (live=${isLive})`);
+    console.log(`[Location] ${userId}: ${latitude},${longitude}`);
   } catch (error) {
     console.error("Location handler error:", error);
     await ctx.reply("❌ Konum işlenirken hata oluştu!");
