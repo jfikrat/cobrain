@@ -35,8 +35,9 @@ async function getToken(userId: number): Promise<string> {
 
   // Refresh if expired (with 60s buffer)
   if (Date.now() >= token.expiry_date - 60_000) {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    // Prefer credentials embedded in token file (Desktop app client)
+    const clientId = (token as GmailToken & { client_id?: string }).client_id || process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = (token as GmailToken & { client_secret?: string }).client_secret || process.env.GOOGLE_CLIENT_SECRET;
     if (!clientId || !clientSecret) throw new Error("GOOGLE_CLIENT_ID/SECRET eksik");
 
     const resp = await fetch(TOKEN_URL, {
