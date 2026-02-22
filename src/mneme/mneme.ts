@@ -16,7 +16,7 @@ import { createMnemeTools } from "./tools.ts";
 import { buildMnemePrompt } from "./prompts.ts";
 import { userManager } from "../services/user-manager.ts";
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = "claude-opus-4-6";
 const MAX_TURNS = 10;
 
 export class Mneme {

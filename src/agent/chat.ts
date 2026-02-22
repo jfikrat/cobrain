@@ -21,7 +21,7 @@ import { config } from "../config.ts";
 // Split modules
 import { getMemoryServer, getTelegramMcpServer, getGoalsServer, getMoodServer, getLocationServer, getTimeServer, getCalendarServer, getGmailServer } from "./mcp-servers.ts";
 import { extractTextContent, buildMessageContent, type MultimodalMessage } from "./message-builder.ts";
-import { createPreToolUseHooks, createPreCompactHook } from "./hooks.ts";
+import { createPreToolUseHooks } from "./hooks.ts";
 
 // Re-export types from message-builder for backwards compatibility
 export type { MultimodalMessage, ImageContent, TextContent, MessageContent } from "./message-builder.ts";
@@ -256,7 +256,6 @@ async function _executeChat(
         traceId,
         permissionMode: settings.permissionMode || config.PERMISSION_MODE,
       }),
-      ...(config.MINIMAL_AUTONOMY ? {} : { PreCompact: createPreCompactHook(userId) }),
     };
 
     const subAgents = config.MINIMAL_AUTONOMY
