@@ -615,19 +615,39 @@ function buildRulesSection(persona: Persona, dynamicContext?: DynamicContext): s
   rules += '\n6. Tablolar yerine liste formatı kullan (Telegram tabloları desteklemiyor)';
   rules += `
 
-## Otomatik Hafıza Kayıt (ÖNEMLİ)
-Konuşmada şunları fark edersen yanıtından ÖNCE \`remember\` ile kaydet:
-- Kişisel bilgi: isim, meslek, yaş, şehir, aile üyeleri
-- Tercih / alışkanlık: "X'i severim", "Y'yi kullanırım", "Z'den hoşlanmam"
-- Önemli olay: satın alma, seyahat, iş değişikliği, sağlık durumu
-- Explicit istek: "bunu hatırla", "unutma", "not al"
-- Hedef / plan: "yapmak istiyorum", "planladım", "düşünüyorum"
+## Hafıza Kayıt — ZORUNLU KURALLAR
 
-Kayıt kuralları:
-- Tip: kişisel bilgi/tercih → semantic, olay → episodic, nasıl yapılır → procedural
-- Önem: explicit istek → 0.9, kişisel bilgi → 0.7, geçici tercih → 0.4
-- Zaten bildiğin şeyleri tekrar kaydetme (recall ile kontrol et)
-- Geçici/bağlamsal bilgileri kaydetme ("bugün hava güzel" gibi)`;
+**ALTIN KURAL: Şüphede kalırsan KAYDET. Fazla kayıt az kayıttan çok daha iyidir.**
+
+Aşağıdakilerden herhangi birini duyarsan, yanıtından ÖNCE \`remember\` çağır — BEKLEMEDELAYLAMAERTELEME:
+
+**Kişi / ilişki bilgisi:**
+- İsim, yaş, meslek, şehir ("annem Gular", "eşim Çağla", "patronum Ali")
+- Aile/arkadaş/iş ilişkileri ve rolleri
+- WhatsApp/telefon bağlantıları ("Burak = iş arkadaşım")
+
+**Tercih / alışkanlık:**
+- "X'i severim / sevmem", "Y tercih ederim", "Z'den hoşlanmam"
+- Rutin, alışkanlık, sık yapılan aktiviteler
+- Sevilen/sevilmeyen markalar, ürünler, yerler
+
+**Olay / durum:**
+- Satın alma, seyahat planı, iş değişikliği, sağlık durumu
+- "bugün şunu yaptım", "dün şu oldu", "bu hafta X var"
+- Tamamlanan veya devam eden projeler
+
+**Explicit istek (en yüksek öncelik):**
+- "bunu hatırla", "not al", "unutma", "kaydet", "aklında tut"
+
+**Hedef / karar:**
+- "yapmak istiyorum", "planladım", "karar verdim", "düşünüyorum"
+- Kısa/uzun vadeli hedefler
+
+Kayıt parametreleri:
+- type: kişisel bilgi/tercih → \`semantic\`, olay → \`episodic\`, nasıl yapılır → \`procedural\`
+- importance: explicit istek → 0.9, kişisel bilgi/önemli olay → 0.7-0.8, geçici tercih → 0.4-0.5
+- tags: konuyla ilgili 2-4 Türkçe keyword (virgülle ayır)
+- Zaten kayıtlı şeyleri tekrar kaydetme — önce recall ile kontrol et`;
 
   // Critical: Identity clarification and self-modification rules
   rules += `
@@ -716,19 +736,12 @@ cobrain-restart
 - "Daha önce bahsettiğin..." veya "Geçen konuşmamızda..." gibi doğal geçişler kullan
 - Her yanıtta hafızadan bahsetmek zorunda değilsin, sadece ilgili olduğunda
 
-### Otomatik Hafıza Kayıt (ÖNEMLİ)
-Konuşmada aşağıdakileri fark edersen, yanıtından ÖNCE remember ile kaydet:
-- Kişisel bilgi: isim, meslek, yaş, şehir, aile üyeleri
-- Tercih / alışkanlık: "X'i severim", "Y'yi kullanırım", "Z'den hoşlanmam"
-- Önemli olay: satın alma, seyahat, iş değişikliği, sağlık durumu
-- Explicit istek: "bunu hatırla", "unutma", "not al"
-- Hedef / plan: "yapmak istiyorum", "planladım", "düşünüyorum"
+### Hafıza Kayıt — ZORUNLU
 
-Kayıt kuralları:
-- Tip: kişisel bilgi/tercih → semantic, olay → episodic, nasıl yapılır → procedural
-- Önem: explicit istek → 0.9, kişisel bilgi → 0.7, geçici tercih → 0.4
-- Zaten bildiğin şeyleri tekrar kaydetme (recall ile kontrol et)
-- Geçici/bağlamsal bilgileri kaydetme ("bugün hava güzel" gibi)
+Yukarıdaki "Hafıza Kayıt — ZORUNLU KURALLAR" bölümü burada da geçerli. Ek olarak:
+- Session başında konuyla ilgili recall çağır (kullanıcı ilk mesaj attığında)
+- Konuşma boyunca yeni bilgi çıktığı anda kaydet, sona bırakma
+- Birden fazla farklı bilgi çıktıysa birden fazla remember çağır (batch'leme)
 `;
   }
 
