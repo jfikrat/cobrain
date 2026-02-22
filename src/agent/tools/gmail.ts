@@ -65,10 +65,18 @@ async function getToken(userId: number): Promise<string> {
 /**
  * Gmail API helper
  */
-async function gmailGet(userId: number, path: string, params?: Record<string, string>) {
+async function gmailGet(userId: number, path: string, params?: Record<string, string | string[]>) {
   const token = await getToken(userId);
   const url = new URL(`${GMAIL_API}${path}`);
-  if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  if (params) {
+    Object.entries(params).forEach(([k, v]) => {
+      if (Array.isArray(v)) {
+        v.forEach(val => url.searchParams.append(k, val));
+      } else {
+        url.searchParams.set(k, v);
+      }
+    });
+  }
 
   const resp = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${token}` },
@@ -177,7 +185,7 @@ export const gmailInboxTool = (userId: number) =>
           data.messages.map(async (msg) => {
             const detail = await gmailGet(userId, `/messages/${msg.id}`, {
               format: "metadata",
-              metadataHeaders: "From,Subject,Date",
+              metadataHeaders: ["From", "Subject", "Date"],
             }) as {
               id: string;
               snippet: string;
@@ -280,7 +288,7 @@ export const gmailSearchTool = (userId: number) =>
           data.messages.map(async (msg) => {
             const detail = await gmailGet(userId, `/messages/${msg.id}`, {
               format: "metadata",
-              metadataHeaders: "From,Subject,Date",
+              metadataHeaders: ["From", "Subject", "Date"],
             }) as {
               id: string;
               snippet: string;
