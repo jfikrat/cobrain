@@ -14,7 +14,6 @@ import { heartbeat } from "../services/heartbeat.ts";
 import { readMindFiles, buildMdSystemPrompt, type DynamicContext } from "./prompts.ts";
 import { getMoodTrackingService } from "../services/mood-tracking.ts";
 import { FileMemory } from "../memory/file-memory.ts";
-import { SmartMemory } from "../memory/smart-memory.ts";
 import { getSessionState, updateSessionState, detectTopic, detectPhase } from "../services/session-state.ts";
 import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
@@ -144,11 +143,10 @@ async function _executeChat(
     }
   } catch {}
 
-  // Load recent memories: file-based + SmartMemory (memory.db)
+  // Load recent memories from file-based system
   let recentMemories: string[] = [];
   const queryText = typeof message === 'string' ? message : (message as any).text || '';
 
-  // 1. File-based memory (facts.md / events.md)
   try {
     const fileMemory = new FileMemory(userFolder);
     const q = queryText.toLowerCase();
@@ -156,28 +154,18 @@ async function _executeChat(
     const facts = await fileMemory.readFacts();
     const events = await fileMemory.readRecentEvents(30);
 
+    // Simple relevance: lines containing query keywords
     const keywords = q.split(/\s+/).filter((w: string) => w.length > 2);
     const allLines = [...facts.split("\n"), ...events.split("\n")];
     const relevant = keywords.length > 0
       ? allLines.filter(l => keywords.some((k: string) => l.toLowerCase().includes(k)) && l.trim() && !l.startsWith("#"))
       : [];
 
+    // Fallback: just include facts if no relevant lines
     if (relevant.length === 0 && facts.trim()) {
       recentMemories = [facts.slice(0, 400)];
     } else {
       recentMemories = deduplicateMemories(relevant.slice(0, 5).map(l => l.trim()));
-    }
-  } catch {}
-
-  // 2. SmartMemory (memory.db) — semantic/episodic memories saved by Cortex
-  try {
-    const smartMem = new SmartMemory(userFolder, userId);
-    const results = await smartMem.search(queryText || "kişisel bilgi tercih", { limit: 6 });
-    if (results.length > 0) {
-      const smartEntries = results.map(r =>
-        `[${r.type}${r.importance >= 0.7 ? " ★" : ""}] ${r.content.slice(0, 200)}`
-      );
-      recentMemories = deduplicateMemories([...recentMemories, ...smartEntries]).slice(0, 10);
     }
   } catch {}
 
