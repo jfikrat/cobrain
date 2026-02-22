@@ -623,6 +623,12 @@ bot.callbackQuery("action:dismiss", async (ctx) => {
   cachedAnalysis = [];
 });
 
+// Generic "tamam/ack" callback — buton kaybolsun, toast göster
+bot.callbackQuery(/^(restart_ack|ack|tamam)$/, async (ctx) => {
+  await ctx.answerCallbackQuery("Tamam");
+  await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+});
+
 // ============ KATEGORİ HANDLER'LAR ============
 
 bot.callbackQuery("category:personal", async (ctx) => {
@@ -724,6 +730,34 @@ bot.callbackQuery(/^mood_(great|neutral|low)$/, async (ctx) => {
   } catch (err) {
     console.error("[MoodCallback] Failed:", err);
     await ctx.answerCallbackQuery({ text: "Hata olustu" });
+  }
+});
+
+// ============ CATCH-ALL CALLBACK HANDLER ============
+// Cortex'in gönderdiği free-form butonlar buraya düşer.
+// Buton metnini kullanıcıdan gelen mesaj gibi Cortex'e iletir.
+
+bot.callbackQuery(/.+/, async (ctx) => {
+  const userId = ctx.from?.id ?? 0;
+  const data = ctx.callbackQuery.data;
+
+  // Spinner'ı kapat
+  await ctx.answerCallbackQuery();
+
+  if (!isAuthorized(userId)) return;
+
+  console.log(`[Telegram] Unhandled callback from ${userId}: "${data}"`);
+
+  // Button'ları kaldır — tıklandıktan sonra kaybolsun
+  try {
+    await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+  } catch { /* mesaj zaten silinmiş veya düzenlenemiyor */ }
+
+  recordInteraction(userId);
+
+  const response = await think(userId, data);
+  if (response.content) {
+    await ctx.reply(response.content, { parse_mode: "HTML" });
   }
 });
 
@@ -1098,9 +1132,8 @@ export async function startBot(): Promise<void> {
   console.log(`[Startup] Sending restart notification to user ${userId}`);
   getStartupContext(userId)
     .then((contextSummary) => {
-      const startupMsg = contextSummary
-        ? `[SYSTEM] Bot yeniden başlatıldı.\n\nSon konuşma özeti:\n${contextSummary}\n\nKullanıcıya geri döndüğünü ve kaldığınız yerden devam edebileceğinizi bildir.`
-        : "[SYSTEM] Bot yeniden başlatıldı. Kullanıcıya kısaca geri döndüğünü bildir.";
+      const contextPart = contextSummary ? `\n\nSon konuşma özeti:\n${contextSummary}` : "";
+      const startupMsg = `[SYSTEM] Bot yeniden başlatıldı.${contextPart}\n\nŞimdi sırayla şunları yap:\n1. list_reminders() çağır — bekleyen hatırlatıcıları al\n2. list_goals() çağır — aktif hedefleri al\n3. recall("son bağlam güncel durum") çağır — hafızandan son durumu al\n4. Telegram'a kısa özet gönder (max 5 satır): geri döndüğünü bildir, önemli bekleyen şeyler varsa listele`;
       return think(userId, startupMsg);
     })
     .then((response) => {
