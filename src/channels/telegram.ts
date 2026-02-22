@@ -1020,10 +1020,15 @@ bot.on("message:text", async (ctx) => {
   }
 
   // ============ NORMAL AI SOHBET ============
+  // Cortex çalışırken sürekli "typing" göster (her 4s yenile)
   await ctx.replyWithChatAction("typing");
+  const typingInterval = setInterval(() => {
+    ctx.replyWithChatAction("typing").catch(() => {});
+  }, 4000);
 
   try {
     const response = await think(userId, text);
+    clearInterval(typingInterval);
 
     // Try Markdown first, fallback to plain text if parsing fails
     try {
@@ -1046,6 +1051,7 @@ bot.on("message:text", async (ctx) => {
       console.warn("[Telegram] Mood extraction failed:", err);
     });
   } catch (error) {
+    clearInterval(typingInterval);
     console.error("Chat hatası:", error);
     const errorMessage = error instanceof Error ? error.message : "Bilinmeyen hata";
     await ctx.reply(`❌ Hata: ${errorMessage}`);
