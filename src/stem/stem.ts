@@ -115,8 +115,11 @@ export class Stem {
       let outputTokens = 0;
       const toolsCalled: string[] = [];
 
+      // Always update notebook after deciding action
+      const prompt = `${eventMessage}\n\nKararını verdikten sonra update_notebook ile "Bugünkü Olaylar" ve "Aktif Durum" bölümlerini güncelle.`;
+
       const queryResult = query({
-        prompt: eventMessage,
+        prompt,
         options: {
           model: this.config.model,
           systemPrompt,
