@@ -185,7 +185,7 @@ export const gmailInboxTool = (userId: number) =>
               labelNames?: string[];
             };
 
-            const h = parseHeaders(detail.payload.headers);
+            const h = parseHeaders(detail.payload?.headers ?? []);
             const from = h.from?.replace(/<[^>]+>/, "").trim() || "?";
             const subject = h.subject || "(Konu yok)";
             const date = h.date ? new Date(h.date).toLocaleDateString("tr-TR") : "?";
@@ -287,7 +287,7 @@ export const gmailSearchTool = (userId: number) =>
               payload: { headers: Array<{ name: string; value: string }> };
             };
 
-            const h = parseHeaders(detail.payload.headers);
+            const h = parseHeaders(detail.payload?.headers ?? []);
             const date = h.date ? new Date(h.date).toLocaleDateString("tr-TR") : "?";
             return `• **${h.subject || "(Konu yok)"}** — ${h.from?.replace(/<[^>]+>/, "").trim()} (${date})\n  ${detail.snippet?.slice(0, 120)}...\n  ID: \`${msg.id}\``;
           })
