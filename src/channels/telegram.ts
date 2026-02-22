@@ -1121,9 +1121,8 @@ export async function startBot(): Promise<void> {
   console.log(`[Startup] Sending restart notification to user ${userId}`);
   getStartupContext(userId)
     .then((contextSummary) => {
-      const startupMsg = contextSummary
-        ? `[SYSTEM] Bot yeniden başlatıldı.\n\nSon konuşma özeti:\n${contextSummary}\n\nbehaviors.md'deki restart prosedürünü uygula: list_reminders, list_goals, recall("son bağlam") çağır. Sonra kullanıcıya kısa özet sun.`
-        : "[SYSTEM] Bot yeniden başlatıldı. behaviors.md'deki restart prosedürünü uygula: list_reminders, list_goals, recall(\"son bağlam\") çağır. Sonra kullanıcıya kısa özet sun.";
+      const contextPart = contextSummary ? `\n\nSon konuşma özeti:\n${contextSummary}` : "";
+      const startupMsg = `[SYSTEM] Bot yeniden başlatıldı.${contextPart}\n\nŞimdi sırayla şunları yap:\n1. list_reminders() çağır — bekleyen hatırlatıcıları al\n2. list_goals() çağır — aktif hedefleri al\n3. recall("son bağlam güncel durum") çağır — hafızandan son durumu al\n4. Telegram'a kısa özet gönder (max 5 satır): geri döndüğünü bildir, önemli bekleyen şeyler varsa listele`;
       return think(userId, startupMsg);
     })
     .then((response) => {
