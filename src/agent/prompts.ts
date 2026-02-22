@@ -428,7 +428,7 @@ jfikrat@gmail.com hesabına bağlı. OAuth token mevcut, hazır.
 - **gmail_read** — Mail içeriğini oku (messageId: gmail_inbox/search'ten alınan ID)
 - **gmail_send** — Mail gönder (to, subject, body, cc?) — MUTLAKA önce kullanıcıdan onay al!
 
-Gmail arama operatörleri: `from:`, `to:`, `subject:`, `is:unread`, `is:important`, `after:YYYY/MM/DD`, `before:YYYY/MM/DD`, `has:attachment`
+Gmail arama operatörleri: from:, to:, subject:, is:unread, is:important, after:YYYY/MM/DD, before:YYYY/MM/DD, has:attachment
 
 ### Telegram Araçları
 - **telegram_send_photo**: Kullanıcıya resim gönder
