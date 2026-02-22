@@ -798,7 +798,15 @@ bot.on("message:voice", async (ctx) => {
 
     // Process transcribed text as normal message
     await ctx.replyWithChatAction("typing");
-    const response = await think(userId, transcript);
+    const voiceTypingInterval = setInterval(() => {
+      ctx.replyWithChatAction("typing").catch(() => {});
+    }, 4000);
+    let response;
+    try {
+      response = await think(userId, transcript);
+    } finally {
+      clearInterval(voiceTypingInterval);
+    }
 
     // Show transcript and response
     const message = `🎤 <i>${transcript}</i>\n\n${response.content}`;

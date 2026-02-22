@@ -532,12 +532,23 @@ class BrainLoop {
 
     console.log(`[BrainLoop] Inbox item işleniyor: "${pendingItem.subject}"`);
 
-    chat(config.MY_TELEGRAM_ID, prompt)
+    // Kullanıcıya "çalışıyor" göster — her 4s yenile
+    const userId = config.MY_TELEGRAM_ID;
+    if (this.bot) this.bot.api.sendChatAction(userId, "typing").catch(() => {});
+    const typingInterval = this.bot
+      ? setInterval(() => this.bot!.api.sendChatAction(userId, "typing").catch(() => {}), 4000)
+      : null;
+
+    chat(userId, prompt)
       .then(async response => {
+        if (typingInterval) clearInterval(typingInterval);
         await inbox.markProcessed(pendingItem.id);
         if (this.bot) sendLogToChannel(this.bot, `📬 Inbox [${pendingItem.from}] — ${pendingItem.subject.slice(0, 60)}`, response);
       })
-      .catch(err => console.error("[BrainLoop] Inbox işleme hatası:", err));
+      .catch(err => {
+        if (typingInterval) clearInterval(typingInterval);
+        console.error("[BrainLoop] Inbox işleme hatası:", err);
+      });
   }
 
   // ── Code Review Cycle ──────────────────────────────────────────────
