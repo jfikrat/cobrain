@@ -91,6 +91,7 @@ class BrainLoop {
   private lastCodeReviewDate: string | null = null;
   private quietHoursBuffer: DigestEntry[] = [];
   private digestSentDate: string | null = null;
+  private lastProactiveCheckHour: string | null = null;
 
   // ── Lifecycle ────────────────────────────────────────────────────────
 
@@ -172,6 +173,12 @@ class BrainLoop {
       await this.checkExpiredExpectations();
     } catch (err) {
       console.error("[BrainLoop] checkExpiredExpectations error:", err);
+    }
+
+    try {
+      await this.checkProactiveBehaviors();
+    } catch (err) {
+      console.error("[BrainLoop] checkProactiveBehaviors error:", err);
     }
 
     // Code review cycle is disabled in minimal autonomy mode.
@@ -474,6 +481,41 @@ class BrainLoop {
     }
   }
 
+  // ── Proactive Behaviors Check ─────────────────────────────────────────
+  //
+  // Saatte bir, aktif saatlerde (07-23) Cortex'e "behaviors.md'ini kontrol et"
+  // mesajı gönderir. Hangi davranışın ne zaman çalışacağı tamamen behaviors.md'de
+  // tanımlı — bu kod sadece tetikleyicidir, hiçbir davranış hardcode değil.
+
+  private async checkProactiveBehaviors(): Promise<void> {
+    const now = new Date();
+    const hour = now.getHours();
+
+    // Sadece aktif saatlerde (07:00-23:00)
+    if (hour < 7 || hour >= 23) return;
+
+    // Saatte bir kez
+    const hourKey = `${now.toISOString().slice(0, 10)}-${String(hour).padStart(2, "0")}`;
+    if (this.lastProactiveCheckHour === hourKey) return;
+
+    this.lastProactiveCheckHour = hourKey;
+
+    const dayNames = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+    const dayName = dayNames[now.getDay()];
+    const timeStr = `${String(hour).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const dateStr = now.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
+
+    await inbox.push({
+      from: "system",
+      subject: `Proaktif kontrol — ${timeStr}`,
+      body: `Saat: ${timeStr} (${dayName}, ${dateStr})\n\nbehaviors.md'ini oku. Şu an yapman gereken proaktif bir şey var mı?\n\nEvet → yap ve gerekirse Telegram'a bildir.\nHayır → sessiz kal, bu mesajı işaretlenmiş say.`,
+      priority: "low",
+      ttlMs: 55 * 60 * 1000, // 55 dakikada expire — bir sonraki tick'te yenisi gelir
+    });
+
+    console.log(`[BrainLoop] Proactive check pushed: ${hourKey}`);
+  }
+
   // ── Inbox Processing ─────────────────────────────────────────────────
 
   private async processInbox(): Promise<void> {
@@ -611,6 +653,7 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
       const state = getSessionState(config.MY_TELEGRAM_ID);
       this.lastCodeReviewDate = state.lastCodeReviewDate;
       this.codeReviewIndex = state.codeReviewIndex;
+      this.lastProactiveCheckHour = state.lastProactiveCheckHour ?? null;
       console.log(`[BrainLoop] State restored: codeReviewIdx=${this.codeReviewIndex}`);
     } catch (err) {
       console.warn("[BrainLoop] State restore failed:", err);
@@ -622,6 +665,7 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
       updateSessionState(config.MY_TELEGRAM_ID, {
         codeReviewIndex: this.codeReviewIndex,
         lastCodeReviewDate: this.lastCodeReviewDate,
+        lastProactiveCheckHour: this.lastProactiveCheckHour,
       });
     } catch (err) {
       console.warn("[BrainLoop] State persist failed:", err);
