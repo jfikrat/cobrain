@@ -741,6 +741,23 @@ function buildFormatSection(persona: Persona): string {
     format += '\n- Gerektiğinde detaylı yanıt ver';
   }
 
+  format += `
+
+## Öneri Butonları
+
+Yanıtlarının sonuna isteğe bağlı olarak 2-3 takip önerisi ekleyebilirsin:
+
+<suggestions>
+Bugünkü programım ne?
+Son maillerime bak
+</suggestions>
+
+Kurallar:
+- Her öneri max 30 karakter, kısa ve net
+- Her yanıtta değil, sadece doğal devam noktalarında ekle
+- Bağlamla alakalı somut sorular veya aksiyonlar olsun
+- Gelen Kutusu mesajlarına yanıt verirken ekleme`;
+
   return format;
 }
 
@@ -844,6 +861,24 @@ Kullanıcı o an meşgul değil ya da çevrimdışı — bu mesajlar senin boşl
 
 `;
   const dynamic = dynamicContext ? '\n\n' + buildDynamicContextXml(dynamicContext) : '';
-  return `${preamble}${mindContent}${dynamic}`;
+
+  const suggestionBlock = `
+
+## Öneri Butonları
+
+Yanıtlarının sonuna isteğe bağlı olarak 2-3 takip önerisi ekleyebilirsin:
+
+<suggestions>
+Bugünkü programım ne?
+Son maillerime bak
+</suggestions>
+
+Kurallar:
+- Her öneri max 30 karakter, kısa ve net
+- Her yanıtta değil, sadece doğal devam noktalarında ekle
+- Bağlamla alakalı somut sorular veya aksiyonlar olsun
+- Gelen Kutusu mesajlarına yanıt verirken ekleme`;
+
+  return `${preamble}${mindContent}${dynamic}${suggestionBlock}`;
 }
 

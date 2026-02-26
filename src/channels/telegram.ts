@@ -1,4 +1,4 @@
-import { Bot } from "grammy";
+import { Bot, InlineKeyboard } from "grammy";
 import { run } from "@grammyjs/runner";
 import { config } from "../config.ts";
 import { heartbeat } from "../services/heartbeat.ts";
@@ -26,6 +26,31 @@ import { generateSessionToken } from "../web/auth.ts";
 import { transcribeAudio, downloadTelegramFile, downloadTelegramFileAsBuffer } from "../services/transcribe.ts";
 import { initTelegramMcp } from "../agent/tools/telegram.ts";
 import { UserMemory } from "../memory/sqlite.ts";
+
+/** Parse <suggestions> block from response, return clean text + suggestions */
+function parseSuggestions(content: string): { text: string; suggestions: string[] } {
+  const match = content.match(/<suggestions>\n?([\s\S]*?)\n?<\/suggestions>\s*$/);
+  if (!match) return { text: content, suggestions: [] };
+
+  const text = content.replace(/<suggestions>[\s\S]*?<\/suggestions>\s*$/, '').trimEnd();
+  const suggestions = match[1]!
+    .split('\n')
+    .map(s => s.trim())
+    .filter(s => s.length > 0 && s.length <= 40)
+    .slice(0, 3);
+
+  return { text, suggestions };
+}
+
+/** Build inline keyboard from suggestion strings */
+function buildSuggestionKeyboard(suggestions: string[]): InlineKeyboard | undefined {
+  if (suggestions.length === 0) return undefined;
+  const kb = new InlineKeyboard();
+  for (const s of suggestions) {
+    kb.text(s, s).row();
+  }
+  return kb;
+}
 
 const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
@@ -751,7 +776,18 @@ bot.callbackQuery(/.+/, async (ctx) => {
 
   const response = await think(userId, data);
   if (response.content) {
-    await ctx.reply(response.content, { parse_mode: "HTML" });
+    const { text: cleanContent, suggestions } = parseSuggestions(response.content);
+    const replyMarkup = buildSuggestionKeyboard(suggestions);
+    try {
+      await ctx.reply(cleanContent, {
+        parse_mode: "HTML",
+        ...(replyMarkup && { reply_markup: replyMarkup }),
+      });
+    } catch {
+      await ctx.reply(cleanContent, {
+        ...(replyMarkup && { reply_markup: replyMarkup }),
+      });
+    }
   }
 });
 
@@ -1038,13 +1074,21 @@ bot.on("message:text", async (ctx) => {
     const response = await think(userId, text);
     clearInterval(typingInterval);
 
+    const { text: cleanContent, suggestions } = parseSuggestions(response.content);
+    const replyMarkup = buildSuggestionKeyboard(suggestions);
+
     // Try Markdown first, fallback to plain text if parsing fails
     try {
-      await ctx.reply(response.content, { parse_mode: "Markdown" });
+      await ctx.reply(cleanContent, {
+        parse_mode: "Markdown",
+        ...(replyMarkup && { reply_markup: replyMarkup }),
+      });
     } catch (markdownError) {
       // Markdown parsing failed (tables, unclosed entities, etc.)
       console.warn("[Telegram] Markdown parse failed, sending as plain text");
-      await ctx.reply(response.content);
+      await ctx.reply(cleanContent, {
+        ...(replyMarkup && { reply_markup: replyMarkup }),
+      });
     }
 
     console.log(
