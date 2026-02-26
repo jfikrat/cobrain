@@ -21,7 +21,7 @@ import { config } from "../config.ts";
 // Split modules
 import { getMemoryServer, getTelegramMcpServer, getGoalsServer, getMoodServer, getLocationServer, getTimeServer, getCalendarServer, getGmailServer } from "./mcp-servers.ts";
 import { extractTextContent, buildMessageContent, type MultimodalMessage } from "./message-builder.ts";
-import { createPreToolUseHooks } from "./hooks.ts";
+import { createPreToolUseHooks, ToolStreamNotifier } from "./hooks.ts";
 
 // Re-export types from message-builder for backwards compatibility
 export type { MultimodalMessage, ImageContent, TextContent, MessageContent } from "./message-builder.ts";
@@ -215,8 +215,9 @@ async function _executeChat(
   // Get or resume session (checks in-memory cache, then DB with TTL)
   const existingSessionId = await getOrResumeSession(userId);
 
-  // Track tools used
+  // Track tools used + streaming notifier
   const toolsUsed: string[] = [];
+  const notifier = new ToolStreamNotifier(userId);
   let lastAssistantContent = "";
   let sessionId = "";
   let totalCost = 0;
@@ -255,6 +256,7 @@ async function _executeChat(
         toolsUsed,
         traceId,
         permissionMode: settings.permissionMode || config.PERMISSION_MODE,
+        notifier,
       }),
     };
 
@@ -379,6 +381,9 @@ async function _executeChat(
       `[Cortex] Completed: ${numTurns} turns, ${toolsUsed.length} tools, $${totalCost.toFixed(4)}`
     );
 
+    // Finalize streaming notification
+    await notifier.complete({ cost: totalCost });
+
     // Heartbeat: agent completed successfully
     heartbeat("ai_agent", { event: "completed", turns: numTurns, tools: toolsUsed.length, cost: totalCost });
 
@@ -437,6 +442,9 @@ async function _executeChat(
     }
 
     console.error("[Cortex] Chat error:", error);
+
+    // Finalize streaming notification with error
+    await notifier.complete({ error: errorMessage });
 
     // Clear session on error to start fresh next time
     userSessions.delete(userId);
