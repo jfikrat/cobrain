@@ -14,7 +14,7 @@ import { Bot } from "grammy";
 import { config } from "../config.ts";
 import { userManager } from "./user-manager.ts";
 import { getGoalsService } from "./goals.ts";
-import { SmartMemory } from "../memory/smart-memory.ts";
+import { FileMemory } from "../memory/file-memory.ts";
 import { getSessionState, updateSessionState } from "./session-state.ts";
 import { expectations } from "./expectations.ts";
 import { heartbeat } from "./heartbeat.ts";
@@ -25,6 +25,8 @@ import { chat, isUserBusy } from "../agent/chat.ts";
 import { mneme } from "../mneme/mneme.ts";
 import { stemRef } from "./stem-ref.ts";
 import { inbox } from "./inbox.ts";
+import { markReplied, wasRecentlyReplied } from "./reply-dedup.ts";
+import type { TriageDecision, StemEvent } from "../stem/types.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -49,6 +51,66 @@ async function sendRawLog(bot: Bot, msg: string): Promise<void> {
   }
 }
 
+// ── Triage Decision Executor ─────────────────────────────────────────────
+
+async function executeTriageDecision(
+  decision: TriageDecision,
+  event: StemEvent,
+  bot: Bot,
+): Promise<void> {
+  const userId = config.MY_TELEGRAM_ID;
+  const chatJid = event.payload.chatJid as string | undefined;
+  const senderName = (event.payload.senderName as string) ||
+    (event.payload.groupName as string) || "?";
+
+  switch (decision.action) {
+    case "reply":
+      if (decision.reply && chatJid && !wasRecentlyReplied(chatJid)) {
+        whatsappDB.addToOutbox(chatJid, decision.reply);
+        markReplied(chatJid);
+        console.log(`[Stem] reply → ${senderName}: "${decision.reply.slice(0, 60)}"`);
+      }
+      break;
+
+    case "wake_cortex":
+      await inbox.push({
+        from: "stem",
+        subject: decision.reason,
+        body: `Bağlam: ${formatEventSummary(event)}`,
+        priority: decision.urgency === "immediate" ? "urgent" : "normal",
+        ttlMs: decision.urgency === "immediate" ? 30 * 60 * 1000 : 2 * 60 * 60 * 1000,
+      });
+      console.log(`[Stem] wake_cortex → "${decision.reason}" (${decision.urgency || "soon"})`);
+      break;
+
+    case "notify": {
+      try {
+        const p = event.payload;
+        const messages = p.messages as Array<{ content?: string }> | undefined;
+        const preview = messages?.map(m => (m.content || "").slice(0, 150)).join(" / ") || "";
+        const text = preview
+          ? `📱 *${senderName}*: ${preview}`
+          : `📱 *${senderName}*: ${decision.reason}`;
+        await bot.api.sendMessage(userId, text, { parse_mode: "Markdown" });
+      } catch (err) {
+        console.error("[Stem] notify telegram error:", err);
+      }
+      break;
+    }
+
+    case "ignore":
+      break;
+  }
+}
+
+function formatEventSummary(event: StemEvent): string {
+  const p = event.payload;
+  const messages = p.messages as Array<{ content?: string }> | undefined;
+  const preview = messages?.map(m => (m.content || "").slice(0, 100)).join(" / ") || "";
+  const sender = (p.senderName as string) || (p.groupName as string) || (p.target as string) || "?";
+  return `[${event.type}] ${sender}: ${preview || JSON.stringify(p).slice(0, 200)}`;
+}
+
 // ── Constants ────────────────────────────────────────────────────────────
 
 const FAST_TICK_MS = config.BRAIN_LOOP_FAST_TICK_MS;
@@ -58,8 +120,8 @@ const CODE_REVIEW_FILES = [
   "src/agent/chat.ts",
   "src/services/brain-loop.ts",
   "src/brain/index.ts",
-  "src/memory/smart-memory.ts",
-  "sr./stem/stem.ts",
+  "src/memory/file-memory.ts",
+  "src/stem/stem.ts",
   "src/channels/telegram.ts",
   "src/agent/prompts.ts",
   "src/brain/router-lite.ts",
@@ -91,8 +153,6 @@ class BrainLoop {
   private lastCodeReviewDate: string | null = null;
   private quietHoursBuffer: DigestEntry[] = [];
   private digestSentDate: string | null = null;
-  private morningBriefingSentDate: string | null = null;
-  private notifiedEventIds: Set<string> = new Set();
   private lastProactiveCheckHour: string | null = null;
 
   // ── Lifecycle ────────────────────────────────────────────────────────
@@ -169,12 +229,6 @@ class BrainLoop {
       await this.checkMorningDigest();
     } catch (err) {
       console.error("[BrainLoop] checkMorningDigest error:", err);
-    }
-
-    try {
-      await this.checkUpcomingEvents();
-    } catch (err) {
-      console.error("[BrainLoop] checkUpcomingEvents error:", err);
     }
 
     try {
@@ -293,7 +347,7 @@ class BrainLoop {
 
           const stem = stemRef.get();
           if (stem) {
-            const stemResult = await stem.feedEvent({
+            const event: StemEvent = {
               type: "whatsapp_dm",
               payload: {
                 chatJid,
@@ -301,17 +355,14 @@ class BrainLoop {
                 messages: msgs.map(m => ({ content: m.content || "[medya]", message_type: m.message_type || "text" })),
               },
               timestamp: Date.now(),
-            });
-            console.log(`[BrainLoop] WA DM → Stem: ${senderName}`);
+            };
+            const decision = await stem.triage(event);
+            console.log(`[BrainLoop] WA DM → Stem: ${senderName} → ${decision.action}`);
 
-            // Kuyruk doluysa notifikasyonu okunmuş işaretleme — sonraki tick'te tekrar denensin
-            if (stemResult.details === "queue_full") {
-              console.warn(`[BrainLoop] Stem queue full — skipping markRead for ${senderName}`);
-              continue;
-            }
+            if (this.bot) await executeTriageDecision(decision, event, this.bot);
 
-            // Quiet hours + action=none → digest buffer'a ekle
-            if (stemResult.action === "none" && this.isQuietHours()) {
+            // Quiet hours + ignore → digest buffer'a ekle
+            if (decision.action === "ignore" && this.isQuietHours()) {
               const time = new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
               const preview = msgs.slice(0, 2).map(m => (m.content || "[medya]").slice(0, 80)).join(" / ");
               this.quietHoursBuffer.push({ sender: senderName, preview, time });
@@ -350,7 +401,7 @@ class BrainLoop {
           const replyAllowed = allowedGroupJids.length > 0 && allowedGroupJids.includes(groupJid);
           const stem = stemRef.get();
           if (stem) {
-            await stem.feedEvent({
+            const event: StemEvent = {
               type: "whatsapp_group",
               payload: {
                 chatJid: groupJid,
@@ -363,8 +414,10 @@ class BrainLoop {
                 })),
               },
               timestamp: Date.now(),
-            });
-            console.log(`[BrainLoop] WA Grup → Stem: ${groupName}`);
+            };
+            const decision = await stem.triage(event);
+            console.log(`[BrainLoop] WA Grup → Stem: ${groupName} → ${decision.action}`);
+            if (this.bot) await executeTriageDecision(decision, event, this.bot);
           } else {
             // Stem disabled — fallback to Cortex
             const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
@@ -406,12 +459,14 @@ class BrainLoop {
         try {
           const stem = stemRef.get();
           if (stem) {
-            await stem.feedEvent({
+            const event: StemEvent = {
               type: "reminder_due",
               payload: { title: reminder.title, message: reminder.message || "" },
               timestamp: Date.now(),
-            });
-            console.log(`[BrainLoop] Hatırlatıcı → Stem: ${reminder.title}`);
+            };
+            const decision = await stem.triage(event);
+            console.log(`[BrainLoop] Hatırlatıcı → Stem: ${reminder.title} → ${decision.action}`);
+            if (this.bot) await executeTriageDecision(decision, event, this.bot);
           } else {
             // Stem disabled — fallback to Cortex
             const remResponse = await chat(
@@ -446,106 +501,22 @@ class BrainLoop {
     // 07:00-07:59 arasında, günde bir kez
     if (hour !== 7) return;
     if (this.digestSentDate === today) return;
+    if (this.quietHoursBuffer.length === 0) return;
 
-    // Gece mesajları varsa → Inbox'a push ET ve Telegram'a da bildir
-    if (this.quietHoursBuffer.length > 0) {
-      const lines = this.quietHoursBuffer.map(e => `- ${e.time} — ${e.sender}: "${e.preview}"`);
-      const count = this.quietHoursBuffer.length;
+    const lines = this.quietHoursBuffer.map(e => `- ${e.time} — ${e.sender}: "${e.preview}"`);
+    const count = this.quietHoursBuffer.length;
 
-      await inbox.push({
-        from: "stem",
-        subject: `Gece özeti — ${count} mesaj sessizce geçti`,
-        body: `Gece boyunca şu mesajlar geldi, aksiyon alınmadı:\n\n${lines.join("\n")}\n\nGerekirse takip et.`,
-        priority: "normal",
-        ttlMs: 8 * 60 * 60 * 1000,
-      });
+    await inbox.push({
+      from: "stem",
+      subject: `Gece özeti — ${count} mesaj sessizce geçti`,
+      body: `Gece boyunca şu mesajlar geldi, aksiyon alınmadı:\n\n${lines.join("\n")}\n\nGerekirse takip et.`,
+      priority: "normal",
+      ttlMs: 8 * 60 * 60 * 1000, // 8 saat
+    });
 
-      // Telegram'a da kısa rapor gönder
-      if (this.bot) {
-        const senderList = lines.join("\n");
-        await this.bot.api.sendMessage(
-          config.MY_TELEGRAM_ID,
-          `Gece özeti: ${count} mesaj sessizce geçti.\n\n${senderList}\n\nSabah bakman yeterli.`
-        );
-      }
-
-      console.log(`[BrainLoop] Morning digest pushed: ${count} quiet-hours events`);
-      this.quietHoursBuffer = [];
-    }
-
-    // Buffer boş olsa bile sabah takvim+mail özeti push et
-    if (this.morningBriefingSentDate !== today) {
-      await inbox.push({
-        from: "system",
-        subject: "Sabah özeti",
-        body: "Günaydın. Takvime bak (calendar_today), önemli okunmamış mailleri kontrol et (gmail_inbox, query: is:unread is:important, limit:5). Kısa özet hazırla ve Telegram'a gönder. Etkinlik ve önemli mail yoksa sadece 'Günaydın, temiz bir gün' de.",
-        priority: "normal",
-        ttlMs: 4 * 60 * 60 * 1000, // 4 saat
-      });
-      this.morningBriefingSentDate = today;
-      console.log(`[BrainLoop] Morning briefing pushed`);
-    }
-
+    console.log(`[BrainLoop] Morning digest pushed: ${count} quiet-hours events`);
+    this.quietHoursBuffer = [];
     this.digestSentDate = today;
-  }
-
-  // ── Upcoming Events (30dk öncesi uyarı) ──────────────────────────────
-
-  private async checkUpcomingEvents(): Promise<void> {
-    // Gece saatlerinde çalışma
-    const hour = new Date().getHours();
-    if (hour < 7 || hour >= 23) return;
-
-    try {
-      const { $ } = await import("bun");
-      const now = new Date();
-      const in35 = new Date(now.getTime() + 35 * 60 * 1000);
-      const in25 = new Date(now.getTime() + 25 * 60 * 1000);
-
-      // gcalcli TSV: start_date, start_time, end_date, end_time, title
-      const result = await $`gcalcli agenda --tsv ${now.toISOString().slice(0, 10)} ${in35.toISOString().slice(0, 10)}`.quiet().nothrow();
-      const output = result.stdout.toString().trim();
-      if (!output) return;
-
-      const lines = output.split("\n").filter(l => l && !l.startsWith("start_date"));
-      for (const line of lines) {
-        const cols = line.split("\t");
-        if (cols.length < 5) continue;
-        const [dateStr, timeStr, , , title] = cols;
-        if (!dateStr || !timeStr || !title) continue;
-
-        // Etkinlik zamanını parse et
-        const eventTime = new Date(`${dateStr}T${timeStr}`);
-        if (isNaN(eventTime.getTime())) continue;
-
-        // 25-35 dakika aralığında mı?
-        if (eventTime >= in25 && eventTime <= in35) {
-          const eventId = `${dateStr}-${timeStr}-${title}`;
-          if (this.notifiedEventIds.has(eventId)) continue;
-
-          this.notifiedEventIds.add(eventId);
-
-          // Eski bildirimleri temizle (Set büyümesin)
-          if (this.notifiedEventIds.size > 50) {
-            const arr = [...this.notifiedEventIds];
-            this.notifiedEventIds = new Set(arr.slice(-25));
-          }
-
-          const minutesLeft = Math.round((eventTime.getTime() - now.getTime()) / 60000);
-          const timeDisplay = eventTime.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
-
-          if (this.bot) {
-            await this.bot.api.sendMessage(
-              config.MY_TELEGRAM_ID,
-              `Randevu hatırlatma: "${title}" — ${timeDisplay} (${minutesLeft} dakika kaldı)`
-            );
-            console.log(`[BrainLoop] Upcoming event notified: ${title} at ${timeDisplay}`);
-          }
-        }
-      }
-    } catch (err) {
-      console.error("[BrainLoop] checkUpcomingEvents error:", err);
-    }
   }
 
   // ── Expired Expectations → Stem Events ───────────────────────────────
@@ -555,10 +526,10 @@ class BrainLoop {
     if (expired.length === 0) return;
 
     const stem = stemRef.get();
-    if (!stem) return;
+    if (!stem || !this.bot) return;
 
     for (const exp of expired) {
-      await stem.feedEvent({
+      const event: StemEvent = {
         type: "expectation_timeout",
         payload: {
           id: exp.id,
@@ -568,8 +539,10 @@ class BrainLoop {
           onResolved: exp.onResolved,
         },
         timestamp: Date.now(),
-      });
-      console.log(`[BrainLoop] Expectation timeout → Stem: [${exp.type}] ${exp.target}`);
+      };
+      const decision = await stem.triage(event);
+      console.log(`[BrainLoop] Expectation timeout → Stem: [${exp.type}] ${exp.target} → ${decision.action}`);
+      await executeTriageDecision(decision, event, this.bot);
     }
   }
 
@@ -598,10 +571,10 @@ class BrainLoop {
     const dateStr = now.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 
     await inbox.push({
-      from: "system",
+      from: "scheduler",
       subject: `Proaktif kontrol — ${timeStr}`,
       body: `Saat: ${timeStr} (${dayName}, ${dateStr})\n\nbehaviors.md'ini oku. Şu an yapman gereken proaktif bir şey var mı?\n\nEvet → yap ve gerekirse Telegram'a bildir.\nHayır → sessiz kal, bu mesajı işaretlenmiş say.`,
-      priority: "low",
+      priority: "normal",
       ttlMs: 55 * 60 * 1000, // 55 dakikada expire — bir sonraki tick'te yenisi gelir
     });
 
@@ -624,12 +597,23 @@ class BrainLoop {
 
     console.log(`[BrainLoop] Inbox item işleniyor: "${pendingItem.subject}"`);
 
-    chat(config.MY_TELEGRAM_ID, prompt)
+    // Kullanıcıya "çalışıyor" göster — her 4s yenile
+    const userId = config.MY_TELEGRAM_ID;
+    if (this.bot) this.bot.api.sendChatAction(userId, "typing").catch(() => {});
+    const typingInterval = this.bot
+      ? setInterval(() => this.bot!.api.sendChatAction(userId, "typing").catch(() => {}), 4000)
+      : null;
+
+    chat(userId, prompt)
       .then(async response => {
+        if (typingInterval) clearInterval(typingInterval);
         await inbox.markProcessed(pendingItem.id);
         if (this.bot) sendLogToChannel(this.bot, `📬 Inbox [${pendingItem.from}] — ${pendingItem.subject.slice(0, 60)}`, response);
       })
-      .catch(err => console.error("[BrainLoop] Inbox işleme hatası:", err));
+      .catch(err => {
+        if (typingInterval) clearInterval(typingInterval);
+        console.error("[BrainLoop] Inbox işleme hatası:", err);
+      });
   }
 
   // ── Code Review Cycle ──────────────────────────────────────────────
@@ -704,26 +688,18 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
       }
 
       const userFolder = userManager.getUserFolder(userId);
-      const memory = new SmartMemory(userFolder, userId);
+      const fileMemory = new FileMemory(userFolder);
       const highPriorityBugs: string[] = [];
 
       for (const obs of observations) {
-        const memContent = `[code-obs] [${obs.type}] [${obs.priority}] Dosya: ${filePath}\nGözlem: ${obs.observation}\nÖneri: ${obs.suggestion}`;
-        await memory.store({
-          type: "semantic",
-          content: memContent,
-          summary: `[code-obs] ${filePath}: ${obs.observation.slice(0, 80)}`,
-          importance: obs.priority === "high" ? 0.9 : obs.priority === "medium" ? 0.7 : 0.5,
-          source: "code-review-cycle",
-          metadata: { file: filePath, obsType: obs.type, priority: obs.priority, date: today },
-        });
+        const entry = `[code-obs] [${obs.type}/${obs.priority}] ${filePath}: ${obs.observation} → ${obs.suggestion}`;
+        await fileMemory.logEvent(entry);
 
         if (obs.priority === "high" && obs.type === "bug") {
           highPriorityBugs.push(`${filePath}: ${obs.observation}`);
         }
       }
 
-      memory.close();
       console.log(`[BrainLoop:CodeReview] ${observations.length} observation(s) saved for ${filePath}`);
 
       if (highPriorityBugs.length > 0 && this.bot) {
