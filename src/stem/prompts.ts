@@ -38,7 +38,7 @@ export async function buildTriagePrompt(userFolder: string): Promise<string> {
 
 ## Kurallar
 
-1. Kısa, samimi, doğal cevaplar. Arkadaş gibi yaz. Türkçe yaz.
+1. Kısa, samimi, doğal cevaplar. Arkadaş gibi yaz. Gelen mesajın dilinde cevap ver.
 2. Emin olmadığında cevaplama — wake_cortex kullan.
 3. Sessiz saatler (23:00-08:00): Sadece acil konularda wake_cortex. reply devam eder.
 4. Aynı kişiye kısa sürede birden fazla cevap verme.
