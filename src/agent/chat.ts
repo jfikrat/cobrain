@@ -35,6 +35,7 @@ export interface ChatResponse {
   numTurns: number;
   toolsUsed: string[];
   model: string;
+  stopReason: string | null;
 }
 
 // Session ID cache per user
@@ -224,6 +225,7 @@ async function _executeChat(
   let inputTokens = 0;
   let outputTokens = 0;
   let numTurns = 0;
+  let stopReason: string | null = null;
 
   // Build the message content (text or multimodal)
   const messageContent = buildMessageContent(message);
@@ -356,6 +358,7 @@ async function _executeChat(
 
         case "result":
           const result = msg as SDKResultMessage;
+          stopReason = result.stop_reason ?? null;
           if (result.subtype === "success") {
             totalCost = result.total_cost_usd;
             inputTokens = result.usage.input_tokens;
@@ -368,7 +371,7 @@ async function _executeChat(
             }
           } else {
             // Error case
-            console.error(`[Cortex] Error: ${result.subtype}`, (result as any).errors);
+            console.error(`[Cortex] Error: ${result.subtype} (stop: ${stopReason})`, (result as any).errors);
             if (!lastAssistantContent) {
               lastAssistantContent = `Bir hata oluştu: ${result.subtype}`;
             }
@@ -378,7 +381,8 @@ async function _executeChat(
     }
 
     console.log(
-      `[Cortex] Completed: ${numTurns} turns, ${toolsUsed.length} tools, $${totalCost.toFixed(4)}`
+      `[Cortex] Completed: ${numTurns} turns, ${toolsUsed.length} tools, $${totalCost.toFixed(4)}` +
+      (stopReason && stopReason !== "end_turn" ? ` [stop: ${stopReason}]` : "")
     );
 
     // Finalize streaming notification
@@ -415,6 +419,7 @@ async function _executeChat(
       numTurns,
       toolsUsed: [...new Set(toolsUsed)], // Unique tools
       model: actualModel,
+      stopReason,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
