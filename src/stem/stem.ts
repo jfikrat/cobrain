@@ -1,61 +1,85 @@
 /**
  * Stem — Haiku-based triage classifier.
- * Single-turn Agent SDK query() call per event, no tools, JSON output.
- * Uses OAuth auth via Agent SDK (no ANTHROPIC_API_KEY needed).
+ * Single API call per event, no tools, JSON output.
+ * Uses OAuth token from ~/.claude/.credentials.json
  */
 
-import { query, type SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import { buildTriagePrompt } from "./prompts.ts";
 import type { StemConfig, StemEvent, TriageDecision } from "./types.ts";
 
+const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+
+function loadOAuthToken(): string | null {
+  try {
+    const credPath = join(homedir(), ".claude", ".credentials.json");
+    const creds = JSON.parse(readFileSync(credPath, "utf-8"));
+    return creds?.claudeAiOauth?.accessToken || null;
+  } catch {
+    return null;
+  }
+}
+
 export class Stem {
   private config: StemConfig;
+  private apiKey: string | null;
 
   constructor(config: StemConfig) {
     this.config = config;
-    console.log(`[Stem] Initialized (model=${config.model})`);
+    this.apiKey = process.env.ANTHROPIC_API_KEY || loadOAuthToken();
+    console.log(`[Stem] Initialized (model=${config.model}, auth=${this.apiKey ? "ok" : "missing"})`);
   }
 
   async triage(event: StemEvent): Promise<TriageDecision> {
     const eventMessage = formatEventMessage(event);
     console.log(`[Stem] triage: ${event.type}`);
 
+    if (!this.apiKey) {
+      console.log("[Stem] No API key or OAuth token found!");
+      return { action: "ignore", reason: "no_auth" };
+    }
+
     try {
       const systemPrompt = await buildTriagePrompt(this.config.userFolder);
 
-      let lastContent = "";
-
-      const queryResult = query({
-        prompt: eventMessage,
-        options: {
-          model: this.config.model,
-          systemPrompt,
-          settingSources: [],
-          mcpServers: {},
-          maxTurns: 1,
+      const response = await fetch(ANTHROPIC_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": this.apiKey,
+          "anthropic-version": "2023-06-01",
         },
+        body: JSON.stringify({
+          model: this.config.model,
+          max_tokens: 256,
+          system: systemPrompt,
+          messages: [{ role: "user", content: eventMessage }],
+        }),
       });
 
-      for await (const msg of queryResult) {
-        if (msg.type === "assistant" && msg.message?.content) {
-          for (const block of msg.message.content) {
-            if (typeof block === "object" && "text" in block) {
-              lastContent = block.text as string;
-            }
-          }
+      if (!response.ok) {
+        const errText = await response.text();
+        console.log(`[Stem] API error ${response.status}: ${errText.slice(0, 200)}`);
+
+        // Token expired — refresh
+        if (response.status === 401) {
+          this.apiKey = loadOAuthToken();
         }
-        if (msg.type === "result") {
-          const result = msg as SDKResultMessage;
-          if (result.subtype === "success" && !lastContent && result.result) {
-            lastContent = result.result;
-          }
-          if (result.subtype !== "success") {
-            console.log(`[Stem] query error: ${result.subtype}`);
-          }
-        }
+        return { action: "ignore", reason: `api_error_${response.status}` };
       }
 
-      const decision = parseTriageResponse(lastContent);
+      const data = (await response.json()) as {
+        content: Array<{ type: string; text?: string }>;
+      };
+
+      const text = data.content
+        .filter((b) => b.type === "text" && b.text)
+        .map((b) => b.text!)
+        .join("");
+
+      const decision = parseTriageResponse(text);
       console.log(`[Stem] decision: action=${decision.action} reason="${decision.reason}"`);
       return decision;
     } catch (err) {
@@ -86,7 +110,7 @@ function parseTriageResponse(text: string): TriageDecision {
       reason: typeof parsed.reason === "string" ? parsed.reason : "no_reason",
       urgency: parsed.urgency === "immediate" ? "immediate" : "soon",
     };
-  } catch (err) {
+  } catch {
     console.log("[Stem] JSON parse failed:", text.slice(0, 200));
     return { action: "ignore", reason: "json_parse_error" };
   }
