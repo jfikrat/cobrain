@@ -849,13 +849,20 @@ bot.on("message:voice", async (ctx) => {
       clearInterval(voiceTypingInterval);
     }
 
-    // Show transcript and response
-    const message = `🎤 <i>${transcript}</i>\n\n${response.content}`;
+    // Show transcript and response (with suggestion buttons)
+    const { text: cleanVoice, suggestions: voiceSuggestions } = parseSuggestions(response.content);
+    const voiceKeyboard = buildSuggestionKeyboard(voiceSuggestions);
+    const message = `🎤 <i>${transcript}</i>\n\n${cleanVoice}`;
 
     try {
-      await ctx.reply(message, { parse_mode: "HTML" });
+      await ctx.reply(message, {
+        parse_mode: "HTML",
+        ...(voiceKeyboard && { reply_markup: voiceKeyboard }),
+      });
     } catch {
-      await ctx.reply(`🎤 ${transcript}\n\n${response.content}`);
+      await ctx.reply(`🎤 ${transcript}\n\n${cleanVoice}`, {
+        ...(voiceKeyboard && { reply_markup: voiceKeyboard }),
+      });
     }
 
     console.log(
@@ -941,7 +948,18 @@ bot.on("message:photo", async (ctx) => {
       await bot.api.deleteMessage(userId, processingMsg.message_id);
     } catch {}
 
-    await ctx.reply(response.content, { parse_mode: "HTML" });
+    const { text: cleanPhoto, suggestions: photoSuggestions } = parseSuggestions(response.content);
+    const photoKeyboard = buildSuggestionKeyboard(photoSuggestions);
+    try {
+      await ctx.reply(cleanPhoto, {
+        parse_mode: "HTML",
+        ...(photoKeyboard && { reply_markup: photoKeyboard }),
+      });
+    } catch {
+      await ctx.reply(cleanPhoto, {
+        ...(photoKeyboard && { reply_markup: photoKeyboard }),
+      });
+    }
 
   } catch (error) {
     console.error("Photo handler error:", error);

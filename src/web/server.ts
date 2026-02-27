@@ -104,10 +104,11 @@ export function startWebServer(): void {
 
           const response = await chat(config.MY_TELEGRAM_ID, message, undefined, model);
 
-          // Mirror to Telegram (fire-and-forget)
+          // Mirror to Telegram (fire-and-forget, strip suggestions)
           const userId = config.MY_TELEGRAM_ID;
+          const cleanMirror = response.content.replace(/<suggestions>[\s\S]*?<\/suggestions>\s*$/, '').trimEnd();
           bot.api.sendMessage(userId, `📡 *API:* ${message}`, { parse_mode: "Markdown" }).catch(() => {});
-          bot.api.sendMessage(userId, response.content).catch(() => {});
+          bot.api.sendMessage(userId, cleanMirror).catch(() => {});
 
           return Response.json(response);
         } catch (err) {
