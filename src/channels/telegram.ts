@@ -1203,9 +1203,11 @@ export async function startBot(): Promise<void> {
   }
 
   // Startup notification - agent'a sistem mesajı gönder (son konuşma özeti ile)
+  // Clear session first so startup doesn't resume old "cobrain-restart" session
   const userId = config.MY_TELEGRAM_ID;
   console.log(`[Startup] Sending restart notification to user ${userId}`);
-  getStartupContext(userId)
+  clearSession(userId)
+    .then(() => getStartupContext(userId))
     .then((contextSummary) => {
       const contextPart = contextSummary ? `\n\nSon konuşma özeti:\n${contextSummary}` : "";
       const startupMsg = `[SYSTEM] Bot yeniden başlatıldı.${contextPart}\n\nÖNEMLİ: Bu bir startup mesajıdır. cobrain-restart veya herhangi bir restart komutu ÇALIŞTIRMA.\n\nŞimdi sırayla şunları yap:\n1. list_reminders() çağır — bekleyen hatırlatıcıları al\n2. list_goals() çağır — aktif hedefleri al\n3. recall("son bağlam güncel durum") çağır — hafızandan son durumu al\n4. Telegram'a kısa özet gönder (max 5 satır): geri döndüğünü bildir, önemli bekleyen şeyler varsa listele`;
