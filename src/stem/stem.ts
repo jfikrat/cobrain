@@ -21,6 +21,7 @@ export class Stem {
     console.log(`[Stem] triage: ${event.type}${this.sessionId ? " (resume)" : " (new)"}`);
 
     try {
+      const t0 = Date.now();
       const systemPrompt = await buildTriagePrompt(this.config.userFolder);
 
       let lastContent = "";
@@ -60,8 +61,9 @@ export class Stem {
         }
       }
 
+      const elapsed = Date.now() - t0;
       const decision = parseTriageResponse(lastContent);
-      console.log(`[Stem] decision: action=${decision.action} reason="${decision.reason}"`);
+      console.log(`[Stem] decision: action=${decision.action} reason="${decision.reason}" (${elapsed}ms)`);
       return decision;
     } catch (err) {
       console.log(`[Stem] triage error: ${err instanceof Error ? err.message : String(err)}`);
