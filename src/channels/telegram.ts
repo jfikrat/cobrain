@@ -1216,7 +1216,7 @@ export async function startBot(): Promise<void> {
     .then(() => getStartupContext(userId))
     .then((contextSummary) => {
       const contextPart = contextSummary ? `\n\nSon konuşma özeti:\n${contextSummary}` : "";
-      const startupMsg = `[SYSTEM] Bot yeniden başlatıldı.${contextPart}\n\nÖNEMLİ: Bu bir startup mesajıdır. cobrain-restart veya herhangi bir restart komutu ÇALIŞTIRMA.\n\nŞimdi sırayla şunları yap:\n1. list_reminders() çağır — bekleyen hatırlatıcıları al\n2. list_goals() çağır — aktif hedefleri al\n3. recall("son bağlam güncel durum") çağır — hafızandan son durumu al\n4. Telegram'a kısa özet gönder (max 5 satır): geri döndüğünü bildir, önemli bekleyen şeyler varsa listele`;
+      const startupMsg = `[SYSTEM] Bot yeniden başlatıldı.${contextPart}\n\nÖNEMLİ: Bu bir startup mesajıdır. cobrain-restart veya herhangi bir restart komutu ÇALIŞTIRMA.\n\nŞimdi sırayla şunları yap:\n1. recall("all") çağır — hafızanı yükle\n2. Telegram'a kısa özet gönder (max 5 satır): geri döndüğünü bildir, önemli bekleyen şeyler varsa listele`;
       return think(userId, startupMsg);
     })
     .then((response) => {
