@@ -1,12 +1,12 @@
 /**
  * Stem — Haiku-based triage classifier.
- * Single messages.create() call per event, no tools, JSON output.
+ * Single-turn Agent SDK query() call per event, no tools, JSON output.
+ * Uses OAuth auth via Agent SDK (no ANTHROPIC_API_KEY needed).
  */
 
+import { query, type SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { buildTriagePrompt } from "./prompts.ts";
 import type { StemConfig, StemEvent, TriageDecision } from "./types.ts";
-
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 
 export class Stem {
   private config: StemConfig;
@@ -22,38 +22,40 @@ export class Stem {
 
     try {
       const systemPrompt = await buildTriagePrompt(this.config.userFolder);
-      const apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        console.error("[Stem] ANTHROPIC_API_KEY not set!");
-        return { action: "ignore", reason: "no_api_key" };
-      }
 
-      const response = await fetch(ANTHROPIC_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
+      let lastContent = "";
+
+      const queryResult = query({
+        prompt: eventMessage,
+        options: {
           model: this.config.model,
-          max_tokens: 256,
-          system: systemPrompt,
-          messages: [{ role: "user", content: eventMessage }],
-        }),
+          systemPrompt,
+          settingSources: [],
+          mcpServers: {},
+          maxTurns: 1,
+        },
       });
 
-      if (!response.ok) {
-        const errText = await response.text();
-        console.log(`[Stem] API error ${response.status}: ${errText.slice(0, 200)}`);
-        return { action: "ignore", reason: `api_error_${response.status}` };
+      for await (const msg of queryResult) {
+        if (msg.type === "assistant" && msg.message?.content) {
+          for (const block of msg.message.content) {
+            if (typeof block === "object" && "text" in block) {
+              lastContent = block.text as string;
+            }
+          }
+        }
+        if (msg.type === "result") {
+          const result = msg as SDKResultMessage;
+          if (result.subtype === "success" && !lastContent && result.result) {
+            lastContent = result.result;
+          }
+          if (result.subtype !== "success") {
+            console.log(`[Stem] query error: ${result.subtype}`);
+          }
+        }
       }
 
-      const data = (await response.json()) as {
-        content: Array<{ type: string; text?: string }>;
-      };
-
-      const decision = parseTriageResponse(data);
+      const decision = parseTriageResponse(lastContent);
       console.log(`[Stem] decision: action=${decision.action} reason="${decision.reason}"`);
       return decision;
     } catch (err) {
@@ -65,13 +67,7 @@ export class Stem {
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-function parseTriageResponse(data: { content: Array<{ type: string; text?: string }> }): TriageDecision {
-  const text = data.content
-    .filter((b) => b.type === "text" && b.text)
-    .map((b) => b.text!)
-    .join("");
-
-  // Extract JSON from response (may be wrapped in markdown code block)
+function parseTriageResponse(text: string): TriageDecision {
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     console.log("[Stem] No JSON in response, defaulting to ignore:", text.slice(0, 200));
@@ -91,7 +87,7 @@ function parseTriageResponse(data: { content: Array<{ type: string; text?: strin
       urgency: parsed.urgency === "immediate" ? "immediate" : "soon",
     };
   } catch (err) {
-    console.log("[Stem] JSON parse failed:", err, text.slice(0, 200));
+    console.log("[Stem] JSON parse failed:", text.slice(0, 200));
     return { action: "ignore", reason: "json_parse_error" };
   }
 }
