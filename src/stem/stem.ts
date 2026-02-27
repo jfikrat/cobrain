@@ -9,6 +9,7 @@ import type { StemConfig, StemEvent, TriageDecision } from "./types.ts";
 
 export class Stem {
   private config: StemConfig;
+  private sessionId: string | null = null;
 
   constructor(config: StemConfig) {
     this.config = config;
@@ -17,7 +18,7 @@ export class Stem {
 
   async triage(event: StemEvent): Promise<TriageDecision> {
     const eventMessage = formatEventMessage(event);
-    console.log(`[Stem] triage: ${event.type}`);
+    console.log(`[Stem] triage: ${event.type}${this.sessionId ? " (resume)" : " (new)"}`);
 
     try {
       const systemPrompt = await buildTriagePrompt(this.config.userFolder);
@@ -29,6 +30,7 @@ export class Stem {
         options: {
           model: this.config.model,
           systemPrompt,
+          resume: this.sessionId || undefined,
           settingSources: [],
           mcpServers: {},
           maxTurns: 1,
@@ -36,6 +38,9 @@ export class Stem {
       });
 
       for await (const msg of queryResult) {
+        if (msg.type === "system" && msg.subtype === "init") {
+          this.sessionId = msg.session_id;
+        }
         if (msg.type === "assistant" && msg.message?.content) {
           for (const block of msg.message.content) {
             if (typeof block === "object" && "text" in block) {
@@ -49,7 +54,8 @@ export class Stem {
             lastContent = result.result;
           }
           if (result.subtype !== "success") {
-            console.log(`[Stem] query error: ${result.subtype}`);
+            console.log(`[Stem] query error: ${result.subtype}, resetting session`);
+            this.sessionId = null;
           }
         }
       }
@@ -59,6 +65,7 @@ export class Stem {
       return decision;
     } catch (err) {
       console.log(`[Stem] triage error: ${err instanceof Error ? err.message : String(err)}`);
+      this.sessionId = null;
       return { action: "ignore", reason: `error: ${err instanceof Error ? err.message : String(err)}` };
     }
   }
