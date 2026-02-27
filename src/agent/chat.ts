@@ -330,6 +330,13 @@ async function _executeChat(
 
         // Limit turns to prevent runaway
         maxTurns: config.MAX_AGENT_TURNS,
+
+        // Enable SDK built-in persistent memory (undocumented)
+        // Stores MEMORY.md + sub-files in userFolder for cross-session persistence
+        env: {
+          ...process.env,
+          CLAUDE_CODE_REMOTE_MEMORY_DIR: userFolder,
+        },
       },
     });
 
