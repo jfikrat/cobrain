@@ -24,6 +24,7 @@ export class Stem {
       const systemPrompt = await buildTriagePrompt(this.config.userFolder);
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (!apiKey) {
+        console.error("[Stem] ANTHROPIC_API_KEY not set!");
         return { action: "ignore", reason: "no_api_key" };
       }
 
@@ -44,7 +45,7 @@ export class Stem {
 
       if (!response.ok) {
         const errText = await response.text();
-        console.error(`[Stem] API error ${response.status}:`, errText.slice(0, 200));
+        console.log(`[Stem] API error ${response.status}: ${errText.slice(0, 200)}`);
         return { action: "ignore", reason: `api_error_${response.status}` };
       }
 
@@ -56,7 +57,7 @@ export class Stem {
       console.log(`[Stem] decision: action=${decision.action} reason="${decision.reason}"`);
       return decision;
     } catch (err) {
-      console.error("[Stem] triage error:", err);
+      console.log(`[Stem] triage error: ${err instanceof Error ? err.message : String(err)}`);
       return { action: "ignore", reason: `error: ${err instanceof Error ? err.message : String(err)}` };
     }
   }
@@ -73,7 +74,7 @@ function parseTriageResponse(data: { content: Array<{ type: string; text?: strin
   // Extract JSON from response (may be wrapped in markdown code block)
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    console.warn("[Stem] No JSON in response, defaulting to ignore:", text.slice(0, 200));
+    console.log("[Stem] No JSON in response, defaulting to ignore:", text.slice(0, 200));
     return { action: "ignore", reason: "no_json_in_response" };
   }
 
@@ -90,7 +91,7 @@ function parseTriageResponse(data: { content: Array<{ type: string; text?: strin
       urgency: parsed.urgency === "immediate" ? "immediate" : "soon",
     };
   } catch (err) {
-    console.warn("[Stem] JSON parse failed:", err, text.slice(0, 200));
+    console.log("[Stem] JSON parse failed:", err, text.slice(0, 200));
     return { action: "ignore", reason: "json_parse_error" };
   }
 }
