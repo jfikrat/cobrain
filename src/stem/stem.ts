@@ -48,7 +48,9 @@ export class Stem {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": this.apiKey,
+          ...(this.apiKey!.startsWith("sk-ant-oat")
+            ? { "Authorization": `Bearer ${this.apiKey}` }
+            : { "x-api-key": this.apiKey! }),
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
