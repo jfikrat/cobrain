@@ -1,308 +1,160 @@
 /**
- * Stem — Haiku-based background watcher.
- * Processes events via Agent SDK query(), maintains a persistent notebook,
- * and auto-consolidates when context reaches ~85%.
+ * Stem — Haiku-based triage classifier.
+ * Single messages.create() call per event, no tools, JSON output.
  */
 
-import {
-  query,
-  type SDKResultMessage,
-} from "@anthropic-ai/claude-agent-sdk";
-import type { Bot } from "grammy";
-import { Notebook } from "./notebook.ts";
-import { buildStemSystemPrompt } from "./prompts.ts";
-import { createStemTools } from "./tools.ts";
-import type { StemConfig, StemEvent, StemResult } from "./types.ts";
+import { buildTriagePrompt } from "./prompts.ts";
+import type { StemConfig, StemEvent, TriageDecision } from "./types.ts";
+
+const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 
 export class Stem {
-  private sessionId: string | null = null;
-  private notebook: Notebook;
-  private estimatedTokens = 0;
-  private running = false;
-  private processing = false;
-  private eventQueue: StemEvent[] = [];
   private config: StemConfig;
-  private mcpServer: ReturnType<typeof createStemTools> | null = null;
-  private bot: Bot | null = null;
 
   constructor(config: StemConfig) {
     this.config = config;
-    this.notebook = new Notebook(config.notebookPath);
+    console.log(`[Stem] Initialized (model=${config.model})`);
   }
 
-  // ── Lifecycle ──────────────────────────────────────────────────────
-
-  async start(bot: Bot): Promise<void> {
-    this.bot = bot;
-    this.mcpServer = createStemTools({
-      notebook: this.notebook,
-      bot,
-      userId: this.config.userId,
-      maxWakesPerHour: this.config.maxWakesPerHour,
-    });
-    this.running = true;
-    console.log(`[Stem] Started (model=${this.config.model}, maxTurns=${this.config.maxTurns}, consolidation=${this.config.consolidationThreshold})`);
-  }
-
-  async stop(): Promise<void> {
-    this.running = false;
-    this.notebook.flush();
-    console.log("[Stem] Stopped");
-  }
-
-  // ── Public API ─────────────────────────────────────────────────────
-
-  async feedEvent(event: StemEvent): Promise<StemResult> {
-    if (!this.running) {
-      return { action: "none", details: "stem_not_running" };
-    }
-
-    // Queue if already processing
-    if (this.processing) {
-      if (this.eventQueue.length >= 20) {
-        console.warn(`[Stem] Queue full (20), dropping event: ${event.type}`);
-        return { action: "none", details: "queue_full" };
-      }
-      this.eventQueue.push(event);
-      console.log(`[Stem] Event queued (queue=${this.eventQueue.length}): ${event.type}`);
-      return { action: "none", details: "queued" };
-    }
-
-    return this.processEventWithQueue(event);
-  }
-
-  // ── Internal Processing ────────────────────────────────────────────
-
-  private async processEventWithQueue(event: StemEvent): Promise<StemResult> {
-    this.processing = true;
-    let result: StemResult;
+  async triage(event: StemEvent): Promise<TriageDecision> {
+    const eventMessage = formatEventMessage(event);
+    console.log(`[Stem] triage: ${event.type}`);
 
     try {
-      result = await this.processEvent(event);
-    } catch (err) {
-      console.error("[Stem] processEvent error:", err);
-      result = { action: "none", details: `error: ${err instanceof Error ? err.message : String(err)}` };
-    }
-
-    // Process queued events
-    while (this.eventQueue.length > 0 && this.running) {
-      const next = this.eventQueue.shift()!;
-      try {
-        await this.processEvent(next);
-      } catch (err) {
-        console.error("[Stem] queued event error:", err);
+      const systemPrompt = await buildTriagePrompt(this.config.userFolder);
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        return { action: "ignore", reason: "no_api_key" };
       }
-    }
 
-    this.processing = false;
-    return result;
-  }
-
-  private async processEvent(event: StemEvent): Promise<StemResult> {
-    if (!this.mcpServer) {
-      return { action: "none", details: "mcp_server_not_initialized" };
-    }
-
-    const eventMessage = this.formatEventMessage(event);
-    console.log(`[Stem] feedEvent: ${event.type}`);
-
-    try {
-      const systemPrompt = await buildStemSystemPrompt(this.config.userFolder, this.notebook);
-
-      let sessionId = "";
-      let lastContent = "";
-      let inputTokens = 0;
-      let outputTokens = 0;
-      const toolsCalled: string[] = [];
-
-      // Always update notebook after deciding action
-      const prompt = `${eventMessage}\n\nKararını verdikten sonra update_notebook ile "Bugünkü Olaylar" ve "Aktif Durum" bölümlerini güncelle.`;
-
-      const queryResult = query({
-        prompt,
-        options: {
-          model: this.config.model,
-          systemPrompt,
-          resume: this.sessionId || undefined,
-          settingSources: [],
-          mcpServers: {
-            stem: this.mcpServer,
-          },
-          maxTurns: this.config.maxTurns,
+      const response = await fetch(ANTHROPIC_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
         },
+        body: JSON.stringify({
+          model: this.config.model,
+          max_tokens: 256,
+          system: systemPrompt,
+          messages: [{ role: "user", content: eventMessage }],
+        }),
       });
 
-      for await (const msg of queryResult) {
-        switch (msg.type) {
-          case "system":
-            if (msg.subtype === "init") {
-              sessionId = msg.session_id;
-              this.sessionId = sessionId;
-            }
-            break;
-
-          case "assistant":
-            if (msg.message?.content) {
-              for (const block of msg.message.content) {
-                if (typeof block === "object") {
-                  if ("text" in block) lastContent = block.text;
-                  if ("type" in block && block.type === "tool_use" && "name" in block) {
-                    toolsCalled.push(block.name as string);
-                  }
-                }
-              }
-            }
-            break;
-
-          case "result": {
-            const result = msg as SDKResultMessage;
-            if (result.subtype === "success") {
-              inputTokens = result.usage?.input_tokens ?? 0;
-              outputTokens = result.usage?.output_tokens ?? 0;
-              if (!lastContent && result.result) {
-                lastContent = result.result;
-              }
-            } else {
-              console.error(`[Stem] Query error: ${result.subtype}`, (result as any).errors);
-            }
-            break;
-          }
-        }
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`[Stem] API error ${response.status}:`, errText.slice(0, 200));
+        return { action: "ignore", reason: `api_error_${response.status}` };
       }
 
-      // Update token estimate
-      this.estimatedTokens += inputTokens;
-
-      const action = this.inferAction(toolsCalled, lastContent);
-      console.log(`[Stem] Completed: action=${action} tokens=${inputTokens}in/${outputTokens}out estimated=${this.estimatedTokens}`);
-
-      // Check consolidation threshold
-      if (this.estimatedTokens > this.config.consolidationThreshold) {
-        await this.consolidateAndReset();
-      }
-
-      return {
-        action,
-        details: lastContent.slice(0, 200),
-        tokensUsed: inputTokens + outputTokens,
+      const data = (await response.json()) as {
+        content: Array<{ type: string; text?: string }>;
       };
+
+      const decision = parseTriageResponse(data);
+      console.log(`[Stem] decision: action=${decision.action} reason="${decision.reason}"`);
+      return decision;
     } catch (err) {
-      console.error("[Stem] query error:", err);
-      return {
-        action: "none",
-        details: `query_error: ${err instanceof Error ? err.message : String(err)}`,
-      };
+      console.error("[Stem] triage error:", err);
+      return { action: "ignore", reason: `error: ${err instanceof Error ? err.message : String(err)}` };
     }
   }
+}
 
-  // ── Consolidation ──────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────
 
-  private async consolidateAndReset(): Promise<void> {
-    console.log(`[Stem] Consolidating... (estimated tokens: ${this.estimatedTokens})`);
+function parseTriageResponse(data: { content: Array<{ type: string; text?: string }> }): TriageDecision {
+  const text = data.content
+    .filter((b) => b.type === "text" && b.text)
+    .map((b) => b.text!)
+    .join("");
 
-    try {
-      // Send consolidation message to stem
-      if (this.mcpServer) {
-        const consolidationPrompt =
-          "KONSOLIDASYON: Context limitine yaklaşıyorsun. " +
-          "1) update_notebook ile defterindeki tüm bölümleri güncelle (güncel durum, bekleyenler, öğrenilenler). " +
-          "2) store_memory ile kalıcı bilgileri hafızaya kaydet. " +
-          "3) 'CONSOLIDATED' yaz.";
-
-        const queryResult = query({
-          prompt: consolidationPrompt,
-          options: {
-            model: this.config.model,
-            systemPrompt: await buildStemSystemPrompt(this.config.userFolder, this.notebook),
-            resume: this.sessionId || undefined,
-            settingSources: [],
-            mcpServers: { stem: this.mcpServer },
-            maxTurns: this.config.maxTurns,
-          },
-        });
-
-        // Drain the generator
-        for await (const _msg of queryResult) {
-          // Just let it run through
-        }
-      }
-    } catch (err) {
-      console.error("[Stem] Consolidation error:", err);
-    }
-
-    // Reset session
-    this.sessionId = null;
-    this.estimatedTokens = 0;
-    console.log("[Stem] Session reset after consolidation");
+  // Extract JSON from response (may be wrapped in markdown code block)
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    console.warn("[Stem] No JSON in response, defaulting to ignore:", text.slice(0, 200));
+    return { action: "ignore", reason: "no_json_in_response" };
   }
 
-  // ── Helpers ────────────────────────────────────────────────────────
-
-  private formatEventMessage(event: StemEvent): string {
-    const time = new Date(event.timestamp).toLocaleTimeString("tr-TR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    switch (event.type) {
-      case "whatsapp_dm": {
-        const p = event.payload;
-        const senderName = p.senderName as string || "Bilinmeyen";
-        const messages = p.messages as Array<{ content?: string; message_type?: string }> || [];
-        const chatJid = p.chatJid as string || "";
-        const msgText = messages
-          .map((m) => {
-            const typeLabel = m.message_type && m.message_type !== "text" ? `[${m.message_type}] ` : "";
-            return `${typeLabel}${(m.content || "").slice(0, 300)}`;
-          })
-          .join("\n");
-        return `[${time}] WhatsApp DM — ${senderName} (${chatJid}):\n${msgText}`;
-      }
-
-      case "whatsapp_group": {
-        const p = event.payload;
-        const groupName = p.groupName as string || "Grup";
-        const messages = p.messages as Array<{ content?: string; sender_name?: string; message_type?: string }> || [];
-        const chatJid = p.chatJid as string || "";
-        const msgText = messages
-          .map((m) => {
-            const sender = ((m.sender_name || "") as string).split(" @ ")[0] || "?";
-            const typeLabel = m.message_type && m.message_type !== "text" ? `[${m.message_type}] ` : "";
-            return `[${sender}]: ${typeLabel}${(m.content || "").slice(0, 200)}`;
-          })
-          .join("\n");
-        return `[${time}] WhatsApp Grup — ${groupName} (${chatJid}):\n${msgText}`;
-      }
-
-      case "reminder_due": {
-        const p = event.payload;
-        return `[${time}] Hatırlatıcı tetiklendi: "${p.title}" — ${p.message || "(mesaj yok)"}`;
-      }
-
-      case "expectation_timeout": {
-        const p = event.payload;
-        return `[${time}] Beklenti timeout: [${p.type}] ${p.target} — ${p.context}`;
-      }
-
-      default:
-        return `[${time}] Bilinmeyen olay: ${event.type}`;
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    const action = parsed.action;
+    if (!["reply", "wake_cortex", "notify", "ignore"].includes(action)) {
+      return { action: "ignore", reason: `invalid_action: ${action}` };
     }
+    return {
+      action,
+      reply: typeof parsed.reply === "string" ? parsed.reply : undefined,
+      reason: typeof parsed.reason === "string" ? parsed.reason : "no_reason",
+      urgency: parsed.urgency === "immediate" ? "immediate" : "soon",
+    };
+  } catch (err) {
+    console.warn("[Stem] JSON parse failed:", err, text.slice(0, 200));
+    return { action: "ignore", reason: "json_parse_error" };
   }
+}
 
-  /** Infer action from tool calls (primary) with text fallback */
-  private inferAction(toolsCalled: string[], content: string): StemResult["action"] {
-    // Primary: tool-call based (reliable)
-    if (toolsCalled.includes("wake_cortex")) return "woke_cortex";
-    if (toolsCalled.includes("send_whatsapp_reply")) return "replied";
-    if (toolsCalled.includes("send_telegram_notification")) return "notified";
-    if (toolsCalled.includes("update_notebook") || toolsCalled.includes("store_memory")) return "noted";
+function formatEventMessage(event: StemEvent): string {
+  const time = new Date(event.timestamp).toLocaleTimeString("tr-TR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
-    // Fallback: text matching
-    const lower = content.toLowerCase();
-    if (lower.includes("wake_cortex") || lower.includes("opus'u uyandır")) return "woke_cortex";
-    if (lower.includes("mesaj gönderildi") || lower.includes("cevap gönderildi")) return "replied";
-    if (lower.includes("telegram bildirimi") || lower.includes("cortex'e iletildi")) return "notified";
-    if (lower.includes("defter güncellendi") || lower.includes("not al")) return "noted";
-    return "none";
+  switch (event.type) {
+    case "whatsapp_dm": {
+      const p = event.payload;
+      const senderName = (p.senderName as string) || "Bilinmeyen";
+      const messages =
+        (p.messages as Array<{ content?: string; message_type?: string }>) || [];
+      const chatJid = (p.chatJid as string) || "";
+      const msgText = messages
+        .map((m) => {
+          const typeLabel =
+            m.message_type && m.message_type !== "text"
+              ? `[${m.message_type}] `
+              : "";
+          return `${typeLabel}${(m.content || "").slice(0, 300)}`;
+        })
+        .join("\n");
+      return `[${time}] WhatsApp DM — ${senderName} (${chatJid}):\n${msgText}`;
+    }
+
+    case "whatsapp_group": {
+      const p = event.payload;
+      const groupName = (p.groupName as string) || "Grup";
+      const messages =
+        (p.messages as Array<{
+          content?: string;
+          sender_name?: string;
+          message_type?: string;
+        }>) || [];
+      const chatJid = (p.chatJid as string) || "";
+      const msgText = messages
+        .map((m) => {
+          const sender =
+            ((m.sender_name || "") as string).split(" @ ")[0] || "?";
+          const typeLabel =
+            m.message_type && m.message_type !== "text"
+              ? `[${m.message_type}] `
+              : "";
+          return `[${sender}]: ${typeLabel}${(m.content || "").slice(0, 200)}`;
+        })
+        .join("\n");
+      return `[${time}] WhatsApp Grup — ${groupName} (${chatJid}):\n${msgText}`;
+    }
+
+    case "reminder_due": {
+      const p = event.payload;
+      return `[${time}] Hatırlatıcı tetiklendi: "${p.title}" — ${p.message || "(mesaj yok)"}`;
+    }
+
+    case "expectation_timeout": {
+      const p = event.payload;
+      return `[${time}] Beklenti timeout: [${p.type}] ${p.target} — ${p.context}`;
+    }
+
+    default:
+      return `[${time}] Bilinmeyen olay: ${event.type}`;
   }
 }

@@ -7,8 +7,6 @@ function normalizeLegacyStemEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const aliases: Array<[keyof NodeJS.ProcessEnv, keyof NodeJS.ProcessEnv]> = [
     ["FF_STEM", "FF_SENTINEL"],
     ["STEM_MODEL", "SENTINEL_MODEL"],
-    ["STEM_MAX_TURNS", "SENTINEL_MAX_TURNS"],
-    ["STEM_CONSOLIDATION_THRESHOLD", "SENTINEL_CONSOLIDATION_THRESHOLD"],
     ["STEM_MAX_WAKES_PER_HOUR", "SENTINEL_MAX_WAKES_PER_HOUR"],
   ];
 
@@ -116,8 +114,6 @@ const envSchema = z.object({
   // v1.4: Stem background watcher (canonical: STEM_*, legacy: SENTINEL_*)
   FF_STEM: z.coerce.boolean().default(true),
   STEM_MODEL: z.string().default("claude-haiku-4-5-20251001"),
-  STEM_MAX_TURNS: z.coerce.number().default(5),
-  STEM_CONSOLIDATION_THRESHOLD: z.coerce.number().default(170_000),
   STEM_MAX_WAKES_PER_HOUR: z.coerce.number().default(10),
 
   // Legacy (kept for migration)

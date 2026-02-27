@@ -25,6 +25,8 @@ import { chat, isUserBusy } from "../agent/chat.ts";
 import { mneme } from "../mneme/mneme.ts";
 import { stemRef } from "./stem-ref.ts";
 import { inbox } from "./inbox.ts";
+import { markReplied, wasRecentlyReplied } from "./reply-dedup.ts";
+import type { TriageDecision, StemEvent } from "../stem/types.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -47,6 +49,59 @@ async function sendRawLog(bot: Bot, msg: string): Promise<void> {
   } catch (err) {
     console.error("[BrainLoop] Log channel send failed:", err);
   }
+}
+
+// ── Triage Decision Executor ─────────────────────────────────────────────
+
+async function executeTriageDecision(
+  decision: TriageDecision,
+  event: StemEvent,
+  bot: Bot,
+): Promise<void> {
+  const userId = config.MY_TELEGRAM_ID;
+  const chatJid = event.payload.chatJid as string | undefined;
+  const senderName = (event.payload.senderName as string) ||
+    (event.payload.groupName as string) || "?";
+
+  switch (decision.action) {
+    case "reply":
+      if (decision.reply && chatJid && !wasRecentlyReplied(chatJid)) {
+        whatsappDB.addToOutbox(chatJid, decision.reply);
+        markReplied(chatJid);
+        console.log(`[Stem] reply → ${senderName}: "${decision.reply.slice(0, 60)}"`);
+      }
+      break;
+
+    case "wake_cortex":
+      await inbox.push({
+        from: "stem",
+        subject: decision.reason,
+        body: `Bağlam: ${formatEventSummary(event)}`,
+        priority: decision.urgency === "immediate" ? "urgent" : "normal",
+        ttlMs: decision.urgency === "immediate" ? 30 * 60 * 1000 : 2 * 60 * 60 * 1000,
+      });
+      console.log(`[Stem] wake_cortex → "${decision.reason}" (${decision.urgency || "soon"})`);
+      break;
+
+    case "notify":
+      try {
+        await bot.api.sendMessage(userId, `📱 ${senderName}: ${decision.reason}`);
+      } catch (err) {
+        console.error("[Stem] notify telegram error:", err);
+      }
+      break;
+
+    case "ignore":
+      break;
+  }
+}
+
+function formatEventSummary(event: StemEvent): string {
+  const p = event.payload;
+  const messages = p.messages as Array<{ content?: string }> | undefined;
+  const preview = messages?.map(m => (m.content || "").slice(0, 100)).join(" / ") || "";
+  const sender = (p.senderName as string) || (p.groupName as string) || (p.target as string) || "?";
+  return `[${event.type}] ${sender}: ${preview || JSON.stringify(p).slice(0, 200)}`;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -285,7 +340,7 @@ class BrainLoop {
 
           const stem = stemRef.get();
           if (stem) {
-            const stemResult = await stem.feedEvent({
+            const event: StemEvent = {
               type: "whatsapp_dm",
               payload: {
                 chatJid,
@@ -293,17 +348,14 @@ class BrainLoop {
                 messages: msgs.map(m => ({ content: m.content || "[medya]", message_type: m.message_type || "text" })),
               },
               timestamp: Date.now(),
-            });
-            console.log(`[BrainLoop] WA DM → Stem: ${senderName}`);
+            };
+            const decision = await stem.triage(event);
+            console.log(`[BrainLoop] WA DM → Stem: ${senderName} → ${decision.action}`);
 
-            // Kuyruk doluysa notifikasyonu okunmuş işaretleme — sonraki tick'te tekrar denensin
-            if (stemResult.details === "queue_full") {
-              console.warn(`[BrainLoop] Stem queue full — skipping markRead for ${senderName}`);
-              continue;
-            }
+            if (this.bot) await executeTriageDecision(decision, event, this.bot);
 
-            // Quiet hours + action=none → digest buffer'a ekle
-            if (stemResult.action === "none" && this.isQuietHours()) {
+            // Quiet hours + ignore → digest buffer'a ekle
+            if (decision.action === "ignore" && this.isQuietHours()) {
               const time = new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
               const preview = msgs.slice(0, 2).map(m => (m.content || "[medya]").slice(0, 80)).join(" / ");
               this.quietHoursBuffer.push({ sender: senderName, preview, time });
@@ -342,7 +394,7 @@ class BrainLoop {
           const replyAllowed = allowedGroupJids.length > 0 && allowedGroupJids.includes(groupJid);
           const stem = stemRef.get();
           if (stem) {
-            await stem.feedEvent({
+            const event: StemEvent = {
               type: "whatsapp_group",
               payload: {
                 chatJid: groupJid,
@@ -355,8 +407,10 @@ class BrainLoop {
                 })),
               },
               timestamp: Date.now(),
-            });
-            console.log(`[BrainLoop] WA Grup → Stem: ${groupName}`);
+            };
+            const decision = await stem.triage(event);
+            console.log(`[BrainLoop] WA Grup → Stem: ${groupName} → ${decision.action}`);
+            if (this.bot) await executeTriageDecision(decision, event, this.bot);
           } else {
             // Stem disabled — fallback to Cortex
             const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
@@ -398,12 +452,14 @@ class BrainLoop {
         try {
           const stem = stemRef.get();
           if (stem) {
-            await stem.feedEvent({
+            const event: StemEvent = {
               type: "reminder_due",
               payload: { title: reminder.title, message: reminder.message || "" },
               timestamp: Date.now(),
-            });
-            console.log(`[BrainLoop] Hatırlatıcı → Stem: ${reminder.title}`);
+            };
+            const decision = await stem.triage(event);
+            console.log(`[BrainLoop] Hatırlatıcı → Stem: ${reminder.title} → ${decision.action}`);
+            if (this.bot) await executeTriageDecision(decision, event, this.bot);
           } else {
             // Stem disabled — fallback to Cortex
             const remResponse = await chat(
@@ -463,10 +519,10 @@ class BrainLoop {
     if (expired.length === 0) return;
 
     const stem = stemRef.get();
-    if (!stem) return;
+    if (!stem || !this.bot) return;
 
     for (const exp of expired) {
-      await stem.feedEvent({
+      const event: StemEvent = {
         type: "expectation_timeout",
         payload: {
           id: exp.id,
@@ -476,8 +532,10 @@ class BrainLoop {
           onResolved: exp.onResolved,
         },
         timestamp: Date.now(),
-      });
-      console.log(`[BrainLoop] Expectation timeout → Stem: [${exp.type}] ${exp.target}`);
+      };
+      const decision = await stem.triage(event);
+      console.log(`[BrainLoop] Expectation timeout → Stem: [${exp.type}] ${exp.target} → ${decision.action}`);
+      await executeTriageDecision(decision, event, this.bot);
     }
   }
 

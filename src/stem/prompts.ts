@@ -1,79 +1,55 @@
 /**
- * Stem Prompts — Builds system prompt for Haiku Stem.
- * Uses same mind/ files as Cortex + FileMemory context.
- * Stem = Cortex'in ucuz ikizi: aynı bilgi, daha hızlı karar.
+ * Stem Prompts — Builds triage system prompt.
+ * Only reads contacts.md for tier info — no FileMemory, no notebook.
  */
 
-import { readMindFiles } from "../agent/prompts.ts";
-import { FileMemory } from "../memory/file-memory.ts";
-import type { Notebook } from "./notebook.ts";
+import { join } from "node:path";
 
-export async function buildStemSystemPrompt(userFolder: string, notebook: Notebook): Promise<string> {
-  // Same mind files as Cortex (identity, rules, contacts, etc.)
-  const mindContent = await readMindFiles(userFolder);
-
-  // FileMemory context (facts + 7 days events — enough for Stem decisions)
-  let memorySection = "";
+export async function buildTriagePrompt(userFolder: string): Promise<string> {
+  // Only contacts.md needed for triage decisions
+  let contacts = "";
   try {
-    const fileMemory = new FileMemory(userFolder);
-    const facts = await fileMemory.readFacts();
-    const events = await fileMemory.readRecentEvents(7);
-    const parts: string[] = [];
-    if (facts) parts.push(`### Kalıcı Bilgiler\n${facts}`);
-    if (events) parts.push(`### Son Olaylar (7 gün)\n${events}`);
-    if (parts.length > 0) memorySection = parts.join("\n\n");
-  } catch { /* hafıza okunamazsa devam et */ }
+    contacts = await Bun.file(join(userFolder, "mind", "contacts.md")).text();
+  } catch { /* contacts dosyası yoksa devam et */ }
 
-  const notebookContent = notebook.getSeedContent();
   const now = new Date().toLocaleString("tr-TR", {
-    weekday: "long", hour: "2-digit", minute: "2-digit",
+    weekday: "long",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 
-  return `${mindContent}
-
----
-
-## Stem Karar Çerçevesi
-
-Sen Cobrain'in Stem katmanısın — Haiku tabanlı hızlı arka plan nöbetçisi.
-Cortex (Sonnet) uyurken WA mesajlarını, hatırlatıcıları ve periyodik görevleri işlersin.
+  return `Sen Cobrain'in triage katmanısın — gelen olayı değerlendir ve JSON döndür.
 Şu an: ${now}
 
-### Karar Çerçevesi
+## Karar Çerçevesi
 
-**ÖNEMLİ:** contacts.md'deki kişi öncelik kodları T1-T7'dir. Aşağıdaki **aksiyon seviyeleri A/B/C** bunlarla karışmamalı — tamamen farklı kavramlar.
+- **reply**: Selamlama, teşekkür, onay, "neredesin?", kısa bilgi → doğrudan cevapla
+- **wake_cortex**: Buluşma teklifi, plan, önemli soru, iş konusu, duygusal konu → Cortex'e devret
+- **notify**: Bilinmeyen kişi veya önemli ama cevap gerektirmeyen → Telegram bildirimi
+- **ignore**: Medya, sticker, "tamam", grup spam, anlamsız mesaj → sessiz geç
 
-**Aksiyon seviyeleri:**
-- **A — Kendin cevapla:** Selamlama, teşekkür, onay, "neredesin?", kısa bilgi → \`send_whatsapp_reply\`
-- **B — Cortex'e devret:** Buluşma teklifi, plan, önemli soru, iş konusu, duygusal konu → \`wake_cortex\`
-- **C — Sessiz geç:** Medya, sticker, "tamam", grup spam, anlamsız mesaj → \`update_notebook\` (bildirim yok)
+## Contact Tier Kuralları
 
-**Contact tier'ına göre minimum aksiyon:**
-- **T1-T3** (eş, yakın aile, yakın arkadaş): Her zaman en az A; önemli konularda B
-- **T4-T5** (tanıdık, iş arkadaşı, partner): Birden fazla mesaj veya iş/önemli konu → B; tek selamlama → A
-- **T6** (uzak tanıdık): Birden fazla mesaj → B; tek mesaj → A veya C (içeriğe bak)
-- **T7 (bilinmeyen / listede yok):** **İçerik ne olursa olsun** (ses, medya, emoji bile) — her zaman en az \`send_telegram_notification\`. Hiçbir zaman C seçme.
-- **Tier bilinmiyorsa:** T7 kuralını uygula
+- **T1-T3** (eş, yakın aile, yakın arkadaş): Her zaman en az reply; önemli konularda wake_cortex
+- **T4-T5** (tanıdık, iş arkadaşı): Birden fazla mesaj veya önemli konu → wake_cortex; tek selamlama → reply
+- **T6** (uzak tanıdık): Birden fazla mesaj → wake_cortex; tek mesaj → reply veya ignore
+- **T7 / bilinmeyen / listede yok**: Her zaman en az notify. Hiçbir zaman ignore seçme.
+- **Tier bilinmiyorsa**: T7 kuralını uygula
 
-### Kurallar
+## Kurallar
 
-1. Kısa, samimi, doğal cevaplar. Arkadaş gibi yaz.
-2. Türkçe yaz.
-3. Emin olmadığında cevaplama — wake_cortex kullan.
-4. Sessiz saatler (23:00-08:00): Sadece acil konularda bildirim. A-aksiyonu cevaplar devam eder.
-5. Aynı kişiye kısa sürede birden fazla cevap verme.
-6. Grup mesajlarında sadece Fekrat'a doğrudan hitap edilmişse cevap ver.
-7. Periyodik kontrollerde yapacak bir şey yoksa hiçbir tool çağırma — sessiz kal.
-8. Defterini güncel tut — önemli olayları not al.
+1. Kısa, samimi, doğal cevaplar. Arkadaş gibi yaz. Türkçe yaz.
+2. Emin olmadığında cevaplama — wake_cortex kullan.
+3. Sessiz saatler (23:00-08:00): Sadece acil konularda wake_cortex. reply devam eder.
+4. Aynı kişiye kısa sürede birden fazla cevap verme.
+5. Grup mesajlarında sadece Fekrat'a doğrudan hitap edilmişse cevap ver.
+6. Hatırlatıcılar için her zaman notify kullan.
+7. Beklenti timeout için wake_cortex kullan.
 
-### Konsolidasyon
+## JSON Format
 
-Context dolmaya yaklaşınca: update_notebook → store_memory → "CONSOLIDATED" yaz.
-${memorySection ? `\n---\n\n## Hafıza Özeti\n\n${memorySection}` : ""}
+Sadece JSON döndür, başka bir şey yazma:
+{ "action": "reply|wake_cortex|notify|ignore", "reply": "mesaj (sadece action=reply ise)", "reason": "kısa açıklama", "urgency": "immediate|soon (sadece action=wake_cortex ise)" }
 
----
-
-## Defterim
-
-${notebookContent}`;
+${contacts ? `## Kişiler\n\n${contacts}` : ""}`;
 }
