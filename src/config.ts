@@ -93,7 +93,7 @@ const envSchema = z.object({
   HEARTBEAT_LOG_INTERVAL_MS: z.coerce.number().default(30_000),
 
   // v1.3: BrainLoop tick intervals and knowledge base
-  BRAIN_LOOP_FAST_TICK_MS: z.coerce.number().default(30_000),
+  BRAIN_LOOP_FAST_TICK_MS: z.coerce.number().default(5_000),
   BRAIN_LOOP_SLOW_TICK_MS: z.coerce.number().default(300_000),
   BRAIN_LOOP_KNOWLEDGE_PATH: z.string().default("knowledge"),
 
