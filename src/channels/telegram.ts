@@ -1213,7 +1213,11 @@ export async function startBot(): Promise<void> {
     })
     .then((response) => {
       console.log(`[Startup] Agent response: ${response.content.slice(0, 50)}...`);
-      bot.api.sendMessage(userId, response.content)
+      const { text: startupText, suggestions: startupSuggestions } = parseSuggestions(response.content);
+      const startupKeyboard = buildSuggestionKeyboard(startupSuggestions);
+      bot.api.sendMessage(userId, startupText, {
+        ...(startupKeyboard && { reply_markup: startupKeyboard }),
+      })
         .then(() => console.log(`[Startup] Message sent`))
         .catch((err) => console.error(`[Startup] Failed to send message:`, err));
     })

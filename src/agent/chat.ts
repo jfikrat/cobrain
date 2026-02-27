@@ -386,7 +386,7 @@ async function _executeChat(
     );
 
     // Finalize streaming notification
-    await notifier.complete({ cost: totalCost });
+    await notifier.complete({ cost: totalCost, stopReason });
 
     // Heartbeat: agent completed successfully
     heartbeat("ai_agent", { event: "completed", turns: numTurns, tools: toolsUsed.length, cost: totalCost });

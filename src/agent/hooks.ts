@@ -42,7 +42,7 @@ export class ToolStreamNotifier {
     await this.flush();
   }
 
-  async complete(opts: { cost?: number; error?: string } = {}): Promise<void> {
+  async complete(opts: { cost?: number; error?: string; stopReason?: string | null } = {}): Promise<void> {
     if (this.toolCount === 0) return;
     const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(0);
 
@@ -50,7 +50,10 @@ export class ToolStreamNotifier {
       this.lines.push(`\n❌ Hata: ${opts.error.slice(0, 200)}`);
     } else {
       const costStr = opts.cost ? `, $${opts.cost.toFixed(3)}` : "";
-      this.lines.push(`\n✅ Tamamlandı (${this.toolCount} tool, ${elapsed}s${costStr})`);
+      const stopWarning = opts.stopReason && opts.stopReason !== "end_turn"
+        ? `\n⚠️ ${opts.stopReason === "max_tokens" ? "Yanıt token limiti nedeniyle kesildi" : `Durma sebebi: ${opts.stopReason}`}`
+        : "";
+      this.lines.push(`\n✅ Tamamlandı (${this.toolCount} tool, ${elapsed}s${costStr})${stopWarning}`);
     }
 
     // Force flush (ignore rate limit)
