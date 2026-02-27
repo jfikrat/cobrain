@@ -1208,7 +1208,7 @@ export async function startBot(): Promise<void> {
   getStartupContext(userId)
     .then((contextSummary) => {
       const contextPart = contextSummary ? `\n\nSon konuşma özeti:\n${contextSummary}` : "";
-      const startupMsg = `[SYSTEM] Bot yeniden başlatıldı.${contextPart}\n\nŞimdi sırayla şunları yap:\n1. list_reminders() çağır — bekleyen hatırlatıcıları al\n2. list_goals() çağır — aktif hedefleri al\n3. recall("son bağlam güncel durum") çağır — hafızandan son durumu al\n4. Telegram'a kısa özet gönder (max 5 satır): geri döndüğünü bildir, önemli bekleyen şeyler varsa listele`;
+      const startupMsg = `[SYSTEM] Bot yeniden başlatıldı.${contextPart}\n\nÖNEMLİ: Bu bir startup mesajıdır. cobrain-restart veya herhangi bir restart komutu ÇALIŞTIRMA.\n\nŞimdi sırayla şunları yap:\n1. list_reminders() çağır — bekleyen hatırlatıcıları al\n2. list_goals() çağır — aktif hedefleri al\n3. recall("son bağlam güncel durum") çağır — hafızandan son durumu al\n4. Telegram'a kısa özet gönder (max 5 satır): geri döndüğünü bildir, önemli bekleyen şeyler varsa listele`;
       return think(userId, startupMsg);
     })
     .then((response) => {
@@ -1237,6 +1237,7 @@ async function getStartupContext(userId: number): Promise<string | null> {
     if (history.length === 0) return null;
 
     return history
+      .filter((m) => !m.content.toLowerCase().includes("cobrain-restart"))
       .map((m) => `${m.role === "user" ? "Kullanıcı" : "Cobrain"}: ${m.content.slice(0, 150)}`)
       .join("\n");
   } catch {
