@@ -5,12 +5,9 @@
 
 import { ClaudeSessionManager, type ClaudeMessage } from "../services/claude-session.ts";
 import { UserMemory, type Message } from "../memory/sqlite.ts";
-import { SmartMemory } from "../memory/smart-memory.ts";
-import { initHaiku, isHaikuAvailable } from "../services/haiku.ts";
+import { isHaikuAvailable } from "../services/haiku.ts";
 import { userManager } from "../services/user-manager.ts";
 import { config } from "../config.ts";
-import type { MemorySearchResult, MemoryInput } from "../types/memory.ts";
-
 // Agent SDK imports
 import { chat as agentChat, clearSession as agentClearSession, closeAllMemories, type MultimodalMessage } from "../agent/index.ts";
 
@@ -21,11 +18,6 @@ import { routeLite } from "./router-lite.ts";
 
 // Session state persistence
 import { updateSessionState, detectPhase, detectTopic } from "../services/session-state.ts";
-
-// Initialize Haiku on module load (for fallback CLI mode)
-if (!config.USE_AGENT_SDK) {
-  initHaiku();
-}
 
 // Initialize Claude Session Manager (tmux-based)
 // Uses per-user folders so each user gets their own CLAUDE.md context
@@ -46,7 +38,6 @@ export interface ThinkResponse {
 
 // Cache for UserMemory instances
 const userMemories = new Map<number, UserMemory>();
-const smartMemories = new Map<number, SmartMemory>();
 
 /**
  * Get or create UserMemory for a specific user
@@ -60,53 +51,6 @@ async function getUserMemory(userId: number): Promise<UserMemory> {
   userMemories.set(userId, memory);
 
   return memory;
-}
-
-/**
- * Get or create SmartMemory for a specific user
- */
-async function getSmartMemory(userId: number): Promise<SmartMemory> {
-  let smartMemory = smartMemories.get(userId);
-  if (smartMemory) return smartMemory;
-
-  const userFolder = userManager.getUserFolder(userId);
-  smartMemory = new SmartMemory(userFolder, userId);
-  smartMemories.set(userId, smartMemory);
-
-  return smartMemory;
-}
-
-/**
- * Search for relevant memories and format as context
- */
-async function getMemoryContext(userId: number, message: string): Promise<{ context: string; memories: MemorySearchResult[] }> {
-  try {
-    console.log(`[Memory] Searching for: "${message.slice(0, 50)}..." (user: ${userId})`);
-    const smartMemory = await getSmartMemory(userId);
-    const memories = await smartMemory.search(message, {
-      limit: 3,
-      minScore: 0.4,
-    });
-
-    if (memories.length === 0) {
-      console.log(`[Memory] No relevant memories found (user: ${userId})`);
-      return { context: "", memories: [] };
-    }
-
-    const contextLines = memories.map((m) => {
-      const summary = m.summary || m.content.slice(0, 150);
-      return `- ${summary}`;
-    });
-
-    const context = `\n\n[İlgili hatıralar]\n${contextLines.join("\n")}`;
-
-    console.log(`[Memory] ${memories.length} ilgili hafıza bulundu (user: ${userId})`);
-
-    return { context, memories };
-  } catch (error) {
-    console.warn(`[Memory] Search error: ${error}`);
-    return { context: "", memories: [] };
-  }
 }
 
 /**
@@ -304,19 +248,13 @@ async function thinkWithCLI(userId: number, message: string): Promise<ThinkRespo
     console.log(`[Session] Yeni session oluşturuldu: ${sessionId.slice(0, 8)}... (user: ${userId})`);
   }
 
-  // Search for relevant memories
-  const { context, memories } = await getMemoryContext(userId, message);
-
-  // Add memory context to message if available
-  const enrichedMessage = context ? `${message}${context}` : message;
-
   // Call Claude via tmux session
-  const response = await claudeSessionManager.chat(userId, enrichedMessage);
+  const response = await claudeSessionManager.chat(userId, message);
 
   // Save to per-user history
   memory.addMessage("user", message, {
     tokensIn: 0, // tmux mode doesn't track tokens
-    metadata: { memoriesUsed: memories.length },
+    metadata: { memoriesUsed: 0 },
   });
 
   memory.addMessage("assistant", response.content, {
@@ -325,21 +263,6 @@ async function thinkWithCLI(userId: number, message: string): Promise<ThinkRespo
   });
 
   memory.incrementSessionMessageCount();
-
-  // Try to extract and store important info from conversation
-  try {
-    const smartMemory = await getSmartMemory(userId);
-    await smartMemory.extractAndStore(
-      [
-        { role: "user", content: message },
-        { role: "assistant", content: response.content },
-      ],
-      sessionId
-    );
-  } catch (error) {
-    // Silently fail - extraction is optional
-    console.warn(`[Memory] Extraction failed: ${error}`);
-  }
 
   const history = memory.getHistory(config.MAX_HISTORY);
 
@@ -350,7 +273,7 @@ async function thinkWithCLI(userId: number, message: string): Promise<ThinkRespo
     costUsd: 0,
     sessionId,
     historyLength: history.length,
-    memoriesUsed: memories.length,
+    memoriesUsed: 0,
   };
 }
 
@@ -392,63 +315,10 @@ export async function getStats(userId: number): Promise<{
   const memory = await getUserMemory(userId);
   const basicStats = memory.getStats();
 
-  let memoryCount = 0;
-  try {
-    const smartMemory = await getSmartMemory(userId);
-    const memoryStats = smartMemory.getStats();
-    memoryCount = memoryStats.total;
-  } catch {
-    // Smart memory not available
-  }
-
   return {
     ...basicStats,
-    memoryCount,
+    memoryCount: 0,
   };
-}
-
-/**
- * Store a memory manually
- */
-export async function storeMemory(userId: number, input: MemoryInput): Promise<number> {
-  const smartMemory = await getSmartMemory(userId);
-  return smartMemory.store(input);
-}
-
-/**
- * Search memories
- */
-export async function searchMemories(
-  userId: number,
-  query: string,
-  limit?: number
-): Promise<MemorySearchResult[]> {
-  const smartMemory = await getSmartMemory(userId);
-  return smartMemory.search(query, { limit: limit ?? 5, minScore: 0.3 });
-}
-
-/**
- * Get recent memories
- */
-export async function getRecentMemories(userId: number, limit?: number) {
-  const smartMemory = await getSmartMemory(userId);
-  return smartMemory.getRecent(limit ?? 10);
-}
-
-/**
- * Get memory stats
- */
-export async function getMemoryStats(userId: number) {
-  const smartMemory = await getSmartMemory(userId);
-  return smartMemory.getStats();
-}
-
-/**
- * Prune expired memories
- */
-export async function pruneMemories(userId: number): Promise<number> {
-  const smartMemory = await getSmartMemory(userId);
-  return smartMemory.prune();
 }
 
 /**
@@ -477,14 +347,9 @@ export async function closeAll(): Promise<void> {
   }
   userMemories.clear();
 
-  for (const smartMemory of smartMemories.values()) {
-    smartMemory.close();
-  }
-  smartMemories.clear();
-
   userManager.close();
 }
 
 // Re-exports
 export { userManager, claudeSessionManager };
-export type { Message, ClaudeMessage, MemorySearchResult, MultimodalMessage };
+export type { Message, ClaudeMessage, MultimodalMessage };

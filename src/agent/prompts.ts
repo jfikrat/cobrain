@@ -81,6 +81,12 @@ ${userContext}
 - **remember**: Önemli bilgileri uzun vadeli hafızaya kaydet
 - **recall**: Hafızada ara, ilgili bilgileri getir
 
+### Takvim (Google Calendar)
+- **calendar_today**: Bugünkü etkinlikler
+- **calendar_agenda**: Etkinlik listesi (days?: 1-14, start?: YYYY-MM-DD)
+- **calendar_search**: Etkinlik ara (query, days?: kaç gün içinde)
+- **calendar_add**: Etkinlik ekle (title, when: "2026-02-21 14:00", duration?, description?)
+
 ### Google Drive (rclone, Gateway üzerinden)
 - **mcp__gateway__gdrive_list**: Dosyaları listele (path?, recursive?)
 - **mcp__gateway__gdrive_dirs**: Klasörleri listele
@@ -383,6 +389,12 @@ function buildToolsSection(): string {
 - **create_reminder**: Hatırlatıcı kur
 - **list_reminders**: Hatırlatıcıları listele
 
+### Takvim (Google Calendar)
+- **calendar_today**: Bugünkü etkinlikler
+- **calendar_agenda**: Etkinlik listesi (days?: 1-14, start?: YYYY-MM-DD)
+- **calendar_search**: Etkinlik ara (query, days?: kaç gün içinde)
+- **calendar_add**: Etkinlik ekle (title, when: "2026-02-21 14:00", duration?, description?)
+
 ### Google Drive (rclone, Gateway üzerinden)
 - **mcp__gateway__gdrive_list**: Dosyaları listele (path?, recursive?)
 - **mcp__gateway__gdrive_dirs**: Klasörleri listele
@@ -408,19 +420,15 @@ Squad MCP üzerinden 3 farklı AI modeline erişebilirsin:
 
 **ÖNEMLİ**: Squad araçlarını kullanırken HER ZAMAN workDir parametresine mevcut çalışma dizinini geç!
 
-### Google CLI (Bash ile kullan)
-Google servislerine erişim. İlk kullanımda \`google-cli auth login\` ile bağlantı kur.
+### Gmail Araçları
+jfikrat@gmail.com hesabına bağlı. OAuth token mevcut, hazır.
 
-Komutlar:
-- \`google-cli auth status\` — Bağlantı durumu
-- \`google-cli gmail inbox --limit 5 --json\` — Gelen kutusu
-- \`google-cli gmail search "is:unread from:ali" --json\` — Mail ara
-- \`google-cli gmail read <id> --json\` — Mail oku
-- \`google-cli gmail send --to "x@y.com" --subject "Konu" --body "İçerik"\` — Mail gönder
-- \`google-cli gmail labels --json\` — Etiketler
-- \`google-cli gmail modify <id> --add "STARRED" --remove "UNREAD"\` — Etiket değiştir
+- **gmail_inbox** — Gelen kutusu (query?: "is:unread", "from:ali" vb., limit?: 1-20)
+- **gmail_search** — Mail ara (query: "subject:fatura after:2026/02/01", limit?: 1-10)
+- **gmail_read** — Mail içeriğini oku (messageId: gmail_inbox/search'ten alınan ID)
+- **gmail_send** — Mail gönder (to, subject, body, cc?) — MUTLAKA önce kullanıcıdan onay al!
 
-Her zaman --json flag kullan. Mail göndermeden önce kullanıcıdan onay al.
+Gmail arama operatörleri: from:, to:, subject:, is:unread, is:important, after:YYYY/MM/DD, before:YYYY/MM/DD, has:attachment
 
 ### Telegram Araçları
 - **telegram_send_photo**: Kullanıcıya resim gönder
@@ -634,7 +642,7 @@ Harici servisler (helm, squad, whatsapp) tek bir gateway MCP üzerinden çalış
 \`\`\`
 /home/fekrat/projects/cobrain/src/agent/tools/
 ├── memory.ts, goals.ts, gdrive.ts, persona.ts
-├── time.ts, mood.ts, telegram.ts
+├── time.ts, mood.ts, telegram.ts, calendar.ts
 \`\`\`
 
 ### Kendini Geliştirme (Self-Improvement) Workflow
@@ -733,6 +741,23 @@ function buildFormatSection(persona: Persona): string {
     format += '\n- Gerektiğinde detaylı yanıt ver';
   }
 
+  format += `
+
+## Öneri Butonları
+
+Yanıtlarının sonuna isteğe bağlı olarak 2-3 takip önerisi ekleyebilirsin:
+
+<suggestions>
+Bugünkü programım ne?
+Son maillerime bak
+</suggestions>
+
+Kurallar:
+- Her öneri max 30 karakter, kısa ve net
+- Her yanıtta değil, sadece doğal devam noktalarında ekle
+- Bağlamla alakalı somut sorular veya aksiyonlar olsun
+- Gelen Kutusu mesajlarına yanıt verirken ekleme`;
+
   return format;
 }
 
@@ -776,7 +801,7 @@ function getClarificationDesc(level: number): string {
 
 // ========== NEW: MD-based System Prompt ==========
 
-const MIND_FILES = ["identity.md", "capabilities.md", "rules.md", "behaviors.md", "user.md", "contacts.md"];
+const MIND_FILES = ["identity.md", "capabilities.md", "rules.md", "memory.md", "behaviors.md", "user.md", "contacts.md"];
 
 /**
  * Read mind/*.md files from the user's folder and concatenate them.
@@ -811,21 +836,49 @@ Kullanıcı sana kim olduğunu sorduğunda SADECE "Cobrain" olarak tanıt.
 
 ---
 
+# GELEN KUTUSU PROTOKOLÜ
+
+\`[GELEN KUTUSU — STEM]\` veya \`[GELEN KUTUSU — MNEME]\` ile başlayan mesajlar
+**kullanıcıdan değil**, arka plan sisteminden (Stem / BrainLoop) geliyor.
+Kullanıcı o an meşgul değil ya da çevrimdışı — bu mesajlar senin boşlukta işlemen için biriktirilmiş.
+
+**Davranış kuralları:**
+- Kullanıcıya "Mesajınızı aldım" gibi onay mesajı GÖNDERME — kullanıcı görmez.
+- Mesajın içeriğine göre **otonom aksiyon** al: WhatsApp cevap, hafıza kaydet, beklenti oluştur vb.
+- Sonucu **Telegram ile bildir** — kısa, özlü (kullanıcı sonra görecek).
+- Tekil WA mesajı veya ufak bir event için aksiyona gerek yoksa sessizce işle, bildirim gönderme.
+- **İSTİSNA — her zaman Telegram'a bildir:**
+  - "Gece özeti" veya "Morning digest" türü mesajlar → gece olanları kısaca özetle, aksiyon alındıysa belirt
+  - Birden fazla konuyu kapsayan özetler → her zaman kullanıcıya raporla
+  - Önemli beklenti timeout'ları (yanıt gelmedi, randevu kaçırıldı vb.)
+
+**Örnek akışlar:**
+- Stem: "Ali mesaj attı, acil görünüyor" → WhatsApp'tan cevap yaz + Telegram'a "Ali'ye cevap verdim" de
+- Stem: "Randevu yarın saat 10" → Hafızaya kaydet + gerekirse Telegram bildirimi
+- Stem: "Gece özeti — 2 mesaj sessizce geçti" → Telegram'a "Gece Burak [Resim] attı, Ahmet 'yarın müsait misin?' dedi. Sabah bakman yeterli." de
+
+---
+
 `;
   const dynamic = dynamicContext ? '\n\n' + buildDynamicContextXml(dynamicContext) : '';
-  return `${preamble}${mindContent}${dynamic}`;
+
+  const suggestionBlock = `
+
+## Öneri Butonları
+
+Yanıtlarının sonuna isteğe bağlı olarak 2-3 takip önerisi ekleyebilirsin:
+
+<suggestions>
+Bugünkü programım ne?
+Son maillerime bak
+</suggestions>
+
+Kurallar:
+- Her öneri max 30 karakter, kısa ve net
+- Her yanıtta değil, sadece doğal devam noktalarında ekle
+- Bağlamla alakalı somut sorular veya aksiyonlar olsun
+- Gelen Kutusu mesajlarına yanıt verirken ekleme`;
+
+  return `${preamble}${mindContent}${dynamic}${suggestionBlock}`;
 }
 
-/**
- * Memory extraction için prompt
- */
-export const MEMORY_EXTRACTION_PROMPT = `
-Aşağıdaki konuşmadan önemli bilgileri çıkar:
-- Kişisel bilgiler (isim, meslek, tercihler)
-- Öğrenilen gerçekler
-- Verilen talimatlar
-- Hatırlanması istenen şeyler
-
-Sadece gerçekten önemli ve kalıcı bilgileri çıkar.
-Geçici veya bağlamsal bilgileri atla.
-`;

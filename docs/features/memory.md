@@ -132,42 +132,18 @@ Output: [
 ]
 ```
 
-## Search Mechanism
+## Memory Architecture
 
-### Search Layers
+### FileMemory (Long-term)
 
-1. **Keyword Matching**: Fast search using tags and content
-2. **Cerebras Ranking**: Semantic similarity scoring (if configured)
-3. **Vector Search**: Embedding-based similarity (if Ollama configured)
+Two Markdown files per user under `~/.cobrain/users/<id>/memory/`:
 
-### Search Flow
+- **facts.md** — Permanent facts organized by section (overwrite semantics)
+- **events.md** — Dated event log (append semantics), archived after 90 days
 
-```
-Query: "project deadline"
-          │
-          ▼
-┌─────────────────────┐
-│  Keyword Matching   │ → Find candidates with "project" or "deadline"
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  Cerebras Ranking   │ → Rank by semantic relevance
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│  Return Top K       │ → Return best matches
-└─────────────────────┘
-```
+### Recall
 
-### Relevance Scoring
-
-Memories are scored on:
-- Keyword overlap (0.3 weight)
-- Semantic similarity (0.5 weight)
-- Importance (0.1 weight)
-- Recency (0.1 weight)
+`recall` tool performs full-text search across facts.md and recent events (30 days by default).
 
 ## Memory Management
 
@@ -301,22 +277,7 @@ Returns memory statistics.
 ```env
 # Memory retention (days)
 MAX_MEMORY_AGE_DAYS=90
-
-# Ollama for embeddings
-OLLAMA_URL=http://localhost:11434
-EMBEDDING_MODEL=all-minilm:l6-v2
-
-# Cerebras for ranking
-CEREBRAS_API_KEY=csk-xxxxx
-CEREBRAS_MODEL=gpt-oss-120b
 ```
-
-### Memory Limits
-
-Default limits (can be adjusted):
-- Maximum memories per user: 10,000
-- Maximum content length: 10,000 characters
-- Maximum tags per memory: 20
 
 ## Best Practices
 
@@ -337,24 +298,18 @@ Default limits (can be adjusted):
 
 ### Storage
 
-Per-user SQLite database:
+Per-user Markdown files:
 
 ```
-~/.cobrain/user_<id>/memory.db
-└── memories (main table)
+~/.cobrain/users/<id>/memory/
+├── facts.md        # Permanent facts (sections, overwrite)
+├── events.md       # Dated event log (append)
+└── archive/        # Events older than 90 days (YYYY-MM-events.md)
 ```
 
-### Vector Embeddings
+### Consolidation
 
-When Ollama is configured:
-- Embeddings: 384 dimensions (all-minilm:l6-v2)
-- Storage: sqlite-vec extension
-- Search: Cosine similarity
-
-### Performance
-
-- Keyword search: < 10ms
-- Vector search: < 50ms
-- Cerebras ranking: ~200ms (API call)
-
-Caching reduces repeated searches to near-instant.
+Mneme agent runs nightly (03:00) using `claude-opus-4-6`:
+- Archives events older than 90 days
+- Extracts patterns from recent events → new facts
+- Resolves conflicting facts

@@ -2,6 +2,25 @@ import { z } from "zod";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+function normalizeLegacyStemEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const normalized = { ...env };
+  const aliases: Array<[keyof NodeJS.ProcessEnv, keyof NodeJS.ProcessEnv]> = [
+    ["FF_STEM", "FF_SENTINEL"],
+    ["STEM_MODEL", "SENTINEL_MODEL"],
+    ["STEM_MAX_WAKES_PER_HOUR", "SENTINEL_MAX_WAKES_PER_HOUR"],
+  ];
+
+  for (const [canonical, legacy] of aliases) {
+    const canonicalValue = normalized[canonical];
+    const legacyValue = normalized[legacy];
+    if ((canonicalValue === undefined || canonicalValue === "") && legacyValue !== undefined && legacyValue !== "") {
+      normalized[canonical] = legacyValue;
+    }
+  }
+
+  return normalized;
+}
+
 const envSchema = z.object({
   // Core
   TELEGRAM_BOT_TOKEN: z.string().min(1, "Telegram bot token gerekli"),
@@ -74,43 +93,28 @@ const envSchema = z.object({
   HEARTBEAT_LOG_INTERVAL_MS: z.coerce.number().default(30_000),
 
   // v1.3: BrainLoop tick intervals and knowledge base
-  BRAIN_LOOP_FAST_TICK_MS: z.coerce.number().default(30_000),
+  BRAIN_LOOP_FAST_TICK_MS: z.coerce.number().default(5_000),
   BRAIN_LOOP_SLOW_TICK_MS: z.coerce.number().default(300_000),
   BRAIN_LOOP_KNOWLEDGE_PATH: z.string().default("knowledge"),
 
   // v0.8: WhatsApp notification settings
   WHATSAPP_STALE_MAX_AGE_SEC: z.coerce.number().default(3600),
   WHATSAPP_ALLOWED_GROUP_JIDS: z.string().default(""),
-  WHATSAPP_MAX_REPLY_LENGTH: z.coerce.number().default(500),
 
   // v1.0: REST API
   COBRAIN_API_KEY: z.string().default(""),
 
   // v1.1: Cortex tuning
-  CORTEX_SALIENCE_THRESHOLD: z.coerce.number().default(0.3),
-  CORTEX_AI_TIMEOUT_MS: z.coerce.number().default(30_000),
-  CORTEX_MAX_QUEUE_SIZE: z.coerce.number().default(50),
   CORTEX_EXPECTATION_TIMEOUT_MS: z.coerce.number().default(30 * 60 * 1000),
   CORTEX_EXPECTATION_CLEANUP_INTERVAL_MS: z.coerce.number().default(60_000),
-  CORTEX_MODEL: z.string().default("gemini-3-flash-preview"),
 
   // Log channel: autonomous event logs sent here
   LOG_CHANNEL_ID: z.coerce.number().optional(),
 
-  // v1.4: Stem (Sonnet background watcher)
-  FF_SENTINEL: z.coerce.boolean().default(true),
-  SENTINEL_MODEL: z.string().default("claude-sonnet-4-6"),
-  SENTINEL_MAX_TURNS: z.coerce.number().default(5),
-  SENTINEL_CONSOLIDATION_THRESHOLD: z.coerce.number().default(170_000),
-  SENTINEL_MAX_WAKES_PER_HOUR: z.coerce.number().default(10),
-
-  // v1.2: Vector search
-  FF_VECTOR_SEARCH: z.coerce.boolean().default(true),
-  VECTOR_WEIGHT: z.coerce.number().default(0.7),
-  FTS_WEIGHT: z.coerce.number().default(0.3),
-  EMBEDDING_MODEL: z.string().default("gemini-embedding-001"),
-  CHUNK_SIZE: z.coerce.number().default(400),
-  CHUNK_OVERLAP: z.coerce.number().default(80),
+  // v1.4: Stem background watcher (canonical: STEM_*, legacy: SENTINEL_*)
+  FF_STEM: z.coerce.boolean().default(true),
+  STEM_MODEL: z.string().default("claude-haiku-4-5-20251001"),
+  STEM_MAX_WAKES_PER_HOUR: z.coerce.number().default(10),
 
   // Legacy (kept for migration)
   DB_PATH: z.string().default("./data/cobrain.db"),
@@ -126,7 +130,7 @@ export type ConfigResult =
  * Returns success/error state for setup wizard
  */
 export function loadConfigSafe(): ConfigResult {
-  const result = envSchema.safeParse(process.env);
+  const result = envSchema.safeParse(normalizeLegacyStemEnv(process.env));
 
   if (!result.success) {
     return {

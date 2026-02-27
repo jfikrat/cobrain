@@ -1,17 +1,119 @@
 /**
- * Agent hooks — PreToolUse (logging, permissions) + PreCompact (memory flush)
+ * Agent hooks — PreToolUse (logging, permissions)
  * Extracted from chat.ts for modularity
  */
 
-import type { PreToolUseHookInput, PreCompactHookInput } from "@anthropic-ai/claude-agent-sdk";
+import type { PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 import { getTelegramBot } from "./tools/telegram.ts";
 import { needsPermission, askToolPermission, type PermissionMode } from "./permissions.ts";
 import { config } from "../config.ts";
 import { getEventStore } from "../brain/event-store.ts";
 import { userManager } from "../services/user-manager.ts";
-import { SmartMemory } from "../memory/smart-memory.ts";
-import { UserMemory } from "../memory/sqlite.ts";
-import { isHaikuAvailable } from "../services/haiku.ts";
+
+// ========== Tool Stream Notifier ==========
+// Streams tool status into a single Telegram message (edit-in-place)
+
+export class ToolStreamNotifier {
+  private messageId: number | null = null;
+  private lines: string[] = [];
+  private userId: number;
+  private lastEditTime = 0;
+  private pendingEdit: Timer | null = null;
+  private startTime = Date.now();
+  private toolCount = 0;
+
+  private static readonly MIN_EDIT_INTERVAL = 1500; // Telegram rate limit safety
+  private static readonly MAX_MSG_LENGTH = 4096;
+  private static readonly HEADER = "🧠 Cortex çalışıyor...";
+
+  constructor(userId: number) {
+    this.userId = userId;
+  }
+
+  async append(line: string): Promise<void> {
+    this.toolCount++;
+    const ts = new Date().toLocaleTimeString("tr-TR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZone: "Europe/Istanbul",
+    });
+    this.lines.push(`${ts} ${line}`);
+    await this.flush();
+  }
+
+  async complete(opts: { cost?: number; error?: string; stopReason?: string | null } = {}): Promise<void> {
+    if (this.toolCount === 0) return;
+    const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(0);
+
+    if (opts.error) {
+      this.lines.push(`\n❌ Hata: ${opts.error.slice(0, 200)}`);
+    } else {
+      const costStr = opts.cost ? `, $${opts.cost.toFixed(3)}` : "";
+      const stopWarning = opts.stopReason && opts.stopReason !== "end_turn"
+        ? `\n⚠️ ${opts.stopReason === "max_tokens" ? "Yanıt token limiti nedeniyle kesildi" : `Durma sebebi: ${opts.stopReason}`}`
+        : "";
+      this.lines.push(`\n✅ Tamamlandı (${this.toolCount} tool, ${elapsed}s${costStr})${stopWarning}`);
+    }
+
+    // Force flush (ignore rate limit)
+    if (this.pendingEdit) {
+      clearTimeout(this.pendingEdit);
+      this.pendingEdit = null;
+    }
+    await this.sendOrEdit();
+  }
+
+  private buildMessage(): string {
+    let text = ToolStreamNotifier.HEADER + "\n\n" + this.lines.join("\n");
+
+    // Trim oldest lines if exceeding Telegram limit
+    while (text.length > ToolStreamNotifier.MAX_MSG_LENGTH && this.lines.length > 2) {
+      this.lines.shift();
+      text = ToolStreamNotifier.HEADER + "\n\n...\n" + this.lines.join("\n");
+    }
+
+    return text;
+  }
+
+  private async flush(): Promise<void> {
+    const now = Date.now();
+    const elapsed = now - this.lastEditTime;
+
+    if (elapsed >= ToolStreamNotifier.MIN_EDIT_INTERVAL) {
+      await this.sendOrEdit();
+    } else if (!this.pendingEdit) {
+      // Schedule edit after remaining interval
+      const remaining = ToolStreamNotifier.MIN_EDIT_INTERVAL - elapsed;
+      this.pendingEdit = setTimeout(async () => {
+        this.pendingEdit = null;
+        await this.sendOrEdit();
+      }, remaining);
+    }
+  }
+
+  private async sendOrEdit(): Promise<void> {
+    const text = this.buildMessage();
+    const bot = getTelegramBot();
+    if (!bot?.api) return;
+
+    try {
+      if (!this.messageId) {
+        const msg = await bot.api.sendMessage(this.userId, text);
+        this.messageId = msg.message_id;
+      } else {
+        await bot.api.editMessageText(this.userId, this.messageId, text);
+      }
+      this.lastEditTime = Date.now();
+    } catch (error) {
+      // "message is not modified" is expected when text hasn't changed
+      const msg = (error as Error).message || "";
+      if (!msg.includes("not modified")) {
+        console.error("[ToolStreamNotifier]", msg.slice(0, 80));
+      }
+    }
+  }
+}
 
 // Tool status message lookup (exact match)
 type StatusHandler = (i: Record<string, unknown>) => string;
@@ -21,9 +123,13 @@ const TOOL_STATUS: Map<string, StatusHandler> = new Map([
   ["Read", (i) => `📄 Dosya okuyorum: ${(i.file_path as string || "").split("/").pop()}`],
   ["Write", (i) => `✍️ Dosya yazıyorum: ${(i.file_path as string || "").split("/").pop()}`],
   ["Edit", (i) => `📝 Dosya düzenliyorum: ${(i.file_path as string || "").split("/").pop()}`],
-  ["Bash", (i) => `⚡ Komut çalıştırıyorum: ${(i.command as string || "").slice(0, 50)}...`],
+  ["Bash", (i) => {
+    const desc = i.description as string | undefined;
+    const cmd = (i.command as string || "").slice(0, 120);
+    return desc ? `⚡ ${desc}` : `⚡ ${cmd}`;
+  }],
   ["Glob", (i) => `🔎 Dosya arıyorum: ${i.pattern}`],
-  ["Grep", (i) => `🔍 İçerik arıyorum: "${(i.pattern as string || "").slice(0, 30)}..."`],
+  ["Grep", (i) => `🔍 İçerik arıyorum: "${(i.pattern as string || "").slice(0, 50)}"`],
   ["mcp__memory__remember", () => `🧠 Hafızaya kaydediyorum...`],
   ["mcp__memory__recall", (i) => `🧠 Hafızamı tarıyorum: "${i.query}"`],
   ["mcp__goals__create_goal", () => `🎯 Hedef oluşturuyorum...`],
@@ -43,6 +149,10 @@ const TOOL_STATUS_PATTERN: [string, StatusHandler][] = [
   ["gdrive_dirs", () => `📁 Google Drive'ı tarıyorum...`],
   ["gdrive_link", () => `📁 Google Drive dosya bilgisi alıyorum...`],
   ["gdrive_info", () => `📁 Google Drive dosya bilgisi alıyorum...`],
+  ["calendar_today", () => `📅 Bugünkü programa bakıyorum...`],
+  ["calendar_agenda", () => `📅 Takvime bakıyorum...`],
+  ["calendar_search", () => `🔍 Takvimde etkinlik arıyorum...`],
+  ["calendar_add", () => `📅 Takvime etkinlik ekliyorum...`],
   ["squad_codex", () => `🤖 Codex ile analiz yapıyorum...`],
   ["squad_gemini", () => `🤖 Gemini ile kod üretiyorum...`],
   ["squad_claude", () => `🤖 Claude Code ile görüşüyorum...`],
@@ -54,6 +164,11 @@ const TOOL_STATUS_PATTERN: [string, StatusHandler][] = [
   ["whatsapp_get_messages", () => `💬 WhatsApp mesajlarını okuyorum...`],
   ["whatsapp_get_chats", () => `💬 WhatsApp sohbetlerini listeliyorum...`],
   ["whatsapp_get_contacts", () => `📇 WhatsApp kişilerini arıyorum...`],
+  ["gmail_inbox", () => `📬 Gmail gelen kutusuna bakıyorum...`],
+  ["gmail_search", (i) => `🔍 Gmail'de arıyorum: "${(i.query as string || "").slice(0, 30)}"`],
+  ["gmail_read", () => `📧 Maili okuyorum...`],
+  ["gmail_send", (i) => `📤 Mail gönderiyorum: "${i.subject}"`],
+  ["gateway__call", (i) => `🔌 ${i.service || "?"}/${i.tool || "?"}`],
 ];
 
 export function getToolStatusMessage(name: string, input: Record<string, unknown>): string {
@@ -62,9 +177,9 @@ export function getToolStatusMessage(name: string, input: Record<string, unknown
   for (const [pattern, handler] of TOOL_STATUS_PATTERN) {
     if (name.includes(pattern)) return handler(input);
   }
-  // Silent: gateway management, telegram (avoid loops), SDK internals
+  // Silent: gateway management (not call), telegram (avoid loops), SDK internals
   if (
-    name.includes("gateway__") ||
+    (name.includes("gateway__") && !name.includes("gateway__call")) ||
     name.startsWith("telegram_") ||
     name.startsWith("mcp__telegram_") ||
     name === "AskUserQuestion" ||
@@ -82,8 +197,9 @@ export function createPreToolUseHooks(params: {
   toolsUsed: string[];
   traceId?: string;
   permissionMode: string;
+  notifier: ToolStreamNotifier;
 }) {
-  const { userId, toolsUsed, traceId, permissionMode } = params;
+  const { userId, toolsUsed, traceId, permissionMode, notifier } = params;
 
   return [
     {
@@ -110,18 +226,14 @@ export function createPreToolUseHooks(params: {
             }
           }
 
-          // Send status message to Telegram
+          // Stream status to single Telegram message
           try {
             const statusMessage = getToolStatusMessage(toolName, toolInput);
             if (statusMessage) {
-              const bot = getTelegramBot();
-              if (bot && bot.api) {
-                await bot.api.sendMessage(userId, statusMessage);
-              }
+              await notifier.append(statusMessage);
             }
           } catch (error) {
-            // Silently fail - don't interrupt main flow
-            console.error("[Cortex] Failed to send status message:", error);
+            console.error("[Cortex] Failed to append status:", error);
           }
 
           // User's permission mode or fallback to global config
@@ -165,90 +277,4 @@ export function createPreToolUseHooks(params: {
       ],
     },
   ];
-}
-
-/**
- * Create PreCompact hook — flush notable facts to memory before context compaction
- */
-export function createPreCompactHook(userId: number) {
-  return [{
-    hooks: [async (raw: unknown) => {
-      try {
-        await flushMemoryBeforeCompact(userId);
-      } catch (err) {
-        console.error('[PreCompact] Memory flush failed:', err);
-      }
-      return { continue: true };
-    }]
-  }];
-}
-
-async function flushMemoryBeforeCompact(userId: number) {
-  if (!isHaikuAvailable()) return;
-
-  const userDb = await userManager.getUserDb(userId);
-  const userMemory = new UserMemory(userDb);
-  const history = userMemory.getHistory(10);
-
-  if (history.length < 3) return;
-
-  const userFolder = userManager.getUserFolder(userId);
-  const smartMemory = new SmartMemory(userFolder, userId);
-
-  try {
-    const conversationText = history
-      .map(m => `${m.role}: ${m.content.slice(0, 300)}`)
-      .join("\n");
-
-    const { GoogleGenerativeAI } = await import("@google/generative-ai");
-    const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY || process.env.GEMINI_API_KEY || "");
-    const model = genAI.getGenerativeModel({
-      model: "gemini-3-flash-preview",
-      generationConfig: { maxOutputTokens: 400 },
-      systemInstruction: "Konuşmadan kalıcı değerli bilgileri çıkar. Her bilgiyi ayrı satırda yaz. Geçici/selamlama bilgilerini ATLA. Sadece bilgi satırları yaz, başka bir şey yazma. Bilgi yoksa BOŞ yaz.",
-    });
-
-    const prompt = `Bu konuşmadan kullanıcı hakkında kalıcı değerli bilgileri (tercihler, kişisel bilgi, öğrenilmiş şeyler, kararlar) çıkar:
-
-${conversationText}
-
-Bilgiler (her satırda bir tane):`;
-
-    const TIMEOUT_MS = 15_000;
-    let timeoutId: ReturnType<typeof setTimeout>;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error("[PreCompact] Gemini timed out")), TIMEOUT_MS);
-    });
-
-    const result = await Promise.race([
-      model.generateContent(prompt),
-      timeoutPromise,
-    ]).finally(() => clearTimeout(timeoutId!));
-
-    const text = result.response.text().trim();
-    if (!text || text === "BOŞ" || text.length < 10) return;
-
-    const facts = text.split("\n")
-      .map(line => line.replace(/^[-•*]\s*/, "").trim())
-      .filter(line => line.length > 10 && line.length < 500);
-
-    let stored = 0;
-    for (const fact of facts.slice(0, 5)) {
-      try {
-        await smartMemory.store({
-          type: "semantic",
-          content: fact,
-          importance: 0.6,
-          source: "pre-compact-flush",
-        });
-        stored++;
-      } catch {}
-    }
-
-    if (stored > 0) {
-      console.log(`[PreCompact] Flushed ${stored} facts to memory for user ${userId}`);
-    }
-  } finally {
-    smartMemory.close();
-  }
 }

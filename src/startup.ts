@@ -21,10 +21,11 @@ import { startWebServer, stopWebServer } from "./web/server.ts";
 import { initEventStore } from "./brain/event-store.ts";
 import { startProjectionScheduler, stopProjectionScheduler } from "./brain/projections.ts";
 import { userManager } from "./services/user-manager.ts";
-import { join } from "node:path";
 
 // Stem
 import { Stem } from "./stem/stem.ts";
+import { stemRef } from "./services/stem-ref.ts";
+import { initInbox } from "./services/inbox.ts";
 
 console.log(`
    ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗███╗   ██╗
@@ -38,7 +39,7 @@ console.log(`
   Base: ${config.COBRAIN_BASE_PATH}
   Mode: ${config.USE_AGENT_SDK ? "Agent SDK" : "CLI (tmux)"}
   Autonomous: ${config.ENABLE_AUTONOMOUS ? "Enabled" : "Disabled"}
-  Stem: ${config.FF_SENTINEL ? `Enabled (${config.SENTINEL_MODEL})` : "Disabled"}
+  Stem: ${config.FF_STEM ? `Enabled (${config.STEM_MODEL})` : "Disabled"}
   Web UI: ${config.ENABLE_WEB_UI ? `Enabled (port ${config.WEB_PORT})` : "Disabled"}
 `);
 
@@ -82,15 +83,16 @@ if (config.ENABLE_WEB_UI) {
   startWebServer();
 }
 
-// Stem instance (created outside setTimeout so it's available for shutdown)
-let stem: Stem | null = null;
-
 // Initialize proactive features after bot starts
 if (config.ENABLE_AUTONOMOUS) {
   // Wait a bit for bot to be ready
   setTimeout(async () => {
     // Load expectations
     await expectations.load();
+
+    // Load inbox
+    const userFolder = userManager.getUserFolder(config.MY_TELEGRAM_ID);
+    await initInbox(userFolder);
 
     // Start periodic expectation cleanup
     setInterval(() => {
@@ -104,19 +106,16 @@ if (config.ENABLE_AUTONOMOUS) {
       console.log("[Autonomous] Minimal autonomy mode: proactive infra disabled");
     }
 
-    // Create and start Stem
-    if (config.FF_SENTINEL) {
-      const userFolder = userManager.getUserFolder(config.MY_TELEGRAM_ID);
-      stem = new Stem({
-        model: config.SENTINEL_MODEL,
-        notebookPath: join(userFolder, "stem-notebook.md"),
-        maxTurns: config.SENTINEL_MAX_TURNS,
-        consolidationThreshold: config.SENTINEL_CONSOLIDATION_THRESHOLD,
-        maxWakesPerHour: config.SENTINEL_MAX_WAKES_PER_HOUR,
+    // Create Stem triage classifier
+    if (config.FF_STEM) {
+      const stem = new Stem({
+        model: config.STEM_MODEL,
+        maxWakesPerHour: config.STEM_MAX_WAKES_PER_HOUR,
         userId: config.MY_TELEGRAM_ID,
+        userFolder,
       });
-      await stem.start(bot);
-      console.log("[Startup] Stem started");
+      stemRef.set(stem);
+      console.log("[Startup] Stem initialized");
     }
 
     // Start BrainLoop (events routed directly to Cortex)
@@ -129,9 +128,6 @@ const shutdown = async () => {
   console.log("\nKapatılıyor...");
 
   await brainLoop.stop();
-  if (stem) {
-    await stem.stop();
-  }
   stopProjectionScheduler();
 
   if (config.ENABLE_AUTONOMOUS && !config.MINIMAL_AUTONOMY) {

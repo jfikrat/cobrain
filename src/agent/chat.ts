@@ -13,17 +13,15 @@ import { userManager } from "../services/user-manager.ts";
 import { heartbeat } from "../services/heartbeat.ts";
 import { readMindFiles, buildMdSystemPrompt, type DynamicContext } from "./prompts.ts";
 import { getMoodTrackingService } from "../services/mood-tracking.ts";
-import { SmartMemory } from "../memory/smart-memory.ts";
+import { FileMemory } from "../memory/file-memory.ts";
 import { getSessionState, updateSessionState, detectTopic, detectPhase } from "../services/session-state.ts";
 import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
-import type { MemorySearchResult } from "../types/memory.ts";
-import type { MemoryEntry } from "../types/memory.ts";
 
 // Split modules
-import { getMemoryServer, getTelegramMcpServer, getGoalsServer, getMoodServer, getLocationServer, getTimeServer } from "./mcp-servers.ts";
+import { getMemoryServer, getTelegramMcpServer, getGoalsServer, getMoodServer, getLocationServer, getTimeServer, getCalendarServer, getGmailServer } from "./mcp-servers.ts";
 import { extractTextContent, buildMessageContent, type MultimodalMessage } from "./message-builder.ts";
-import { createPreToolUseHooks, createPreCompactHook } from "./hooks.ts";
+import { createPreToolUseHooks, ToolStreamNotifier } from "./hooks.ts";
 
 // Re-export types from message-builder for backwards compatibility
 export type { MultimodalMessage, ImageContent, TextContent, MessageContent } from "./message-builder.ts";
@@ -37,6 +35,7 @@ export interface ChatResponse {
   numTurns: number;
   toolsUsed: string[];
   model: string;
+  stopReason: string | null;
 }
 
 // Session ID cache per user
@@ -106,11 +105,20 @@ export function chat(
   return current;
 }
 
+const RETRYABLE_PATTERNS = ["Internal server error", "overloaded", "rate limit", "529", "500"];
+const MAX_RETRIES = 3;
+const RETRY_DELAYS_MS = [1000, 3000, 8000];
+
+function isRetryableError(message: string): boolean {
+  return RETRYABLE_PATTERNS.some((p) => message.toLowerCase().includes(p.toLowerCase()));
+}
+
 async function _executeChat(
   userId: number,
   message: string | MultimodalMessage,
   traceId?: string,
   modelOverride?: string,
+  attempt = 1,
 ): Promise<ChatResponse> {
   activeThinking.add(userId);
   try {
@@ -136,40 +144,30 @@ async function _executeChat(
     }
   } catch {}
 
-  // Token budget: max 5 memories, query-relevant + importance, deduplicated
+  // Load recent memories from file-based system
   let recentMemories: string[] = [];
+  const queryText = typeof message === 'string' ? message : (message as any).text || '';
+
   try {
-    const memory = new SmartMemory(userFolder, userId);
-    const now = Date.now();
+    const fileMemory = new FileMemory(userFolder);
+    const q = queryText.toLowerCase();
 
-    // Query-relevant memories (hybrid search)
-    const queryText = typeof message === 'string' ? message : (message as any).text || '';
-    let queryRelevant: MemorySearchResult[] = [];
-    try {
-      queryRelevant = await memory.search(queryText, { limit: 3, minScore: 0.3 });
-    } catch {}
+    const facts = await fileMemory.readFacts();
+    const events = await fileMemory.readRecentEvents(30);
 
-    // Importance-based (reduced)
-    const important = memory.getByImportance(2, 0.7);
+    // Simple relevance: lines containing query keywords
+    const keywords = q.split(/\s+/).filter((w: string) => w.length > 2);
+    const allLines = [...facts.split("\n"), ...events.split("\n")];
+    const relevant = keywords.length > 0
+      ? allLines.filter(l => keywords.some((k: string) => l.toLowerCase().includes(k)) && l.trim() && !l.startsWith("#"))
+      : [];
 
-    // Merge + deduplicate by id, cap at 5
-    const seenIds = new Set<number>();
-    const merged: MemoryEntry[] = [];
-    for (const entry of [...queryRelevant, ...important]) {
-      if (seenIds.has(entry.id)) continue;
-      seenIds.add(entry.id);
-      merged.push(entry);
-      if (merged.length >= 5) break;
+    // Fallback: just include facts if no relevant lines
+    if (relevant.length === 0 && facts.trim()) {
+      recentMemories = [facts.slice(0, 400)];
+    } else {
+      recentMemories = deduplicateMemories(relevant.slice(0, 5).map(l => l.trim()));
     }
-
-    // Format with recency & importance labels
-    recentMemories = deduplicateMemories(
-      merged.map(e => {
-        const daysAgo = Math.floor((now - new Date(e.createdAt).getTime()) / (1000 * 60 * 60 * 24));
-        return `[${daysAgo}d ago, imp=${e.importance.toFixed(1)}] ${truncate(e.content, 180)}`;
-      })
-    );
-    memory.close();
   } catch {}
 
   // Session state for continuity
@@ -218,14 +216,16 @@ async function _executeChat(
   // Get or resume session (checks in-memory cache, then DB with TTL)
   const existingSessionId = await getOrResumeSession(userId);
 
-  // Track tools used
+  // Track tools used + streaming notifier
   const toolsUsed: string[] = [];
+  const notifier = new ToolStreamNotifier(userId);
   let lastAssistantContent = "";
   let sessionId = "";
   let totalCost = 0;
   let inputTokens = 0;
   let outputTokens = 0;
   let numTurns = 0;
+  let stopReason: string | null = null;
 
   // Build the message content (text or multimodal)
   const messageContent = buildMessageContent(message);
@@ -258,8 +258,8 @@ async function _executeChat(
         toolsUsed,
         traceId,
         permissionMode: settings.permissionMode || config.PERMISSION_MODE,
+        notifier,
       }),
-      ...(config.MINIMAL_AUTONOMY ? {} : { PreCompact: createPreCompactHook(userId) }),
     };
 
     const subAgents = config.MINIMAL_AUTONOMY
@@ -275,9 +275,9 @@ async function _executeChat(
             description: "Uzun metinleri özetler ve analiz eder. Makale, döküman, konuşma özeti için kullan.",
             prompt: "Sen Cortex'in dil ve anlam sub-agent'ısın (Wernicke). Verilen metni kısa, öz ve anlaşılır şekilde özetle. Önemli noktaları vurgula. Türkçe yanıt ver.",
           },
-          hippocampus: {
+          mneme: {
             description: "Kullanıcının hafızasında arama ve analiz yapar. Geçmiş konuşmalar, kaydedilen bilgiler için kullan.",
-            prompt: "Sen Cortex'in hafıza sub-agent'ısın (Hippocampus). Kullanıcının hafızasında detaylı arama yap, ilgili bilgileri bul ve özetle. Türkçe yanıt ver.",
+            prompt: "Sen Cortex'in hafıza sub-agent'ısın (Mneme). Kullanıcının hafızasında detaylı arama yap, ilgili bilgileri bul ve özetle. Türkçe yanıt ver.",
             tools: ["mcp__memory__recall", "mcp__memory__memory_stats"],
           },
         };
@@ -313,6 +313,8 @@ async function _executeChat(
           time: getTimeServer(),
           mood: getMoodServer(userId),
           location: getLocationServer(userId),
+          calendar: getCalendarServer(),
+          gmail: getGmailServer(userId),
           // Gateway - helm, squad, whatsapp via single MCP gateway
           gateway: {
             type: "stdio" as const,
@@ -328,6 +330,7 @@ async function _executeChat(
 
         // Limit turns to prevent runaway
         maxTurns: config.MAX_AGENT_TURNS,
+
       },
     });
 
@@ -356,6 +359,7 @@ async function _executeChat(
 
         case "result":
           const result = msg as SDKResultMessage;
+          stopReason = result.stop_reason ?? null;
           if (result.subtype === "success") {
             totalCost = result.total_cost_usd;
             inputTokens = result.usage.input_tokens;
@@ -368,7 +372,7 @@ async function _executeChat(
             }
           } else {
             // Error case
-            console.error(`[Cortex] Error: ${result.subtype}`, (result as any).errors);
+            console.error(`[Cortex] Error: ${result.subtype} (stop: ${stopReason})`, (result as any).errors);
             if (!lastAssistantContent) {
               lastAssistantContent = `Bir hata oluştu: ${result.subtype}`;
             }
@@ -378,8 +382,12 @@ async function _executeChat(
     }
 
     console.log(
-      `[Cortex] Completed: ${numTurns} turns, ${toolsUsed.length} tools, $${totalCost.toFixed(4)}`
+      `[Cortex] Completed: ${numTurns} turns, ${toolsUsed.length} tools, $${totalCost.toFixed(4)}` +
+      (stopReason && stopReason !== "end_turn" ? ` [stop: ${stopReason}]` : "")
     );
+
+    // Finalize streaming notification
+    await notifier.complete({ cost: totalCost, stopReason });
 
     // Heartbeat: agent completed successfully
     heartbeat("ai_agent", { event: "completed", turns: numTurns, tools: toolsUsed.length, cost: totalCost });
@@ -412,6 +420,7 @@ async function _executeChat(
       numTurns,
       toolsUsed: [...new Set(toolsUsed)], // Unique tools
       model: actualModel,
+      stopReason,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -426,10 +435,22 @@ async function _executeChat(
         const mem = new UserMemory(userDb);
         mem.clearSession();
       } catch {}
-      return _executeChat(userId, message, traceId, modelOverride);
+      return _executeChat(userId, message, traceId, modelOverride, attempt);
+    }
+
+    // Retry on transient API errors (500, overloaded, rate limit)
+    if (attempt <= MAX_RETRIES && isRetryableError(errorMessage)) {
+      const delay = RETRY_DELAYS_MS[attempt - 1] ?? 8000;
+      console.warn(`[Cortex] API error (attempt ${attempt}/${MAX_RETRIES}), retrying in ${delay}ms: ${errorMessage.slice(0, 80)}`);
+      await new Promise((r) => setTimeout(r, delay));
+      activeThinking.delete(userId);
+      return _executeChat(userId, message, traceId, modelOverride, attempt + 1);
     }
 
     console.error("[Cortex] Chat error:", error);
+
+    // Finalize streaming notification with error
+    await notifier.complete({ error: errorMessage });
 
     // Clear session on error to start fresh next time
     userSessions.delete(userId);

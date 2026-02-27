@@ -1,4 +1,4 @@
-import { Bot } from "grammy";
+import { Bot, InlineKeyboard } from "grammy";
 import { run } from "@grammyjs/runner";
 import { config } from "../config.ts";
 import { heartbeat } from "../services/heartbeat.ts";
@@ -26,6 +26,31 @@ import { generateSessionToken } from "../web/auth.ts";
 import { transcribeAudio, downloadTelegramFile, downloadTelegramFileAsBuffer } from "../services/transcribe.ts";
 import { initTelegramMcp } from "../agent/tools/telegram.ts";
 import { UserMemory } from "../memory/sqlite.ts";
+
+/** Parse <suggestions> block from response, return clean text + suggestions */
+function parseSuggestions(content: string): { text: string; suggestions: string[] } {
+  const match = content.match(/<suggestions>\n?([\s\S]*?)\n?<\/suggestions>\s*$/);
+  if (!match) return { text: content, suggestions: [] };
+
+  const text = content.replace(/<suggestions>[\s\S]*?<\/suggestions>\s*$/, '').trimEnd();
+  const suggestions = match[1]!
+    .split('\n')
+    .map(s => s.trim())
+    .filter(s => s.length > 0 && s.length <= 40)
+    .slice(0, 3);
+
+  return { text, suggestions };
+}
+
+/** Build inline keyboard from suggestion strings */
+function buildSuggestionKeyboard(suggestions: string[]): InlineKeyboard | undefined {
+  if (suggestions.length === 0) return undefined;
+  const kb = new InlineKeyboard();
+  for (const s of suggestions) {
+    kb.text(s, s).row();
+  }
+  return kb;
+}
 
 const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
@@ -755,9 +780,25 @@ bot.callbackQuery(/.+/, async (ctx) => {
 
   recordInteraction(userId);
 
+  // Seçimi kullanıcı mesajı gibi göster
+  await ctx.reply(`💬 ${data}`);
+
+  await ctx.replyWithChatAction("typing");
+
   const response = await think(userId, data);
   if (response.content) {
-    await ctx.reply(response.content, { parse_mode: "HTML" });
+    const { text: cleanContent, suggestions } = parseSuggestions(response.content);
+    const replyMarkup = buildSuggestionKeyboard(suggestions);
+    try {
+      await ctx.reply(cleanContent, {
+        parse_mode: "HTML",
+        ...(replyMarkup && { reply_markup: replyMarkup }),
+      });
+    } catch {
+      await ctx.reply(cleanContent, {
+        ...(replyMarkup && { reply_markup: replyMarkup }),
+      });
+    }
   }
 });
 
@@ -804,15 +845,30 @@ bot.on("message:voice", async (ctx) => {
 
     // Process transcribed text as normal message
     await ctx.replyWithChatAction("typing");
-    const response = await think(userId, transcript);
+    const voiceTypingInterval = setInterval(() => {
+      ctx.replyWithChatAction("typing").catch(() => {});
+    }, 4000);
+    let response;
+    try {
+      response = await think(userId, transcript);
+    } finally {
+      clearInterval(voiceTypingInterval);
+    }
 
-    // Show transcript and response
-    const message = `🎤 <i>${transcript}</i>\n\n${response.content}`;
+    // Show transcript and response (with suggestion buttons)
+    const { text: cleanVoice, suggestions: voiceSuggestions } = parseSuggestions(response.content);
+    const voiceKeyboard = buildSuggestionKeyboard(voiceSuggestions);
+    const message = `🎤 <i>${transcript}</i>\n\n${cleanVoice}`;
 
     try {
-      await ctx.reply(message, { parse_mode: "HTML" });
+      await ctx.reply(message, {
+        parse_mode: "HTML",
+        ...(voiceKeyboard && { reply_markup: voiceKeyboard }),
+      });
     } catch {
-      await ctx.reply(`🎤 ${transcript}\n\n${response.content}`);
+      await ctx.reply(`🎤 ${transcript}\n\n${cleanVoice}`, {
+        ...(voiceKeyboard && { reply_markup: voiceKeyboard }),
+      });
     }
 
     console.log(
@@ -898,7 +954,18 @@ bot.on("message:photo", async (ctx) => {
       await bot.api.deleteMessage(userId, processingMsg.message_id);
     } catch {}
 
-    await ctx.reply(response.content, { parse_mode: "HTML" });
+    const { text: cleanPhoto, suggestions: photoSuggestions } = parseSuggestions(response.content);
+    const photoKeyboard = buildSuggestionKeyboard(photoSuggestions);
+    try {
+      await ctx.reply(cleanPhoto, {
+        parse_mode: "HTML",
+        ...(photoKeyboard && { reply_markup: photoKeyboard }),
+      });
+    } catch {
+      await ctx.reply(cleanPhoto, {
+        ...(photoKeyboard && { reply_markup: photoKeyboard }),
+      });
+    }
 
   } catch (error) {
     console.error("Photo handler error:", error);
@@ -1026,18 +1093,31 @@ bot.on("message:text", async (ctx) => {
   }
 
   // ============ NORMAL AI SOHBET ============
+  // Cortex çalışırken sürekli "typing" göster (her 4s yenile)
   await ctx.replyWithChatAction("typing");
+  const typingInterval = setInterval(() => {
+    ctx.replyWithChatAction("typing").catch(() => {});
+  }, 4000);
 
   try {
     const response = await think(userId, text);
+    clearInterval(typingInterval);
+
+    const { text: cleanContent, suggestions } = parseSuggestions(response.content);
+    const replyMarkup = buildSuggestionKeyboard(suggestions);
 
     // Try Markdown first, fallback to plain text if parsing fails
     try {
-      await ctx.reply(response.content, { parse_mode: "Markdown" });
+      await ctx.reply(cleanContent, {
+        parse_mode: "Markdown",
+        ...(replyMarkup && { reply_markup: replyMarkup }),
+      });
     } catch (markdownError) {
       // Markdown parsing failed (tables, unclosed entities, etc.)
       console.warn("[Telegram] Markdown parse failed, sending as plain text");
-      await ctx.reply(response.content);
+      await ctx.reply(cleanContent, {
+        ...(replyMarkup && { reply_markup: replyMarkup }),
+      });
     }
 
     console.log(
@@ -1052,6 +1132,7 @@ bot.on("message:text", async (ctx) => {
       console.warn("[Telegram] Mood extraction failed:", err);
     });
   } catch (error) {
+    clearInterval(typingInterval);
     console.error("Chat hatası:", error);
     const errorMessage = error instanceof Error ? error.message : "Bilinmeyen hata";
     await ctx.reply(`❌ Hata: ${errorMessage}`);
@@ -1128,17 +1209,23 @@ export async function startBot(): Promise<void> {
   }
 
   // Startup notification - agent'a sistem mesajı gönder (son konuşma özeti ile)
+  // Clear session first so startup doesn't resume old "cobrain-restart" session
   const userId = config.MY_TELEGRAM_ID;
   console.log(`[Startup] Sending restart notification to user ${userId}`);
-  getStartupContext(userId)
+  clearSession(userId)
+    .then(() => getStartupContext(userId))
     .then((contextSummary) => {
       const contextPart = contextSummary ? `\n\nSon konuşma özeti:\n${contextSummary}` : "";
-      const startupMsg = `[SYSTEM] Bot yeniden başlatıldı.${contextPart}\n\nŞimdi sırayla şunları yap:\n1. list_reminders() çağır — bekleyen hatırlatıcıları al\n2. list_goals() çağır — aktif hedefleri al\n3. recall("son bağlam güncel durum") çağır — hafızandan son durumu al\n4. Telegram'a kısa özet gönder (max 5 satır): geri döndüğünü bildir, önemli bekleyen şeyler varsa listele`;
+      const startupMsg = `[SYSTEM] Bot yeniden başlatıldı.${contextPart}\n\nÖNEMLİ: Bu bir startup mesajıdır. cobrain-restart veya herhangi bir restart komutu ÇALIŞTIRMA.\n\nŞimdi sırayla şunları yap:\n1. list_reminders() çağır — bekleyen hatırlatıcıları al\n2. list_goals() çağır — aktif hedefleri al\n3. recall("son bağlam güncel durum") çağır — hafızandan son durumu al\n4. Telegram'a kısa özet gönder (max 5 satır): geri döndüğünü bildir, önemli bekleyen şeyler varsa listele`;
       return think(userId, startupMsg);
     })
     .then((response) => {
       console.log(`[Startup] Agent response: ${response.content.slice(0, 50)}...`);
-      bot.api.sendMessage(userId, response.content)
+      const { text: startupText, suggestions: startupSuggestions } = parseSuggestions(response.content);
+      const startupKeyboard = buildSuggestionKeyboard(startupSuggestions);
+      bot.api.sendMessage(userId, startupText, {
+        ...(startupKeyboard && { reply_markup: startupKeyboard }),
+      })
         .then(() => console.log(`[Startup] Message sent`))
         .catch((err) => console.error(`[Startup] Failed to send message:`, err));
     })
@@ -1158,6 +1245,7 @@ async function getStartupContext(userId: number): Promise<string | null> {
     if (history.length === 0) return null;
 
     return history
+      .filter((m) => !m.content.toLowerCase().includes("cobrain-restart"))
       .map((m) => `${m.role === "user" ? "Kullanıcı" : "Cobrain"}: ${m.content.slice(0, 150)}`)
       .join("\n");
   } catch {

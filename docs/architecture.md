@@ -78,10 +78,8 @@ src/
 │   └── telegram.ts          # Telegram bot (grammy)
 │
 ├── memory/                  # Memory subsystem
-│   ├── smart-memory.ts      # Semantic memory layer
-│   ├── sqlite.ts            # SQLite persistence
-│   ├── embeddings.ts        # Ollama embeddings
-│   └── vector-memory.ts     # sqlite-vec vector search
+│   ├── sqlite.ts            # SQLite persistence (message history, sessions)
+│   └── file-memory.ts       # Markdown-based long-term memory (facts.md + events.md)
 │
 ├── services/                # Business logic
 │   ├── persona.ts           # Persona management
@@ -93,12 +91,10 @@ src/
 │   ├── proactive.ts         # Autonomous orchestration
 │   ├── whatsapp.ts          # WhatsApp client (Baileys)
 │   ├── whatsapp-db.ts       # WhatsApp persistence
-│   ├── cerebras.ts          # Cerebras LLM client
 │   └── notifier.ts          # Telegram notifications
 │
 ├── types/                   # TypeScript interfaces
 │   ├── index.ts             # Central re-export
-│   ├── memory.ts            # Memory types
 │   ├── persona.ts           # Persona interfaces
 │   ├── autonomous.ts        # Goals, reminders, tasks
 │   └── user.ts              # User profile types
@@ -160,10 +156,8 @@ User Input → Channel → Brain → Agent SDK → Claude API
 | Runtime | Bun v1.3.5+ | Fast JavaScript runtime |
 | Language | TypeScript 5 | Type-safe development |
 | LLM | Claude (Agent SDK) | Primary AI model |
-| LLM (Optional) | Cerebras | Memory ranking/extraction |
-| Embeddings | Ollama | Local vector embeddings |
 | Database | SQLite (bun:sqlite) | Persistent storage |
-| Vector Search | sqlite-vec | Semantic similarity |
+| Long-term Memory | FileMemory (Markdown) | facts.md + events.md |
 | Telegram | grammy + runner | Bot framework |
 | WhatsApp | Baileys | Unofficial WA client |
 | HTTP/WS | Bun.serve | Built-in web server |
