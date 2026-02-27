@@ -102,12 +102,14 @@ export function startWebServer(): void {
             return Response.json({ error: "message required" }, { status: 400 });
           }
 
+          // Mirror API question to Telegram BEFORE processing (so it appears above the response)
+          const userId = config.MY_TELEGRAM_ID;
+          bot.api.sendMessage(userId, `📡 *API:* ${message}`, { parse_mode: "Markdown" }).catch(() => {});
+
           const response = await chat(config.MY_TELEGRAM_ID, message, undefined, model);
 
-          // Mirror to Telegram (fire-and-forget, strip suggestions)
-          const userId = config.MY_TELEGRAM_ID;
+          // Mirror response to Telegram (fire-and-forget, strip suggestions)
           const cleanMirror = response.content.replace(/<suggestions>[\s\S]*?<\/suggestions>\s*$/, '').trimEnd();
-          bot.api.sendMessage(userId, `📡 *API:* ${message}`, { parse_mode: "Markdown" }).catch(() => {});
           bot.api.sendMessage(userId, cleanMirror).catch(() => {});
 
           return Response.json(response);
