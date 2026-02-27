@@ -774,6 +774,11 @@ bot.callbackQuery(/.+/, async (ctx) => {
 
   recordInteraction(userId);
 
+  // Seçimi kullanıcı mesajı gibi göster
+  await ctx.reply(`💬 ${data}`);
+
+  await ctx.replyWithChatAction("typing");
+
   const response = await think(userId, data);
   if (response.content) {
     const { text: cleanContent, suggestions } = parseSuggestions(response.content);
