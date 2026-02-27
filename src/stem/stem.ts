@@ -105,8 +105,17 @@ function formatEventMessage(event: StemEvent): string {
       const senderName = (p.senderName as string) || "Bilinmeyen";
       const messages =
         (p.messages as Array<{ content?: string; message_type?: string }>) || [];
+      const history =
+        (p.conversationHistory as Array<{ content: string; direction: string }>) || [];
       const chatJid = (p.chatJid as string) || "";
-      const msgText = messages
+
+      const historyText = history.length > 0
+        ? `[SON ${history.length} MESAJ — Bağlam]\n${history
+            .map((m) => `${m.direction === "outgoing" ? "Cobrain" : senderName}: ${m.content.slice(0, 150)}`)
+            .join("\n")}\n\n`
+        : "";
+
+      const newMsgText = messages
         .map((m) => {
           const typeLabel =
             m.message_type && m.message_type !== "text"
@@ -115,7 +124,8 @@ function formatEventMessage(event: StemEvent): string {
           return `${typeLabel}${(m.content || "").slice(0, 300)}`;
         })
         .join("\n");
-      return `[${time}] WhatsApp DM — ${senderName} (${chatJid}):\n${msgText}`;
+
+      return `[${time}] WhatsApp DM — ${senderName} (${chatJid}):\n${historyText}[YENİ MESAJLAR]\n${newMsgText}`;
     }
 
     case "whatsapp_group": {

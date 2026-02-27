@@ -26,6 +26,7 @@ import { mneme } from "../mneme/mneme.ts";
 import { stemRef } from "./stem-ref.ts";
 import { inbox } from "./inbox.ts";
 import { markReplied, wasRecentlyReplied } from "./reply-dedup.ts";
+import { waMailbox } from "./wa-mailbox.ts";
 import type { TriageDecision, StemEvent } from "../stem/types.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -68,6 +69,7 @@ async function executeTriageDecision(
       if (decision.reply && chatJid && !wasRecentlyReplied(chatJid)) {
         whatsappDB.addToOutbox(chatJid, decision.reply);
         markReplied(chatJid);
+        waMailbox.addOutgoing(chatJid, decision.reply);
         console.log(`[Stem] reply → ${senderName}: "${decision.reply.slice(0, 60)}"`);
       }
       break;
@@ -347,17 +349,21 @@ class BrainLoop {
 
           const stem = stemRef.get();
           if (stem) {
+            const incomingMsgs = msgs.map(m => ({ content: m.content || "[medya]", message_type: m.message_type || "text" }));
+            waMailbox.push(chatJid, senderName, incomingMsgs);
             const event: StemEvent = {
               type: "whatsapp_dm",
               payload: {
                 chatJid,
                 senderName,
-                messages: msgs.map(m => ({ content: m.content || "[medya]", message_type: m.message_type || "text" })),
+                messages: incomingMsgs,
+                conversationHistory: waMailbox.getHistory(chatJid),
               },
               timestamp: Date.now(),
             };
             const decision = await stem.triage(event);
             console.log(`[BrainLoop] WA DM → Stem: ${senderName} → ${decision.action}`);
+            waMailbox.markProcessed(chatJid);
 
             if (this.bot) await executeTriageDecision(decision, event, this.bot);
 
