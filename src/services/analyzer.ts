@@ -1,4 +1,5 @@
-import { chatOneShot } from "../brain/claude.ts";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { config } from "../config.ts";
 import type { PendingMessage } from "./whatsapp.ts";
 
 export interface MessageAnalysis {
@@ -43,7 +44,17 @@ export async function analyzeMessages(messages: PendingMessage[]): Promise<Messa
   const prompt = `${ANALYSIS_PROMPT}\n\nBu mesajları analiz et:\n\n${messagesText}`;
 
   try {
-    const response = await chatOneShot(prompt);
+    const key = config.GEMINI_API_KEY || process.env.GEMINI_API_KEY || "";
+    if (!key) throw new Error("GEMINI_API_KEY not configured");
+
+    const genAI = new GoogleGenerativeAI(key);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3-flash-preview",
+      generationConfig: { maxOutputTokens: 1000 },
+    });
+
+    const result = await model.generateContent(prompt);
+    const response = result.response.text() || "";
 
     // JSON'u parse et
     const jsonMatch = response.match(/\[[\s\S]*\]/);

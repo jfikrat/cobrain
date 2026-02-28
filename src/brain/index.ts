@@ -1,30 +1,19 @@
 /**
  * Brain module - AI chat logic with per-user memory
- * Cobrain v0.3 - Agent SDK based (with CLI fallback)
+ * Cobrain v0.3 - Agent SDK based
  */
 
-import { ClaudeSessionManager, type ClaudeMessage } from "../services/claude-session.ts";
 import { UserMemory, type Message } from "../memory/sqlite.ts";
 import { isHaikuAvailable } from "../services/haiku.ts";
 import { userManager } from "../services/user-manager.ts";
 import { config } from "../config.ts";
-// Agent SDK imports
-import { chat as agentChat, clearSession as agentClearSession, closeAllMemories, type MultimodalMessage } from "../agent/index.ts";
+import { chat as agentChat, clearSession as agentClearSession, type MultimodalMessage } from "../agent/index.ts";
 
-// Phase 1: Event Brain + Router-lite
 import { generateTraceId } from "../types/brain-events.ts";
 import { getEventStore } from "./event-store.ts";
-import { routeLite } from "./router-lite.ts";
 
 // Session state persistence
 import { updateSessionState, detectPhase, detectTopic } from "../services/session-state.ts";
-
-// Initialize Claude Session Manager (tmux-based)
-// Uses per-user folders so each user gets their own CLAUDE.md context
-const claudeSessionManager = new ClaudeSessionManager(
-  process.env.COBRAIN_WORK_DIR || process.cwd(),
-  (userId: number) => userManager.getUserFolder(userId)
-);
 
 export interface ThinkResponse {
   content: string;
@@ -76,18 +65,8 @@ export async function think(userId: number, message: string | MultimodalMessage,
     });
   }
 
-  // Route decision: in minimal autonomy mode always use the primary model.
-  const route = config.MINIMAL_AUTONOMY
-    ? {
-        model: config.AGENT_MODEL,
-        level: "deep" as const,
-        reason: "minimal_autonomy",
-      }
-    : routeLite({
-        text: textMessage,
-        hasImage,
-        channel,
-      });
+  // Always use primary model
+  const route = { model: config.AGENT_MODEL, level: "deep" as const, reason: "primary" };
 
   if (eventStore) {
     eventStore.append({
@@ -99,26 +78,10 @@ export async function think(userId: number, message: string | MultimodalMessage,
     });
   }
 
-  // Model override only when FF_ROUTER_LITE is enabled, route has a real model,
-  // and query is fast or default tier. Deep (complex) stays on AGENT_MODEL.
-  const modelOverride =
-    !config.MINIMAL_AUTONOMY
-    && config.FF_ROUTER_LITE
-    && route.model !== "none"
-    && (route.level === "fast" || route.level === "default")
-      ? route.model
-      : undefined;
-
   try {
     let response: ThinkResponse;
 
-    // Use Agent SDK if enabled
-    if (config.USE_AGENT_SDK) {
-      response = await thinkWithAgentSDK(userId, message, traceId, modelOverride);
-    } else {
-      // Fallback to CLI mode (only supports text)
-      response = await thinkWithCLI(userId, textMessage);
-    }
+    response = await thinkWithAgentSDK(userId, message, traceId);
 
     // Event: completed
     if (eventStore) {
@@ -129,7 +92,7 @@ export async function think(userId: number, message: string | MultimodalMessage,
         actor: "agent",
         payload: {
           numTurns: response.historyLength,
-          model: modelOverride || config.AGENT_MODEL,
+          model: config.AGENT_MODEL,
           routeLevel: route.level,
         },
         inputTokens: response.inputTokens,
@@ -186,13 +149,12 @@ async function thinkWithAgentSDK(
   userId: number,
   message: string | MultimodalMessage,
   traceId?: string,
-  modelOverride?: string,
 ): Promise<ThinkResponse> {
   const hasImages = typeof message !== "string" && message.images && message.images.length > 0;
   const textMessage = typeof message === "string" ? message : message.text;
-  console.log(`[Brain] Using Agent SDK for user ${userId}${hasImages ? " (with images)" : ""}${modelOverride ? ` (model: ${modelOverride})` : ""}`);
+  console.log(`[Brain] Using Agent SDK for user ${userId}${hasImages ? " (with images)" : ""}`);
 
-  const response = await agentChat(userId, message, traceId, modelOverride);
+  const response = await agentChat(userId, message, traceId);
 
   // Save messages to database (like CLI mode does)
   try {
@@ -235,63 +197,10 @@ async function thinkWithAgentSDK(
 }
 
 /**
- * CLI based chat (legacy fallback)
- */
-async function thinkWithCLI(userId: number, message: string): Promise<ThinkResponse> {
-  const memory = await getUserMemory(userId);
-
-  // Get or create session ID for tracking
-  let sessionId = memory.getSessionId();
-  if (!sessionId) {
-    sessionId = crypto.randomUUID();
-    memory.setSession(sessionId);
-    console.log(`[Session] Yeni session oluşturuldu: ${sessionId.slice(0, 8)}... (user: ${userId})`);
-  }
-
-  // Call Claude via tmux session
-  const response = await claudeSessionManager.chat(userId, message);
-
-  // Save to per-user history
-  memory.addMessage("user", message, {
-    tokensIn: 0, // tmux mode doesn't track tokens
-    metadata: { memoriesUsed: 0 },
-  });
-
-  memory.addMessage("assistant", response.content, {
-    tokensOut: 0,
-    costUsd: 0,
-  });
-
-  memory.incrementSessionMessageCount();
-
-  const history = memory.getHistory(config.MAX_HISTORY);
-
-  return {
-    content: response.content,
-    inputTokens: 0,
-    outputTokens: 0,
-    costUsd: 0,
-    sessionId,
-    historyLength: history.length,
-    memoriesUsed: 0,
-  };
-}
-
-/**
  * Clear user's session and history
  */
 export async function clearSession(userId: number): Promise<void> {
-  if (config.USE_AGENT_SDK) {
-    agentClearSession(userId);
-  } else {
-    const memory = await getUserMemory(userId);
-    memory.clearSession();
-    memory.clearHistory();
-
-    // Also stop the Claude tmux session
-    await claudeSessionManager.stopSession(userId);
-  }
-
+  agentClearSession(userId);
   console.log(`[Session] Session temizlendi (user: ${userId})`);
 }
 
@@ -332,16 +241,6 @@ export async function isVectorMemoryAvailable(): Promise<boolean> {
  * Close all memory connections
  */
 export async function closeAll(): Promise<void> {
-  // Close Agent SDK memories
-  if (config.USE_AGENT_SDK) {
-    closeAllMemories();
-  }
-
-  // Stop all Claude tmux sessions (for CLI mode)
-  if (!config.USE_AGENT_SDK) {
-    await claudeSessionManager.stopAll();
-  }
-
   for (const memory of userMemories.values()) {
     memory.close();
   }
@@ -351,5 +250,5 @@ export async function closeAll(): Promise<void> {
 }
 
 // Re-exports
-export { userManager, claudeSessionManager };
-export type { Message, ClaudeMessage, MultimodalMessage };
+export { userManager };
+export type { Message, MultimodalMessage };

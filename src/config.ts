@@ -2,25 +2,6 @@ import { z } from "zod";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-function normalizeLegacyStemEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const normalized = { ...env };
-  const aliases: Array<[keyof NodeJS.ProcessEnv, keyof NodeJS.ProcessEnv]> = [
-    ["FF_STEM", "FF_SENTINEL"],
-    ["STEM_MODEL", "SENTINEL_MODEL"],
-    ["STEM_MAX_WAKES_PER_HOUR", "SENTINEL_MAX_WAKES_PER_HOUR"],
-  ];
-
-  for (const [canonical, legacy] of aliases) {
-    const canonicalValue = normalized[canonical];
-    const legacyValue = normalized[legacy];
-    if ((canonicalValue === undefined || canonicalValue === "") && legacyValue !== undefined && legacyValue !== "") {
-      normalized[canonical] = legacyValue;
-    }
-  }
-
-  return normalized;
-}
-
 const envSchema = z.object({
   // Core
   TELEGRAM_BOT_TOKEN: z.string().min(1, "Telegram bot token gerekli"),
@@ -79,11 +60,6 @@ const envSchema = z.object({
   FF_SESSION_STATE: z.coerce.boolean().default(true),
   FF_MEMORY_CONSOLIDATION: z.coerce.boolean().default(true),
 
-  // Model cascade (router-lite)
-  AGENT_MODEL_FAST: z.string().default("claude-sonnet-4-6"),
-  AGENT_MODEL_DEFAULT: z.string().default("claude-sonnet-4-6"),
-  // AGENT_MODEL is used as the "deep" path (now also Sonnet)
-
   // v0.7: Always-on heartbeat monitoring
   ENABLE_HEARTBEAT_MONITORING: z
     .string()
@@ -116,8 +92,6 @@ const envSchema = z.object({
   STEM_MODEL: z.string().default("claude-haiku-4-5-20251001"),
   STEM_MAX_WAKES_PER_HOUR: z.coerce.number().default(10),
 
-  // Legacy (kept for migration)
-  DB_PATH: z.string().default("./data/cobrain.db"),
 });
 
 // Type for safe config loading result
@@ -130,7 +104,7 @@ export type ConfigResult =
  * Returns success/error state for setup wizard
  */
 export function loadConfigSafe(): ConfigResult {
-  const result = envSchema.safeParse(normalizeLegacyStemEnv(process.env));
+  const result = envSchema.safeParse(process.env);
 
   if (!result.success) {
     return {

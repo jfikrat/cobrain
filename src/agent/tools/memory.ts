@@ -123,9 +123,6 @@ export function createMemoryServer(userId: number) {
   });
 }
 
-// Legacy export — no-op, kept for compatibility
-export function closeAllMemories(): void {}
-
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function inferSection(content: string, type: string): string {

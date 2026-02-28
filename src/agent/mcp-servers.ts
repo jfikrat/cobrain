@@ -12,6 +12,7 @@ import { createMoodServer } from "./tools/mood.ts";
 import { createLocationServer } from "./tools/location.ts";
 import { createCalendarServer } from "./tools/calendar.ts";
 import { createGmailServer } from "./tools/gmail.ts";
+import { createGDriveServer } from "./tools/gdrive.ts";
 
 // Per-user server caches
 const userMemoryServers = new Map<number, ReturnType<typeof createMemoryServer>>();
@@ -93,6 +94,16 @@ export function getGmailServer(userId: number) {
     userGmailServers.set(userId, server);
   }
   return server;
+}
+
+// Shared GDrive server
+let gdriveServer: ReturnType<typeof createGDriveServer> | null = null;
+
+export function getGDriveServer() {
+  if (!gdriveServer) {
+    gdriveServer = createGDriveServer();
+  }
+  return gdriveServer;
 }
 
 // Re-export getTimeServer for convenience

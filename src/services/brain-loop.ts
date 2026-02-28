@@ -126,7 +126,6 @@ const CODE_REVIEW_FILES = [
   "src/stem/stem.ts",
   "src/channels/telegram.ts",
   "src/agent/prompts.ts",
-  "src/brain/router-lite.ts",
   "src/brain/event-store.ts",
   "src/services/scheduler.ts",
   "src/services/task-queue.ts",

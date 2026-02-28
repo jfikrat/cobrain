@@ -230,5 +230,3 @@ Format: NUMARA:PUAN (her satırda bir tane)`;
 
   return results.sort((a, b) => b.score - a.score).slice(0, limit);
 }
-
-// WhatsApp classification removed — now handled by Stem (Haiku via Agent SDK)

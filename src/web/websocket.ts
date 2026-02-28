@@ -12,11 +12,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { userManager } from "../services/user-manager.ts";
 import { generatePersonaSystemPrompt } from "../agent/prompts.ts";
-import { createMemoryServer } from "../agent/tools/memory.ts";
-import { createGDriveServer } from "../agent/tools/gdrive.ts";
-import { createGoalsServer } from "../agent/tools/goals.ts";
-import { createPersonaServer } from "../agent/tools/persona.ts";
-import { createTelegramServer } from "../agent/tools/telegram.ts";
+import { getMemoryServer, getGoalsServer, getPersonaServer, getGDriveServer, getTelegramMcpServer } from "../agent/mcp-servers.ts";
 import { getPersonaService } from "../services/persona.ts";
 import { needsPermission, type PermissionMode } from "../agent/permissions.ts";
 import { config } from "../config.ts";
@@ -199,55 +195,6 @@ type ServerMessage =
   | ConversationCreatedMessage
   | ConversationDeletedMessage
   | NotificationMessage;
-
-// ============ MCP Server Cache ============
-
-const userMemoryServers = new Map<number, ReturnType<typeof createMemoryServer>>();
-const userGoalsServers = new Map<number, ReturnType<typeof createGoalsServer>>();
-const userPersonaServers = new Map<number, ReturnType<typeof createPersonaServer>>();
-let gdriveServer: ReturnType<typeof createGDriveServer> | null = null;
-let telegramServer: ReturnType<typeof createTelegramServer> | null = null;
-
-function getMemoryServer(userId: number) {
-  let server = userMemoryServers.get(userId);
-  if (!server) {
-    server = createMemoryServer(userId);
-    userMemoryServers.set(userId, server);
-  }
-  return server;
-}
-
-function getGDriveServer() {
-  if (!gdriveServer) {
-    gdriveServer = createGDriveServer();
-  }
-  return gdriveServer;
-}
-
-function getTelegramServer() {
-  if (!telegramServer) {
-    telegramServer = createTelegramServer();
-  }
-  return telegramServer;
-}
-
-function getGoalsServer(userId: number) {
-  let server = userGoalsServers.get(userId);
-  if (!server) {
-    server = createGoalsServer(userId);
-    userGoalsServers.set(userId, server);
-  }
-  return server;
-}
-
-function getPersonaServer(userId: number) {
-  let server = userPersonaServers.get(userId);
-  if (!server) {
-    server = createPersonaServer(userId);
-    userPersonaServers.set(userId, server);
-  }
-  return server;
-}
 
 // ============ Session Management ============
 
@@ -467,7 +414,7 @@ async function streamChat(
         gdrive: getGDriveServer(),
         goals: getGoalsServer(userId),
         persona: getPersonaServer(userId),
-        telegram: getTelegramServer(),
+        telegram: getTelegramMcpServer(),
         // Helm - Browser control via Chrome extension
         helm: {
           type: "stdio" as const,
