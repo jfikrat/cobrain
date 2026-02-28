@@ -1029,6 +1029,9 @@ bot.on("message:location", async (ctx) => {
 });
 
 // Live location güncellemeleri — sadece cache'e yaz, agent'ı meşgul etme
+const liveLocationLastLog = new Map<number, number>();
+const LIVE_LOCATION_LOG_INTERVAL = 30 * 60 * 1000; // 30 dakika
+
 bot.on("edited_message:location", (ctx) => {
   const userId = ctx.from?.id ?? 0;
 
@@ -1041,7 +1044,13 @@ bot.on("edited_message:location", (ctx) => {
     const { latitude, longitude } = location;
 
     liveLocationCache.set(userId, { latitude, longitude, updatedAt: new Date() });
-    console.log(`[LiveLocation] ${userId} cached: ${latitude},${longitude}`);
+
+    const now = Date.now();
+    const lastLog = liveLocationLastLog.get(userId) ?? 0;
+    if (now - lastLog >= LIVE_LOCATION_LOG_INTERVAL) {
+      console.log(`[LiveLocation] ${userId} cached: ${latitude},${longitude}`);
+      liveLocationLastLog.set(userId, now);
+    }
 
   } catch (error) {
     console.error("Live location update error:", error);
