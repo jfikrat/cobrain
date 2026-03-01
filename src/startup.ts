@@ -22,9 +22,6 @@ import { initEventStore } from "./brain/event-store.ts";
 import { startProjectionScheduler, stopProjectionScheduler } from "./brain/projections.ts";
 import { userManager } from "./services/user-manager.ts";
 
-// Stem
-import { Stem } from "./stem/stem.ts";
-import { stemRef } from "./services/stem-ref.ts";
 import { initInbox } from "./services/inbox.ts";
 
 console.log(`
@@ -35,11 +32,10 @@ console.log(`
   ╚██████╗╚██████╔╝██████╔╝██║  ██║██║  ██║██║██║ ╚████║
    ╚═════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝
 
-  Kişisel AI Asistan v0.5.0 — Stem Edition
+  Kişisel AI Asistan v0.5.0
   Base: ${config.COBRAIN_BASE_PATH}
   Mode: ${config.USE_AGENT_SDK ? "Agent SDK" : "CLI (tmux)"}
   Autonomous: ${config.ENABLE_AUTONOMOUS ? "Enabled" : "Disabled"}
-  Stem: ${config.FF_STEM ? `Enabled (${config.STEM_MODEL})` : "Disabled"}
   Web UI: ${config.ENABLE_WEB_UI ? `Enabled (port ${config.WEB_PORT})` : "Disabled"}
 `);
 
@@ -104,18 +100,6 @@ if (config.ENABLE_AUTONOMOUS) {
       console.log("[Autonomous] Proactive infrastructure enabled");
     } else {
       console.log("[Autonomous] Minimal autonomy mode: proactive infra disabled");
-    }
-
-    // Create Stem triage classifier
-    if (config.FF_STEM) {
-      const stem = new Stem({
-        model: config.STEM_MODEL,
-        maxWakesPerHour: config.STEM_MAX_WAKES_PER_HOUR,
-        userId: config.MY_TELEGRAM_ID,
-        userFolder,
-      });
-      stemRef.set(stem);
-      console.log("[Startup] Stem initialized");
     }
 
     // Start BrainLoop (events routed directly to Cortex)

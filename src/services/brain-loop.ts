@@ -277,7 +277,7 @@ class BrainLoop {
           }
 
           await inbox.push({
-            from: "stem",
+            from: "brain-loop",
             subject: `[whatsapp_dm] ${senderName}: ${incomingMsgs[0]?.content?.slice(0, 80) ?? ""}`,
             body: bodyParts.join("\n\n"),
             priority: "normal",
@@ -312,7 +312,7 @@ class BrainLoop {
           const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
 
           await inbox.push({
-            from: "stem",
+            from: "brain-loop",
             subject: `[whatsapp_group] ${groupName}`,
             body: `Bağlam: [whatsapp_group] ${groupName}\nCevap izni: ${replyAllowed ? "evet" : "hayır"}\n\n${msgTexts}`,
             priority: "normal",
@@ -351,7 +351,7 @@ class BrainLoop {
       for (const reminder of dueReminders) {
         try {
           await inbox.push({
-            from: "stem",
+            from: "brain-loop",
             subject: `[hatırlatıcı] ${reminder.title}`,
             body: `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}`,
             priority: "urgent",
@@ -378,7 +378,7 @@ class BrainLoop {
 
     for (const exp of expired) {
       await inbox.push({
-        from: "stem",
+        from: "brain-loop",
         subject: `[beklenti_timeout] ${exp.type} — ${exp.target}`,
         body: `Beklenti zaman aşımına uğradı:\nTür: ${exp.type}\nHedef: ${exp.target}\nBağlam: ${exp.context || "yok"}\nOnResolved: ${exp.onResolved || "yok"}`,
         priority: "normal",

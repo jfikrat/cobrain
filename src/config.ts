@@ -87,11 +87,6 @@ const envSchema = z.object({
   // Log channel: autonomous event logs sent here
   LOG_CHANNEL_ID: z.coerce.number().optional(),
 
-  // v1.4: Stem background watcher (canonical: STEM_*, legacy: SENTINEL_*)
-  FF_STEM: z.coerce.boolean().default(true),
-  STEM_MODEL: z.string().default("claude-haiku-4-5-20251001"),
-  STEM_MAX_WAKES_PER_HOUR: z.coerce.number().default(10),
-
 });
 
 // Type for safe config loading result
