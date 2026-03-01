@@ -11,9 +11,8 @@ import {
   type PreToolUseHookInput,
 } from "@anthropic-ai/claude-agent-sdk";
 import { userManager } from "../services/user-manager.ts";
-import { generatePersonaSystemPrompt } from "../agent/prompts.ts";
-import { getMemoryServer, getGoalsServer, getPersonaServer, getGDriveServer, getTelegramMcpServer } from "../agent/mcp-servers.ts";
-import { getPersonaService } from "../services/persona.ts";
+import { buildMdSystemPrompt, readMindFiles } from "../agent/prompts.ts";
+import { getMemoryServer, getGDriveServer, getTelegramMcpServer } from "../agent/mcp-servers.ts";
 import { needsPermission, type PermissionMode } from "../agent/permissions.ts";
 import { config } from "../config.ts";
 
@@ -384,10 +383,9 @@ async function streamChat(
   const settings = await userManager.getUserSettings(userId);
   const userFolder = userManager.getUserFolder(userId);
 
-  // Get persona and generate system prompt
-  const personaService = await getPersonaService(userId);
-  const persona = await personaService.getActivePersona();
-  const systemPrompt = generatePersonaSystemPrompt(persona);
+  // Generate system prompt from mind/*.md files
+  const mindFiles = await readMindFiles(userFolder);
+  const systemPrompt = buildMdSystemPrompt(mindFiles);
 
   // Get existing session
   const existingSessionId = userSessions.get(userId);
@@ -412,8 +410,6 @@ async function streamChat(
       mcpServers: {
         memory: getMemoryServer(userId),
         gdrive: getGDriveServer(),
-        goals: getGoalsServer(userId),
-        persona: getPersonaServer(userId),
         telegram: getTelegramMcpServer(),
         // Helm - Browser control via Chrome extension
         helm: {

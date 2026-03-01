@@ -132,12 +132,6 @@ const TOOL_STATUS: Map<string, StatusHandler> = new Map([
   ["Grep", (i) => `🔍 İçerik arıyorum: "${(i.pattern as string || "").slice(0, 50)}"`],
   ["mcp__memory__remember", () => `🧠 Hafızaya kaydediyorum...`],
   ["mcp__memory__recall", (i) => `🧠 Hafızamı tarıyorum: "${i.query}"`],
-  ["mcp__goals__create_goal", () => `🎯 Hedef oluşturuyorum...`],
-  ["mcp__goals__create_reminder", () => `⏰ Hatırlatıcı kuruyorum...`],
-  ["mcp__location__save_location", (i) => `📍 Konum kaydediyorum: "${i.name}"`],
-  ["mcp__location__get_distance", (i) => `🗺️ Mesafe hesaplıyorum: ${i.origin} → ${i.destination}`],
-  ["mcp__location__geocode", () => `🗺️ Adres çözümlüyorum...`],
-  ["mcp__location__list_locations", () => `📍 Kayıtlı konumları listeliyorum...`],
   ["Task", (i) => `🚀 Yardımcı agent başlatıyorum: ${i.description}`],
   ["TodoWrite", () => `📋 Görev listesini güncelliyorum...`],
 ]);

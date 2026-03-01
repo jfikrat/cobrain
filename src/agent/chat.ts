@@ -1,7 +1,7 @@
 /**
  * Cobrain Agent Chat
  * Ana chat fonksiyonu - Claude Agent SDK kullanarak
- * v0.3 - Dynamic Persona System
+ * v0.4 - MD-based System Prompt
  */
 
 import {
@@ -19,7 +19,7 @@ import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
 
 // Split modules
-import { getMemoryServer, getTelegramMcpServer, getGoalsServer, getMoodServer, getLocationServer, getTimeServer, getCalendarServer, getGmailServer } from "./mcp-servers.ts";
+import { getMemoryServer, getTelegramMcpServer, getMoodServer, getTimeServer, getCalendarServer, getGmailServer } from "./mcp-servers.ts";
 import { extractTextContent, buildMessageContent, type MultimodalMessage } from "./message-builder.ts";
 import { createPreToolUseHooks, ToolStreamNotifier } from "./hooks.ts";
 
@@ -308,11 +308,9 @@ async function _executeChat(
         // MCP Servers (createSdkMcpServer returns full config)
         mcpServers: {
           memory: getMemoryServer(userId),
-          goals: getGoalsServer(userId),
           telegram: getTelegramMcpServer(),
           time: getTimeServer(),
           mood: getMoodServer(userId),
-          location: getLocationServer(userId),
           calendar: getCalendarServer(),
           gmail: getGmailServer(userId),
           // Gateway - helm, squad, whatsapp via single MCP gateway

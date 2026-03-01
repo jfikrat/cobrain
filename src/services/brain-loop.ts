@@ -13,7 +13,7 @@ import { resolve } from "node:path";
 import { Bot } from "grammy";
 import { config } from "../config.ts";
 import { userManager } from "./user-manager.ts";
-import { getGoalsService } from "./goals.ts";
+import { getRemindersService } from "./reminders.ts";
 import { FileMemory } from "../memory/file-memory.ts";
 import { getSessionState, updateSessionState } from "./session-state.ts";
 import { expectations } from "./expectations.ts";
@@ -457,8 +457,8 @@ class BrainLoop {
 
     try {
       const db = await userManager.getUserDb(userId);
-      const goalsService = await getGoalsService(db, userId);
-      const dueReminders = goalsService.getDueReminders();
+      const remindersService = await getRemindersService(db, userId);
+      const dueReminders = remindersService.getDueReminders();
 
       for (const reminder of dueReminders) {
         try {
@@ -485,7 +485,7 @@ class BrainLoop {
           if (this.bot) await sendRawLog(this.bot, `❌ <b>Hatırlatıcı hata</b> — ${escapeHtml(reminder.title)}\n<code>${String(err).slice(0, 200)}</code>`);
         }
         // Başarı veya hata — mark et (hata durumunda sonsuz döngüyü önle)
-        goalsService.markReminderSent(reminder.id);
+        remindersService.markReminderSent(reminder.id);
       }
     } catch (err) {
       console.error("[BrainLoop] checkDueReminders error:", err);

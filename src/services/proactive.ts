@@ -6,7 +6,7 @@
 import { Bot } from "grammy";
 import { getScheduler } from "./scheduler.ts";
 import { getTaskQueue } from "./task-queue.ts";
-import { getGoalsService } from "./goals.ts";
+import { getRemindersService } from "./reminders.ts";
 import { userManager } from "./user-manager.ts";
 import { think } from "../brain/index.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
@@ -31,7 +31,6 @@ export function initProactiveInfra(botInstance: Bot): void {
 
   // Register scheduled task handlers
   scheduler.registerHandler("daily_summary", handleDailySummary);
-  scheduler.registerHandler("goal_check", handleGoalCheck);
   scheduler.registerHandler("reminder", handleReminder);
   scheduler.registerHandler("memory_prune", handleMemoryPrune);
   scheduler.registerHandler("memory_consolidation", handleMemoryConsolidation);
@@ -39,7 +38,6 @@ export function initProactiveInfra(botInstance: Bot): void {
   // Register queue task handlers
   taskQueue.registerHandler("reminder", handleReminderTask);
   taskQueue.registerHandler("daily_summary", handleDailySummaryTask);
-  taskQueue.registerHandler("goal_check", handleGoalCheckTask);
   taskQueue.registerHandler("memory_prune", handleMemoryPruneTask);
   taskQueue.registerHandler("memory_consolidation", handleMemoryConsolidationTask);
 
@@ -70,11 +68,6 @@ async function handleDailySummary(task: ScheduledTask): Promise<void> {
   taskQueue.enqueue(task.userId, "daily_summary", { scheduledTaskId: task.id }, 1, `scheduled:${task.id}`);
 }
 
-async function handleGoalCheck(task: ScheduledTask): Promise<void> {
-  const taskQueue = getTaskQueue();
-  taskQueue.enqueue(task.userId, "goal_check", { scheduledTaskId: task.id }, 1, `scheduled:${task.id}`);
-}
-
 async function handleReminder(_task: ScheduledTask): Promise<void> {
   // Reminders are now handled by BrainLoop → Stem
 }
@@ -99,25 +92,12 @@ async function handleDailySummaryTask(task: QueuedTask): Promise<TaskResult> {
 
   try {
     const db = await userManager.getUserDb(task.userId);
-    const goalsService = await getGoalsService(db, task.userId);
+    const remindersService = await getRemindersService(db, task.userId);
 
-    const goals = goalsService.getActiveGoals();
-    const reminders = goalsService.getPendingReminders();
-    const stats = goalsService.getStats();
+    const reminders = remindersService.getPendingReminders();
+    const pendingCount = remindersService.getPendingCount();
 
     let message = `<b>Günaydın! Günlük Özet</b>\n\n`;
-
-    if (goals.length > 0) {
-      message += `<b>Aktif Hedefler (${goals.length})</b>\n`;
-      for (const goal of goals.slice(0, 3)) {
-        const progress = Math.round(goal.progress * 100);
-        message += `• ${goal.title} (${progress}%)\n`;
-      }
-      if (goals.length > 3) {
-        message += `  <i>+${goals.length - 3} daha...</i>\n`;
-      }
-      message += "\n";
-    }
 
     if (reminders.length > 0) {
       message += `<b>Bugünkü Hatırlatıcılar</b>\n`;
@@ -140,51 +120,8 @@ async function handleDailySummaryTask(task: QueuedTask): Promise<TaskResult> {
       message += "\n";
     }
 
-    message += `<b>İstatistikler</b>\n`;
-    message += `• Aktif hedef: ${stats.activeGoals}\n`;
-    message += `• Tamamlanan: ${stats.completedGoals}\n`;
-    message += `• Bekleyen hatırlatıcı: ${stats.pendingReminders}\n`;
-
+    message += `<b>Bekleyen hatırlatıcı:</b> ${pendingCount}\n`;
     message += `\n<i>İyi günler!</i>`;
-
-    await bot.api.sendMessage(task.userId, message, { parse_mode: "HTML" });
-
-    return { success: true };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    };
-  }
-}
-
-async function handleGoalCheckTask(task: QueuedTask): Promise<TaskResult> {
-  if (!bot) {
-    return { success: false, error: "Bot not initialized" };
-  }
-
-  try {
-    const db = await userManager.getUserDb(task.userId);
-    const goalsService = await getGoalsService(db, task.userId);
-
-    const goals = goalsService.getActiveGoals();
-
-    if (goals.length === 0) {
-      return { success: true, message: "No active goals" };
-    }
-
-    let message = `<b>Haftalık Hedef Kontrolü</b>\n\n`;
-    message += `Bu hafta hedeflerinize ne kadar yaklaştınız?\n\n`;
-
-    for (const goal of goals) {
-      const progress = Math.round(goal.progress * 100);
-      const progressBar = "█".repeat(Math.floor(progress / 10)) + "░".repeat(10 - Math.floor(progress / 10));
-
-      message += `<b>${goal.title}</b>\n`;
-      message += `   ${progressBar} ${progress}%\n\n`;
-    }
-
-    message += `<i>Hedeflerinizi güncellemek için /goals yazın!</i>`;
 
     await bot.api.sendMessage(task.userId, message, { parse_mode: "HTML" });
 
@@ -225,8 +162,8 @@ async function handleReminderTask(task: QueuedTask): Promise<TaskResult> {
 
     // Mark reminder as sent
     const db = await userManager.getUserDb(task.userId);
-    const goalsService = await getGoalsService(db, task.userId);
-    goalsService.markReminderSent(reminderId);
+    const remindersService = await getRemindersService(db, task.userId);
+    remindersService.markReminderSent(reminderId);
 
     return { success: true };
   } catch (error) {

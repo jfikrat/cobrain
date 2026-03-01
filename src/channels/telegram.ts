@@ -6,8 +6,6 @@ import { think, clearSession, getStats, userManager, isVectorMemoryAvailable, ty
 import { initPermissions, clearAllPending } from "../agent/permissions.ts";
 import { whatsappDB, type PendingChat } from "../services/whatsapp-db.ts";
 import { analyzeMessages, generateSummary, type MessageAnalysis } from "../services/analyzer.ts";
-import { getPersonaService } from "../services/persona.ts";
-import { applyApprovedPersonaChange, applyApprovedRollback } from "../agent/tools/persona.ts";
 import { recordInteraction, extractMoodFromMessage, recordUserActivity } from "../services/interaction-tracker.ts";
 import {
   formatSummaryMessage,
@@ -141,7 +139,6 @@ Hafıza, hedef, hatırlatıcı işlemleri için doğal dil kullan:
 /reply [kişi] [mesaj] - Mesaj gönder
 
 <b>Ayarlar:</b>
-/persona - Persona ayarlarını görüntüle
 /mode - Permission modunu değiştir
 
 <b>Diğer:</b>
@@ -450,120 +447,6 @@ bot.callbackQuery(/^mode:(strict|smart|yolo)$/, async (ctx) => {
 
     console.log(`[Bot] User ${userId} changed permission mode to: ${mode}`);
   } catch (error) {
-    await ctx.answerCallbackQuery("Hata oluştu!");
-  }
-});
-
-// ===== Persona Commands & Callbacks =====
-
-bot.command("persona", async (ctx) => {
-  const userId = ctx.from?.id;
-  if (!userId || !isAuthorized(userId)) return;
-
-  try {
-    const service = await getPersonaService(userId);
-    const persona = await service.getActivePersona();
-
-    const toneLabels: Record<string, string> = {
-      samimi: "Samimi",
-      resmi: "Resmi",
-      teknik: "Teknik",
-      espirili: "Espirili",
-      destekleyici: "Destekleyici",
-    };
-
-    const text = `👤 <b>Persona Ayarları</b> (v${persona.version})
-
-<b>Kimlik:</b>
-• İsim: ${persona.identity.name}
-• Rol: ${persona.identity.role}
-• Değerler: ${persona.identity.coreValues.join(", ")}
-
-<b>Ses Tonu:</b>
-• Ton: ${toneLabels[persona.voice.tone] || persona.voice.tone}
-• Formalite: ${Math.round(persona.voice.formality * 100)}%
-• Detay: ${Math.round(persona.voice.verbosity * 100)}%
-• Emoji: ${persona.voice.emojiUsage}
-• Hitap: ${persona.voice.addressForm}
-
-<b>Davranış:</b>
-• Proaktiflik: ${Math.round(persona.behavior.proactivity * 100)}%
-• Soru sorma eşiği: ${Math.round(persona.behavior.clarificationThreshold * 100)}%
-• Cevap stili: ${persona.behavior.responseStyle}
-
-<b>Kullanıcı Bağlamı:</b>
-• İsim: ${persona.userContext.name}${persona.userContext.role ? `\n• Rol: ${persona.userContext.role}` : ""}
-• İlgiler: ${persona.userContext.interests.length > 0 ? persona.userContext.interests.join(", ") : "(yok)"}
-
-<i>Ton ve hitap değişiklikleri için agent'a iste.</i>`;
-
-    await ctx.reply(text, { parse_mode: "HTML" });
-  } catch (error) {
-    await ctx.reply(`❌ Hata: ${error instanceof Error ? error.message : "Bilinmeyen hata"}`);
-  }
-});
-
-// Persona change approval callback
-// Format: persona_approve:<field>:<encodedValue>
-bot.callbackQuery(/^persona_approve:(.+)$/, async (ctx) => {
-  const userId = ctx.from?.id;
-  if (!userId || !isAuthorized(userId)) return;
-
-  try {
-    const data = ctx.callbackQuery.data.replace("persona_approve:", "");
-    const parsed = JSON.parse(Buffer.from(data, "base64").toString("utf-8"));
-
-    const { field, value, reason } = parsed;
-
-    const success = await applyApprovedPersonaChange(userId, field, value, reason);
-
-    if (success) {
-      await ctx.editMessageText(
-        `✅ <b>Persona güncellendi!</b>\n\n` +
-        `Alan: <code>${field}</code>\n` +
-        `Yeni değer: <code>${JSON.stringify(value)}</code>`,
-        { parse_mode: "HTML" }
-      );
-      await ctx.answerCallbackQuery("Değişiklik uygulandı!");
-      console.log(`[Persona] User ${userId} approved change: ${field} = ${JSON.stringify(value)}`);
-    } else {
-      await ctx.answerCallbackQuery("Değişiklik uygulanamadı!");
-    }
-  } catch (error) {
-    console.error("Persona approve error:", error);
-    await ctx.answerCallbackQuery("Hata oluştu!");
-  }
-});
-
-// Persona change reject callback
-bot.callbackQuery(/^persona_reject$/, async (ctx) => {
-  await ctx.editMessageText("❌ Persona değişikliği reddedildi.", { parse_mode: "HTML" });
-  await ctx.answerCallbackQuery("Reddedildi");
-});
-
-// Persona rollback approval callback
-bot.callbackQuery(/^persona_rollback:(\d+)$/, async (ctx) => {
-  const userId = ctx.from?.id;
-  if (!userId || !isAuthorized(userId)) return;
-
-  try {
-    const targetVersion = parseInt(ctx.match![1]!, 10);
-
-    const success = await applyApprovedRollback(userId, targetVersion, "Kullanıcı onayladı");
-
-    if (success) {
-      await ctx.editMessageText(
-        `✅ <b>Persona geri alındı!</b>\n\n` +
-        `Versiyon ${targetVersion}'e dönüldü.`,
-        { parse_mode: "HTML" }
-      );
-      await ctx.answerCallbackQuery("Rollback tamamlandı!");
-      console.log(`[Persona] User ${userId} rolled back to v${targetVersion}`);
-    } else {
-      await ctx.answerCallbackQuery("Rollback başarısız!");
-    }
-  } catch (error) {
-    console.error("Persona rollback error:", error);
     await ctx.answerCallbackQuery("Hata oluştu!");
   }
 });
@@ -1176,7 +1059,6 @@ export async function startBot(): Promise<void> {
     { command: "web", description: "Web arayüzü linki al" },
 
     // Ayarlar
-    { command: "persona", description: "Persona ayarlarını görüntüle" },
     { command: "mode", description: "Permission modunu değiştir" },
 
     // Session
