@@ -1,12 +1,12 @@
 /**
- * BrainLoop — Unified autonomous loop (Stem edition)
+ * BrainLoop — Unified autonomous loop (Cortex direct edition)
  *
  * Architecture:
- * - fastTick (30s): WhatsApp poll → stem events, due reminders → stem events
- * - slowTick (5min): periodic check → stem event, code review cycle
+ * - fastTick (30s): WhatsApp poll → inbox, due reminders → inbox
+ * - slowTick (5min): periodic check → inbox, code review cycle
  *
- * AI reasoning is now handled entirely by the Stem (Haiku).
- * Gemini Flash and ActionExecutor have been removed.
+ * All AI reasoning is handled by Cortex (Sonnet) directly via inbox.
+ * Stem (Haiku triage) layer has been removed.
  */
 
 import { resolve } from "node:path";
@@ -23,11 +23,9 @@ import { getTaskQueue } from "./task-queue.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
 import { chat, isUserBusy } from "../agent/chat.ts";
 import { mneme } from "../mneme/mneme.ts";
-import { stemRef } from "./stem-ref.ts";
 import { inbox } from "./inbox.ts";
 import { markReplied, wasRecentlyReplied } from "./reply-dedup.ts";
 import { waMailbox } from "./wa-mailbox.ts";
-import type { TriageDecision, StemEvent } from "../stem/types.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -52,67 +50,6 @@ async function sendRawLog(bot: Bot, msg: string): Promise<void> {
   }
 }
 
-// ── Triage Decision Executor ─────────────────────────────────────────────
-
-async function executeTriageDecision(
-  decision: TriageDecision,
-  event: StemEvent,
-  bot: Bot,
-): Promise<void> {
-  const userId = config.MY_TELEGRAM_ID;
-  const chatJid = event.payload.chatJid as string | undefined;
-  const senderName = (event.payload.senderName as string) ||
-    (event.payload.groupName as string) || "?";
-
-  switch (decision.action) {
-    case "reply":
-      if (decision.reply && chatJid && !wasRecentlyReplied(chatJid)) {
-        whatsappDB.addToOutbox(chatJid, decision.reply);
-        markReplied(chatJid);
-        waMailbox.addOutgoing(chatJid, decision.reply);
-        console.log(`[Stem] reply → ${senderName}: "${decision.reply.slice(0, 60)}"`);
-      }
-      break;
-
-    case "wake_cortex":
-      await inbox.push({
-        from: "stem",
-        subject: decision.reason,
-        body: `Bağlam: ${formatEventSummary(event)}`,
-        priority: decision.urgency === "immediate" ? "urgent" : "normal",
-        ttlMs: decision.urgency === "immediate" ? 30 * 60 * 1000 : 2 * 60 * 60 * 1000,
-      });
-      console.log(`[Stem] wake_cortex → "${decision.reason}" (${decision.urgency || "soon"})`);
-      break;
-
-    case "notify": {
-      try {
-        const p = event.payload;
-        const messages = p.messages as Array<{ content?: string }> | undefined;
-        const preview = messages?.map(m => (m.content || "").slice(0, 150)).join(" / ") || "";
-        const text = preview
-          ? `📱 *${senderName}*: ${preview}`
-          : `📱 *${senderName}*: ${decision.reason}`;
-        await bot.api.sendMessage(userId, text, { parse_mode: "Markdown" });
-      } catch (err) {
-        console.error("[Stem] notify telegram error:", err);
-      }
-      break;
-    }
-
-    case "ignore":
-      break;
-  }
-}
-
-function formatEventSummary(event: StemEvent): string {
-  const p = event.payload;
-  const messages = p.messages as Array<{ content?: string }> | undefined;
-  const preview = messages?.map(m => (m.content || "").slice(0, 100)).join(" / ") || "";
-  const sender = (p.senderName as string) || (p.groupName as string) || (p.target as string) || "?";
-  return `[${event.type}] ${sender}: ${preview || JSON.stringify(p).slice(0, 200)}`;
-}
-
 // ── Constants ────────────────────────────────────────────────────────────
 
 const FAST_TICK_MS = config.BRAIN_LOOP_FAST_TICK_MS;
@@ -123,7 +60,6 @@ const CODE_REVIEW_FILES = [
   "src/services/brain-loop.ts",
   "src/brain/index.ts",
   "src/memory/file-memory.ts",
-  "src/stem/stem.ts",
   "src/channels/telegram.ts",
   "src/agent/prompts.ts",
   "src/brain/event-store.ts",
@@ -138,22 +74,12 @@ const PROJECT_ROOT = resolve(import.meta.dir, "../..");
 
 // ── BrainLoop Class ──────────────────────────────────────────────────────
 
-// ── Quiet Hours Digest Buffer ─────────────────────────────────────────────
-
-interface DigestEntry {
-  sender: string;
-  preview: string;
-  time: string;
-}
-
 class BrainLoop {
   private bot: Bot | null = null;
   private fastIntervalId: ReturnType<typeof setInterval> | null = null;
   private slowIntervalId: ReturnType<typeof setInterval> | null = null;
   private codeReviewIndex = 0;
   private lastCodeReviewDate: string | null = null;
-  private quietHoursBuffer: DigestEntry[] = [];
-  private digestSentDate: string | null = null;
   private lastProactiveCheckHour: string | null = null;
 
   // ── Lifecycle ────────────────────────────────────────────────────────
@@ -227,12 +153,6 @@ class BrainLoop {
     }
 
     try {
-      await this.checkMorningDigest();
-    } catch (err) {
-      console.error("[BrainLoop] checkMorningDigest error:", err);
-    }
-
-    try {
       await this.checkExpiredExpectations();
     } catch (err) {
       console.error("[BrainLoop] checkExpiredExpectations error:", err);
@@ -256,7 +176,7 @@ class BrainLoop {
     }
   }
 
-  // ── WhatsApp Polling → Stem Events ──────────────────────────────
+  // ── WhatsApp Polling → Inbox (Cortex direct) ─────────────────────────
 
   private async pollWhatsApp(): Promise<void> {
     if (!this.bot || !whatsappDB.isAvailable()) return;
@@ -324,7 +244,7 @@ class BrainLoop {
     const dms = notifications.filter(n => !n.is_group);
     const groupMsgs = notifications.filter(n => n.is_group);
 
-    // ── Feed DMs to Stem (fallback: Cortex) ──────────────────────
+    // ── Feed DMs → Inbox (Cortex direct) ──────────────────────────────
     if (dms.length > 0) {
       const bySender = new Map<string, typeof dms>();
       for (const notif of dms) {
@@ -346,41 +266,26 @@ class BrainLoop {
             console.log(`[BrainLoop] Expectation resolved: whatsapp_reply from ${senderName}`);
           }
 
-          const stem = stemRef.get();
-          if (stem) {
-            const incomingMsgs = msgs.map(m => ({ content: m.content || "[medya]", message_type: m.message_type || "text" }));
-            waMailbox.push(chatJid, senderName, incomingMsgs);
-            const event: StemEvent = {
-              type: "whatsapp_dm",
-              payload: {
-                chatJid,
-                senderName,
-                messages: incomingMsgs,
-                conversationHistory: waMailbox.getHistory(chatJid),
-              },
-              timestamp: Date.now(),
-            };
-            const decision = await stem.triage(event);
-            console.log(`[BrainLoop] WA DM → Stem: ${senderName} → ${decision.action}`);
-            waMailbox.markProcessed(chatJid);
+          const incomingMsgs = msgs.map(m => ({ content: m.content || "[medya]", message_type: m.message_type || "text" }));
+          waMailbox.push(chatJid, senderName, incomingMsgs);
+          const history = waMailbox.getHistory(chatJid);
+          const msgTexts = incomingMsgs.map(m => m.content).join("\n");
 
-            if (this.bot) await executeTriageDecision(decision, event, this.bot);
-
-            // Quiet hours + ignore → digest buffer'a ekle
-            if (decision.action === "ignore" && this.isQuietHours()) {
-              const time = new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
-              const preview = msgs.slice(0, 2).map(m => (m.content || "[medya]").slice(0, 80)).join(" / ");
-              this.quietHoursBuffer.push({ sender: senderName, preview, time });
-            }
-          } else {
-            // Stem disabled — fallback to Cortex
-            const msgTexts = msgs.map(m => m.content || "[medya]").join("\n");
-            const dmResponse = await chat(
-              userId,
-              `[OTONOM OLAY — WhatsApp DM]\nGönderen: ${senderName} (${chatJid})\n\n${msgTexts}\n\n---\nBu mesajı değerlendir: Telegram'dan beni bilgilendir ve/veya gerekirse WhatsApp'tan cevap ver.`,
-            );
-            if (this.bot) await sendLogToChannel(this.bot, `📱 WA DM — ${senderName}`, dmResponse);
+          const bodyParts = [`Bağlam: [whatsapp_dm] ${senderName}: ${msgTexts}`];
+          if (history.length > 0) {
+            bodyParts.push(`\n[SON MESAJLAR]\n${history}`);
           }
+
+          await inbox.push({
+            from: "stem",
+            subject: `[whatsapp_dm] ${senderName}: ${incomingMsgs[0]?.content?.slice(0, 80) ?? ""}`,
+            body: bodyParts.join("\n\n"),
+            priority: "normal",
+            ttlMs: 2 * 60 * 60 * 1000,
+          });
+          waMailbox.markProcessed(chatJid);
+          console.log(`[BrainLoop] WA DM → Inbox: ${senderName}`);
+
           const chatIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(chatIds);
           for (const id of chatIds) processedIds.add(id);
@@ -391,7 +296,7 @@ class BrainLoop {
       }
     }
 
-    // ── Feed Group Messages to Stem (fallback: Cortex) ────────────
+    // ── Feed Group Messages → Inbox (Cortex direct) ────────────────────
     if (groupMsgs.length > 0) {
       const byGroup = new Map<string, typeof groupMsgs>();
       for (const notif of groupMsgs) {
@@ -404,34 +309,17 @@ class BrainLoop {
         const groupName = msgs[0]!.sender_name?.split(" @ ")[1] || groupJid;
         try {
           const replyAllowed = allowedGroupJids.length > 0 && allowedGroupJids.includes(groupJid);
-          const stem = stemRef.get();
-          if (stem) {
-            const event: StemEvent = {
-              type: "whatsapp_group",
-              payload: {
-                chatJid: groupJid,
-                groupName,
-                replyAllowed,
-                messages: msgs.map(m => ({
-                  content: m.content || "[medya]",
-                  sender_name: m.sender_name || "?",
-                  message_type: "text",
-                })),
-              },
-              timestamp: Date.now(),
-            };
-            const decision = await stem.triage(event);
-            console.log(`[BrainLoop] WA Grup → Stem: ${groupName} → ${decision.action}`);
-            if (this.bot) await executeTriageDecision(decision, event, this.bot);
-          } else {
-            // Stem disabled — fallback to Cortex
-            const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
-            const grpResponse = await chat(
-              userId,
-              `[OTONOM OLAY — WhatsApp Grup]\nGrup: ${groupName} (${groupJid})\nCevap izni: ${replyAllowed ? "evet" : "hayır"}\n\n${msgTexts}\n\n---\nBu grup mesajını değerlendir: Önemliyse Telegram'dan beni bilgilendir.`,
-            );
-            if (this.bot) await sendLogToChannel(this.bot, `👥 WA Grup — ${groupName}`, grpResponse);
-          }
+          const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
+
+          await inbox.push({
+            from: "stem",
+            subject: `[whatsapp_group] ${groupName}`,
+            body: `Bağlam: [whatsapp_group] ${groupName}\nCevap izni: ${replyAllowed ? "evet" : "hayır"}\n\n${msgTexts}`,
+            priority: "normal",
+            ttlMs: 2 * 60 * 60 * 1000,
+          });
+          console.log(`[BrainLoop] WA Grup → Inbox: ${groupName}`);
+
           const groupIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(groupIds);
           for (const id of groupIds) processedIds.add(id);
@@ -450,7 +338,7 @@ class BrainLoop {
     });
   }
 
-  // ── Due Reminders → Stem Events ──────────────────────────────────
+  // ── Due Reminders → Inbox ────────────────────────────────────────────
 
   private async checkDueReminders(): Promise<void> {
     const userId = config.MY_TELEGRAM_ID;
@@ -462,24 +350,14 @@ class BrainLoop {
 
       for (const reminder of dueReminders) {
         try {
-          const stem = stemRef.get();
-          if (stem) {
-            const event: StemEvent = {
-              type: "reminder_due",
-              payload: { title: reminder.title, message: reminder.message || "" },
-              timestamp: Date.now(),
-            };
-            const decision = await stem.triage(event);
-            console.log(`[BrainLoop] Hatırlatıcı → Stem: ${reminder.title} → ${decision.action}`);
-            if (this.bot) await executeTriageDecision(decision, event, this.bot);
-          } else {
-            // Stem disabled — fallback to Cortex
-            const remResponse = await chat(
-              userId,
-              `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}\n\n---\nBu hatırlatıcıyı Telegram'dan bana ilet.`,
-            );
-            if (this.bot) await sendLogToChannel(this.bot, `⏰ Hatırlatıcı — ${reminder.title}`, remResponse);
-          }
+          await inbox.push({
+            from: "stem",
+            subject: `[hatırlatıcı] ${reminder.title}`,
+            body: `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}`,
+            priority: "urgent",
+            ttlMs: 30 * 60 * 1000,
+          });
+          console.log(`[BrainLoop] Hatırlatıcı → Inbox: ${reminder.title}`);
         } catch (err) {
           console.error("[BrainLoop] reminder error:", err);
           if (this.bot) await sendRawLog(this.bot, `❌ <b>Hatırlatıcı hata</b> — ${escapeHtml(reminder.title)}\n<code>${String(err).slice(0, 200)}</code>`);
@@ -492,62 +370,21 @@ class BrainLoop {
     }
   }
 
-  // ── Quiet Hours Helpers ───────────────────────────────────────────────
-
-  private isQuietHours(): boolean {
-    const hour = new Date().getHours();
-    return hour >= 23 || hour < 8;
-  }
-
-  private async checkMorningDigest(): Promise<void> {
-    const hour = new Date().getHours();
-    const today = new Date().toISOString().slice(0, 10);
-
-    // 07:00-07:59 arasında, günde bir kez
-    if (hour !== 7) return;
-    if (this.digestSentDate === today) return;
-    if (this.quietHoursBuffer.length === 0) return;
-
-    const lines = this.quietHoursBuffer.map(e => `- ${e.time} — ${e.sender}: "${e.preview}"`);
-    const count = this.quietHoursBuffer.length;
-
-    await inbox.push({
-      from: "stem",
-      subject: `Gece özeti — ${count} mesaj sessizce geçti`,
-      body: `Gece boyunca şu mesajlar geldi, aksiyon alınmadı:\n\n${lines.join("\n")}\n\nGerekirse takip et.`,
-      priority: "normal",
-      ttlMs: 8 * 60 * 60 * 1000, // 8 saat
-    });
-
-    console.log(`[BrainLoop] Morning digest pushed: ${count} quiet-hours events`);
-    this.quietHoursBuffer = [];
-    this.digestSentDate = today;
-  }
-
-  // ── Expired Expectations → Stem Events ───────────────────────────────
+  // ── Expired Expectations → Inbox ─────────────────────────────────────
 
   private async checkExpiredExpectations(): Promise<void> {
     const expired = expectations.cleanExpired();
     if (expired.length === 0) return;
 
-    const stem = stemRef.get();
-    if (!stem || !this.bot) return;
-
     for (const exp of expired) {
-      const event: StemEvent = {
-        type: "expectation_timeout",
-        payload: {
-          id: exp.id,
-          type: exp.type,
-          target: exp.target,
-          context: exp.context,
-          onResolved: exp.onResolved,
-        },
-        timestamp: Date.now(),
-      };
-      const decision = await stem.triage(event);
-      console.log(`[BrainLoop] Expectation timeout → Stem: [${exp.type}] ${exp.target} → ${decision.action}`);
-      await executeTriageDecision(decision, event, this.bot);
+      await inbox.push({
+        from: "stem",
+        subject: `[beklenti_timeout] ${exp.type} — ${exp.target}`,
+        body: `Beklenti zaman aşımına uğradı:\nTür: ${exp.type}\nHedef: ${exp.target}\nBağlam: ${exp.context || "yok"}\nOnResolved: ${exp.onResolved || "yok"}`,
+        priority: "normal",
+        ttlMs: 60 * 60 * 1000,
+      });
+      console.log(`[BrainLoop] Expectation timeout → Inbox: [${exp.type}] ${exp.target}`);
     }
   }
 
