@@ -252,6 +252,7 @@ class WhatsAppDBService {
     message_id: string;
     content: string;
     message_type: string;
+    media_path: string | null;
     is_group: number;
     message_timestamp: number;
     created_at: number;
@@ -261,9 +262,11 @@ class WhatsAppDBService {
       // Atomic: SELECT + UPDATE in transaction to prevent race conditions
       const tx = this.db.transaction(() => {
         const rows = this.db!.query<any, [number]>(
-          `SELECT * FROM notifications
-           WHERE status = 'pending'
-           ORDER BY created_at ASC
+          `SELECT n.*, m.media_path
+           FROM notifications n
+           LEFT JOIN messages m ON m.id = n.message_id
+           WHERE n.status = 'pending'
+           ORDER BY n.created_at ASC
            LIMIT ?`
         ).all(limit);
 

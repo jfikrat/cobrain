@@ -266,7 +266,10 @@ class BrainLoop {
             console.log(`[BrainLoop] Expectation resolved: whatsapp_reply from ${senderName}`);
           }
 
-          const incomingMsgs = msgs.map(m => ({ content: m.content || "[medya]", message_type: m.message_type || "text" }));
+          const incomingMsgs = msgs.map(m => ({
+            content: m.content || (m.media_path ? `[medya: ${m.media_path}]` : "[medya]"),
+            message_type: m.message_type || "text",
+          }));
           waMailbox.push(chatJid, senderName, incomingMsgs);
           const history = waMailbox.getHistory(chatJid);
           const msgTexts = incomingMsgs.map(m => m.content).join("\n");
