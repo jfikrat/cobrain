@@ -270,11 +270,23 @@ class BrainLoop {
             content: m.content || (m.media_path ? `[medya: ${m.media_path}]` : "[medya]"),
             message_type: m.message_type || "text",
           }));
+
+          // Outgoing mesajları (Fekrat'ın gönderdiği) history'e ekle
+          const lastOutTs = waMailbox.getLastOutgoingTimestamp(chatJid);
+          const sinceTs = lastOutTs > 0
+            ? Math.floor(lastOutTs / 1000)
+            : Math.floor(Date.now() / 1000) - 3600; // İlk kez: son 1 saat
+          const outgoingMsgs = whatsappDB.getRecentOutgoing(chatJid, sinceTs);
+          for (const msg of outgoingMsgs) {
+            waMailbox.addOutgoing(chatJid, msg.content || "[medya]");
+          }
+
           waMailbox.push(chatJid, senderName, incomingMsgs);
           const history = waMailbox.getHistory(chatJid);
           const msgTexts = incomingMsgs.map(m => m.content).join("\n");
 
-          const bodyParts = [`Bağlam: [whatsapp_dm] ${senderName}: ${msgTexts}`];
+          // chatJid'i body'ye ekle — doğru numaraya cevap yazabilmek için
+          const bodyParts = [`Bağlam: [whatsapp_dm] ${senderName} | jid:${chatJid}: ${msgTexts}`];
           if (history.length > 0) {
             const historyStr = history.map(m => `[${m.direction === "incoming" ? "←" : "→"}] ${m.content}`).join("\n");
             bodyParts.push(`[SON MESAJLAR]\n${historyStr}`);

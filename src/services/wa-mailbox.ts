@@ -82,6 +82,15 @@ class WaMailbox {
     return this.boxes.get(chatJid)?.history ?? [];
   }
 
+  /** Get the timestamp of the last outgoing message in history (ms), or 0 if none */
+  getLastOutgoingTimestamp(chatJid: string): number {
+    const box = this.boxes.get(chatJid);
+    if (!box) return 0;
+    const outgoing = box.history.filter(m => m.direction === "outgoing");
+    if (outgoing.length === 0) return 0;
+    return Math.max(...outgoing.map(m => m.timestamp));
+  }
+
   private trimHistory(box: SenderMailbox): void {
     if (box.history.length > HISTORY_LIMIT) {
       box.history = box.history.slice(-HISTORY_LIMIT);

@@ -359,6 +359,23 @@ class WhatsAppDBService {
     }
   }
 
+  /**
+   * Belirli bir chatJid için belirli bir timestamp'ten sonra gönderilen (from_me) mesajları getir
+   */
+  getRecentOutgoing(chatJid: string, sinceTimestampSec: number): Message[] {
+    if (!this.db) return [];
+    return this.db.query<Message, [string, number]>(`
+      SELECT id, chat_jid, sender_jid, content, message_type, timestamp, is_from_me
+      FROM messages
+      WHERE chat_jid = ?
+        AND is_from_me = 1
+        AND timestamp > ?
+        AND message_type != 'reaction'
+      ORDER BY timestamp ASC
+      LIMIT 20
+    `).all(chatJid, sinceTimestampSec);
+  }
+
   close() {
     if (this.db) this.db.close();
   }
