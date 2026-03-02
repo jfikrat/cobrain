@@ -285,6 +285,16 @@ class BrainLoop {
             continue;
           }
 
+          // Guard 3: Son 120s içinde Fekrat bu chat'e cevap yazdıysa atla
+          const recentOutgoing = whatsappDB.getRecentOutgoing(chatJid, nowSec - 120);
+          if (recentOutgoing.length > 0) {
+            const chatIds = msgs.map(m => m.id);
+            whatsappDB.markNotificationsRead(chatIds);
+            processedJids.add(chatJid);
+            console.log(`[BrainLoop] WA DM skip (user replied): ${senderName}`);
+            continue;
+          }
+
           // Bekleyen whatsapp_reply expectation var mı? → resolve et
           const pendingExp = expectations
             .pendingForUser(userId)
@@ -431,6 +441,12 @@ class BrainLoop {
       // Guard 2: Inbox'ta bu chat için zaten pending item varsa atla
       if (inbox.pending().some(item => item.chatJid === chatJid)) {
         console.log(`[BrainLoop] WA ts-scan skip (pending): ${senderName}`);
+        continue;
+      }
+
+      // Guard 3: Son 120s içinde Fekrat bu chat'e cevap yazdıysa atla
+      if (whatsappDB.getRecentOutgoing(chatJid, nowSec - 120).length > 0) {
+        console.log(`[BrainLoop] WA ts-scan skip (user replied): ${senderName}`);
         continue;
       }
 
