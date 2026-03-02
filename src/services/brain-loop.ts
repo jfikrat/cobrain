@@ -266,6 +266,25 @@ class BrainLoop {
       for (const [chatJid, msgs] of bySender) {
         const senderName = msgs[0]!.sender_name || chatJid.split("@")[0] || "?";
         try {
+          // Guard 1: Son 60s içinde bu chat'e cevap verildiyse atla
+          if (wasRecentlyReplied(chatJid)) {
+            const chatIds = msgs.map(m => m.id);
+            whatsappDB.markNotificationsRead(chatIds);
+            processedJids.add(chatJid);
+            console.log(`[BrainLoop] WA DM skip (dedup): ${senderName}`);
+            continue;
+          }
+
+          // Guard 2: Inbox'ta bu chat için zaten pending item varsa atla
+          const alreadyPending = inbox.pending().some(item => item.chatJid === chatJid);
+          if (alreadyPending) {
+            const chatIds = msgs.map(m => m.id);
+            whatsappDB.markNotificationsRead(chatIds);
+            processedJids.add(chatJid);
+            console.log(`[BrainLoop] WA DM skip (pending): ${senderName}`);
+            continue;
+          }
+
           // Bekleyen whatsapp_reply expectation var mı? → resolve et
           const pendingExp = expectations
             .pendingForUser(userId)
@@ -308,11 +327,12 @@ class BrainLoop {
             body: bodyParts.join("\n\n"),
             priority: "normal",
             ttlMs: 2 * 60 * 60 * 1000,
+            chatJid,
             // cortex: "wa", // DISABLED — mimari düzenlenene kadar
           });
           waMailbox.markProcessed(chatJid);
           processedJids.add(chatJid);
-          console.log(`[BrainLoop] WA DM → Inbox (wa-cortex): ${senderName}`);
+          console.log(`[BrainLoop] WA DM → Inbox: ${senderName}`);
 
           // lastSeenMsgTimestamps güncelle — timestamp scan duplikasyon yapmaz
           const maxMsgTs = Math.max(...msgs.map(m => m.message_timestamp || 0));
@@ -402,6 +422,18 @@ class BrainLoop {
       const newestTs = Math.max(...newMsgs.map(m => m.timestamp ?? 0));
       if (newestTs > lastSeen) this.lastSeenMsgTimestamps.set(chatJid, newestTs);
 
+      // Guard 1: Son 60s içinde bu chat'e cevap verildiyse atla
+      if (wasRecentlyReplied(chatJid)) {
+        console.log(`[BrainLoop] WA ts-scan skip (dedup): ${senderName}`);
+        continue;
+      }
+
+      // Guard 2: Inbox'ta bu chat için zaten pending item varsa atla
+      if (inbox.pending().some(item => item.chatJid === chatJid)) {
+        console.log(`[BrainLoop] WA ts-scan skip (pending): ${senderName}`);
+        continue;
+      }
+
       try {
         const incomingMsgs = newMsgs.map(m => ({
           content: m.content || (m.message_type !== "text" ? `[${m.message_type}]` : "[mesaj]"),
@@ -432,10 +464,11 @@ class BrainLoop {
           body: bodyParts.join("\n\n"),
           priority: "normal",
           ttlMs: 2 * 60 * 60 * 1000,
+          chatJid,
           // cortex: "wa", // DISABLED — mimari düzenlenene kadar
         });
         waMailbox.markProcessed(chatJid);
-        console.log(`[BrainLoop] WA DM (ts-scan) → Inbox (wa-cortex): ${senderName} (${newMsgs.length} msg)`);
+        console.log(`[BrainLoop] WA DM (ts-scan) → Inbox: ${senderName} (${newMsgs.length} msg)`);
       } catch (err) {
         console.error(`[BrainLoop] timestampScan ${chatJid} error:`, err);
       }
@@ -565,6 +598,8 @@ class BrainLoop {
       .then(async response => {
         if (typingInterval) clearInterval(typingInterval);
         await inbox.markProcessed(pendingItem.id);
+        // WA DM ise cevap verildi olarak işaretle — 60s dedup
+        if (pendingItem.chatJid) markReplied(pendingItem.chatJid);
         if (this.bot) sendLogToChannel(this.bot, `📬 Inbox [${pendingItem.from}] — ${pendingItem.subject.slice(0, 60)}`, response);
       })
       .catch(err => {
@@ -603,6 +638,9 @@ class BrainLoop {
       });
 
       console.log(`[BrainLoop] WA Cortex tamamlandı: ${response.numTurns} turn, $${response.totalCost.toFixed(4)}`);
+
+      // WA DM ise cevap verildi olarak işaretle — 60s dedup
+      if (item.chatJid) markReplied(item.chatJid);
 
       // Outbox kontrol et — Cobrain onayı gerekiyor mu?
       await this.checkWACortexOutbox(userId, userFolder);

@@ -25,6 +25,8 @@ export interface InboxItem {
   processedAt?: number;
   /** Hangi cortex işleyecek (undefined = ana Cobrain) */
   cortex?: "wa";
+  /** WA DM'leri için — reply dedup ve per-chat guard için */
+  chatJid?: string;
 }
 
 // ── InboxService ──────────────────────────────────────────────────────────
