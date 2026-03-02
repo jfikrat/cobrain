@@ -23,6 +23,12 @@ export interface InboxItem {
   /** urgent: 30dk, normal: 2sa */
   ttlMs: number;
   processedAt?: number;
+  /**
+   * İşlenmeden önce beklenecek zaman (unix ms).
+   * Şu an < processAfter ise pending() listesine girmez.
+   * WA DM'lerde 60s geciktirme için kullanılır — Fekrat arada cevap verirse Cobrain atlar.
+   */
+  processAfter?: number;
   /** Hangi cortex işleyecek (undefined = ana Cobrain) */
   cortex?: "wa";
   /** WA DM'leri için — reply dedup ve per-chat guard için */
@@ -107,15 +113,25 @@ class InboxService {
   }
 
   /**
-   * İşlenmemiş öğeler — önce urgent, sonra en eski
+   * İşlenmemiş öğeler — önce urgent, sonra en eski.
+   * processAfter varsa ve henüz o zaman gelmemişse listeye girmez.
    */
   pending(): InboxItem[] {
+    const now = Date.now();
     return this.items
-      .filter(i => !i.processedAt)
+      .filter(i => !i.processedAt && !(i.processAfter && i.processAfter > now))
       .sort((a, b) => {
         if (a.priority === b.priority) return a.createdAt - b.createdAt;
         return a.priority === "urgent" ? -1 : 1;
       });
+  }
+
+  /**
+   * Bu chatJid için işlenmemiş (processedAt yok) item var mı?
+   * processAfter bekliyenler dahil — Guard 2 için kullanılır.
+   */
+  hasChatItem(chatJid: string): boolean {
+    return this.items.some(i => !i.processedAt && i.chatJid === chatJid);
   }
 
   async markProcessed(id: string): Promise<void> {

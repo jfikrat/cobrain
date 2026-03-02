@@ -275,8 +275,8 @@ class BrainLoop {
             continue;
           }
 
-          // Guard 2: Inbox'ta bu chat için zaten pending item varsa atla
-          const alreadyPending = inbox.pending().some(item => item.chatJid === chatJid);
+          // Guard 2: Inbox'ta bu chat için zaten item varsa atla (processAfter bekleyenler dahil)
+          const alreadyPending = inbox.hasChatItem(chatJid);
           if (alreadyPending) {
             const chatIds = msgs.map(m => m.id);
             whatsappDB.markNotificationsRead(chatIds);
@@ -338,11 +338,12 @@ class BrainLoop {
             priority: "normal",
             ttlMs: 2 * 60 * 60 * 1000,
             chatJid,
+            processAfter: Date.now() + 60_000, // 60s bekle — Fekrat arada cevap verirse Guard 3 yakalar
             // cortex: "wa", // DISABLED — mimari düzenlenene kadar
           });
           waMailbox.markProcessed(chatJid);
           processedJids.add(chatJid);
-          console.log(`[BrainLoop] WA DM → Inbox: ${senderName}`);
+          console.log(`[BrainLoop] WA DM → Inbox: ${senderName} (processAfter: 60s)`);
 
           // lastSeenMsgTimestamps güncelle — timestamp scan duplikasyon yapmaz
           const maxMsgTs = Math.max(...msgs.map(m => m.message_timestamp || 0));
@@ -438,8 +439,8 @@ class BrainLoop {
         continue;
       }
 
-      // Guard 2: Inbox'ta bu chat için zaten pending item varsa atla
-      if (inbox.pending().some(item => item.chatJid === chatJid)) {
+      // Guard 2: Inbox'ta bu chat için zaten item varsa atla (processAfter bekleyenler dahil)
+      if (inbox.hasChatItem(chatJid)) {
         console.log(`[BrainLoop] WA ts-scan skip (pending): ${senderName}`);
         continue;
       }
@@ -481,10 +482,11 @@ class BrainLoop {
           priority: "normal",
           ttlMs: 2 * 60 * 60 * 1000,
           chatJid,
+          processAfter: Date.now() + 60_000, // 60s bekle — Fekrat arada cevap verirse Guard 3 yakalar
           // cortex: "wa", // DISABLED — mimari düzenlenene kadar
         });
         waMailbox.markProcessed(chatJid);
-        console.log(`[BrainLoop] WA DM (ts-scan) → Inbox: ${senderName} (${newMsgs.length} msg)`);
+        console.log(`[BrainLoop] WA DM (ts-scan) → Inbox: ${senderName} (${newMsgs.length} msg, processAfter: 60s)`);
       } catch (err) {
         console.error(`[BrainLoop] timestampScan ${chatJid} error:`, err);
       }
