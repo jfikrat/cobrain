@@ -377,6 +377,24 @@ class WhatsAppDBService {
   }
 
   /**
+   * Belirli bir chatJid için timestamp'ten sonra gelen (from_me=0) mesajları getir.
+   * Notifications tablosunu bypass eder — okunmuş/okunmamış fark etmez.
+   */
+  getRecentIncoming(chatJid: string, sinceTimestampSec: number, limit: number = 10): Message[] {
+    if (!this.db) return [];
+    return this.db.query<Message, [string, number, number]>(`
+      SELECT id, chat_jid, sender_jid, content, message_type, timestamp, is_from_me
+      FROM messages
+      WHERE chat_jid = ?
+        AND is_from_me = 0
+        AND timestamp > ?
+        AND message_type != 'reaction'
+      ORDER BY timestamp ASC
+      LIMIT ?
+    `).all(chatJid, sinceTimestampSec, limit);
+  }
+
+  /**
    * Son N saatte mesaj gelen aktif DM sohbetleri döndür (gruplar hariç)
    */
   getRecentActiveChats(limitHours: number = 24): Array<{ chatJid: string; senderName: string }> {

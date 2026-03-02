@@ -81,6 +81,8 @@ class BrainLoop {
   private codeReviewIndex = 0;
   private lastCodeReviewDate: string | null = null;
   private lastProactiveCheckHour: string | null = null;
+  // Timestamp-based scan: chatJid → son görülen mesajın unix timestamp'i (sn)
+  private lastSeenMsgTimestamps = new Map<string, number>();
 
   // ── Lifecycle ────────────────────────────────────────────────────────
 
@@ -121,10 +123,17 @@ class BrainLoop {
   private async fastTick(): Promise<void> {
     heartbeat("brain_loop", { event: "fast_tick" });
 
+    let processedJids = new Set<string>();
     try {
-      await this.pollWhatsApp();
+      processedJids = await this.pollWhatsApp();
     } catch (err) {
       console.error("[BrainLoop] pollWhatsApp error:", err);
+    }
+
+    try {
+      await this.timestampScanWhatsApp(processedJids);
+    } catch (err) {
+      console.error("[BrainLoop] timestampScanWhatsApp error:", err);
     }
 
     try {
@@ -178,13 +187,14 @@ class BrainLoop {
 
   // ── WhatsApp Polling → Inbox (Cortex direct) ─────────────────────────
 
-  private async pollWhatsApp(): Promise<void> {
-    if (!this.bot || !whatsappDB.isAvailable()) return;
+  private async pollWhatsApp(): Promise<Set<string>> {
+    const processedJids = new Set<string>();
+    if (!this.bot || !whatsappDB.isAvailable()) return processedJids;
 
     const allNotifications = whatsappDB.getPendingNotifications(10);
     if (allNotifications.length === 0) {
       heartbeat("whatsapp_notifications", { sent: 0, dms: 0, groups: 0, stale: 0 });
-      return;
+      return processedJids;
     }
 
     const processedIds = new Set<number>();
@@ -239,7 +249,7 @@ class BrainLoop {
       }
     }
 
-    if (notifications.length === 0) return;
+    if (notifications.length === 0) return processedJids;
 
     const dms = notifications.filter(n => !n.is_group);
     const groupMsgs = notifications.filter(n => n.is_group);
@@ -300,7 +310,15 @@ class BrainLoop {
             ttlMs: 2 * 60 * 60 * 1000,
           });
           waMailbox.markProcessed(chatJid);
+          processedJids.add(chatJid);
           console.log(`[BrainLoop] WA DM → Inbox: ${senderName}`);
+
+          // lastSeenMsgTimestamps güncelle — timestamp scan duplikasyon yapmaz
+          const maxMsgTs = Math.max(...msgs.map(m => m.message_timestamp || 0));
+          if (maxMsgTs > 0) {
+            const cur = this.lastSeenMsgTimestamps.get(chatJid) ?? 0;
+            if (maxMsgTs > cur) this.lastSeenMsgTimestamps.set(chatJid, maxMsgTs);
+          }
 
           const chatIds = msgs.map(m => m.id);
           whatsappDB.markNotificationsRead(chatIds);
@@ -352,6 +370,74 @@ class BrainLoop {
       groups: groupMsgs.length,
       stale: staleIds.length,
     });
+
+    return processedJids;
+  }
+
+  // ── Timestamp-based WhatsApp Scan ─────────────────────────────────────
+  // notifications tablosuna güvenmez — messages tablosunu timestamp ile tarar.
+  // Fekrat telefonda okusa bile mesajı yakalar.
+
+  private async timestampScanWhatsApp(skipJids: Set<string>): Promise<void> {
+    if (!whatsappDB.isAvailable()) return;
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const activeChats = whatsappDB.getRecentActiveChats(1); // son 1 saat
+
+    for (const { chatJid, senderName } of activeChats) {
+      if (skipJids.has(chatJid)) continue; // notifications path'i zaten işledi
+
+      const lastSeen = this.lastSeenMsgTimestamps.get(chatJid);
+      if (lastSeen === undefined) {
+        // İlk kez görülen chat — baseline'ı şu ana ayarla, bu tick'te işleme
+        this.lastSeenMsgTimestamps.set(chatJid, nowSec);
+        continue;
+      }
+
+      const newMsgs = whatsappDB.getRecentIncoming(chatJid, lastSeen);
+      if (newMsgs.length === 0) continue;
+
+      // lastSeen'i güncelle — sonraki tick'te tekrar işleme
+      const newestTs = Math.max(...newMsgs.map(m => m.timestamp ?? 0));
+      if (newestTs > lastSeen) this.lastSeenMsgTimestamps.set(chatJid, newestTs);
+
+      try {
+        const incomingMsgs = newMsgs.map(m => ({
+          content: m.content || (m.message_type !== "text" ? `[${m.message_type}]` : "[mesaj]"),
+          message_type: m.message_type || "text",
+        }));
+
+        // Outgoing history'yi de sync et
+        const lastOutTs = waMailbox.getLastOutgoingTimestamp(chatJid);
+        const sinceTs = lastOutTs > 0 ? Math.floor(lastOutTs / 1000) : nowSec - 3600;
+        const outgoing = whatsappDB.getRecentOutgoing(chatJid, sinceTs);
+        for (const msg of outgoing) {
+          waMailbox.addOutgoing(chatJid, msg.content || "[medya]", (msg.timestamp || 0) * 1000);
+        }
+
+        waMailbox.push(chatJid, senderName, incomingMsgs);
+        const history = waMailbox.getHistory(chatJid);
+        const msgTexts = incomingMsgs.map(m => m.content).join("\n");
+
+        const bodyParts = [`Bağlam: [whatsapp_dm] ${senderName} | jid:${chatJid}: ${msgTexts}`];
+        if (history.length > 0) {
+          const historyStr = history.map(m => `[${m.direction === "incoming" ? "←" : "→"}] ${m.content}`).join("\n");
+          bodyParts.push(`[SON MESAJLAR]\n${historyStr}`);
+        }
+
+        await inbox.push({
+          from: "brain-loop",
+          subject: `[whatsapp_dm] ${senderName}: ${incomingMsgs[0]?.content?.slice(0, 80) ?? ""}`,
+          body: bodyParts.join("\n\n"),
+          priority: "normal",
+          ttlMs: 2 * 60 * 60 * 1000,
+        });
+        waMailbox.markProcessed(chatJid);
+        console.log(`[BrainLoop] WA DM (ts-scan) → Inbox: ${senderName} (${newMsgs.length} msg)`);
+      } catch (err) {
+        console.error(`[BrainLoop] timestampScan ${chatJid} error:`, err);
+      }
+    }
   }
 
   // ── Due Reminders → Inbox ────────────────────────────────────────────
@@ -592,6 +678,11 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
         for (const chat of activeChats) {
           const messages = whatsappDB.getMessages(chat.chatJid, 15);
           waMailbox.seedFromHistory(chat.chatJid, chat.senderName, messages);
+          // lastSeenMsgTimestamps başlat — restart'ta eski mesajları tekrar işleme
+          const newestMsg = messages[messages.length - 1];
+          if (newestMsg?.timestamp) {
+            this.lastSeenMsgTimestamps.set(chat.chatJid, newestMsg.timestamp);
+          }
         }
         console.log(`[BrainLoop] WaMailbox seeded for ${activeChats.length} chat(s)`);
       } catch (err) {
