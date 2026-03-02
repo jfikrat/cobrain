@@ -308,7 +308,7 @@ class BrainLoop {
             body: bodyParts.join("\n\n"),
             priority: "normal",
             ttlMs: 2 * 60 * 60 * 1000,
-            cortex: "wa",
+            // cortex: "wa", // DISABLED — mimari düzenlenene kadar
           });
           waMailbox.markProcessed(chatJid);
           processedJids.add(chatJid);
@@ -432,7 +432,7 @@ class BrainLoop {
           body: bodyParts.join("\n\n"),
           priority: "normal",
           ttlMs: 2 * 60 * 60 * 1000,
-          cortex: "wa",
+          // cortex: "wa", // DISABLED — mimari düzenlenene kadar
         });
         waMailbox.markProcessed(chatJid);
         console.log(`[BrainLoop] WA DM (ts-scan) → Inbox (wa-cortex): ${senderName} (${newMsgs.length} msg)`);
