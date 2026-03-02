@@ -273,7 +273,8 @@ class BrainLoop {
 
           const bodyParts = [`Bağlam: [whatsapp_dm] ${senderName}: ${msgTexts}`];
           if (history.length > 0) {
-            bodyParts.push(`\n[SON MESAJLAR]\n${history}`);
+            const historyStr = history.map(m => `[${m.direction === "incoming" ? "←" : "→"}] ${m.content}`).join("\n");
+            bodyParts.push(`[SON MESAJLAR]\n${historyStr}`);
           }
 
           await inbox.push({
