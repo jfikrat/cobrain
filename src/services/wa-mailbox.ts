@@ -51,14 +51,22 @@ class WaMailbox {
   }
 
   /** Record an outgoing reply so future triage has context */
-  addOutgoing(chatJid: string, content: string): void {
+  addOutgoing(chatJid: string, content: string, timestampMs?: number): void {
     const box = this.boxes.get(chatJid);
     if (!box) return;
+    const ts = timestampMs ?? Date.now();
+    // Dedup: aynı içerik + yakın timestamp (2sn tolerans) varsa ekleme
+    const isDuplicate = box.history.some(m =>
+      m.direction === "outgoing" &&
+      m.content === content &&
+      Math.abs(m.timestamp - ts) < 2000
+    );
+    if (isDuplicate) return;
     box.history.push({
       content,
       messageType: "text",
       direction: "outgoing",
-      timestamp: Date.now(),
+      timestamp: ts,
     });
     this.trimHistory(box);
   }

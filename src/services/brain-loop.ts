@@ -278,7 +278,7 @@ class BrainLoop {
             : Math.floor(Date.now() / 1000) - 3600; // İlk kez: son 1 saat
           const outgoingMsgs = whatsappDB.getRecentOutgoing(chatJid, sinceTs);
           for (const msg of outgoingMsgs) {
-            waMailbox.addOutgoing(chatJid, msg.content || "[medya]");
+            waMailbox.addOutgoing(chatJid, msg.content || "[medya]", (msg.timestamp || 0) * 1000);
           }
 
           waMailbox.push(chatJid, senderName, incomingMsgs);
