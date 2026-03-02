@@ -9,7 +9,7 @@
  * Stem (Haiku triage) layer has been removed.
  */
 
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
 import { Bot } from "grammy";
 import { config } from "../config.ts";
 import { userManager } from "./user-manager.ts";
@@ -308,10 +308,11 @@ class BrainLoop {
             body: bodyParts.join("\n\n"),
             priority: "normal",
             ttlMs: 2 * 60 * 60 * 1000,
+            cortex: "wa",
           });
           waMailbox.markProcessed(chatJid);
           processedJids.add(chatJid);
-          console.log(`[BrainLoop] WA DM → Inbox: ${senderName}`);
+          console.log(`[BrainLoop] WA DM → Inbox (wa-cortex): ${senderName}`);
 
           // lastSeenMsgTimestamps güncelle — timestamp scan duplikasyon yapmaz
           const maxMsgTs = Math.max(...msgs.map(m => m.message_timestamp || 0));
@@ -431,9 +432,10 @@ class BrainLoop {
           body: bodyParts.join("\n\n"),
           priority: "normal",
           ttlMs: 2 * 60 * 60 * 1000,
+          cortex: "wa",
         });
         waMailbox.markProcessed(chatJid);
-        console.log(`[BrainLoop] WA DM (ts-scan) → Inbox: ${senderName} (${newMsgs.length} msg)`);
+        console.log(`[BrainLoop] WA DM (ts-scan) → Inbox (wa-cortex): ${senderName} (${newMsgs.length} msg)`);
       } catch (err) {
         console.error(`[BrainLoop] timestampScan ${chatJid} error:`, err);
       }
@@ -530,6 +532,17 @@ class BrainLoop {
   private async processInbox(): Promise<void> {
     const pendingItem = inbox.pending()[0];
     if (!pendingItem) return;
+
+    // WA Cortex: kullanıcı meşgul olsa bile bağımsız çalışır
+    if (pendingItem.cortex === "wa") {
+      await inbox.markProcessed(pendingItem.id);
+      this.processWACortexItem(pendingItem).catch(err =>
+        console.error("[BrainLoop] WA cortex error:", err)
+      );
+      return;
+    }
+
+    // Ana Cobrain: kullanıcı konuşuyorsa bekle
     if (isUserBusy(config.MY_TELEGRAM_ID)) return;
 
     const prompt = [
@@ -558,6 +571,79 @@ class BrainLoop {
         if (typingInterval) clearInterval(typingInterval);
         console.error("[BrainLoop] Inbox işleme hatası:", err);
       });
+  }
+
+  // ── WA Cortex Processor ───────────────────────────────────────────────
+
+  private async processWACortexItem(item: import("./inbox.ts").InboxItem): Promise<void> {
+    const userId = config.MY_TELEGRAM_ID;
+    const userFolder = userManager.getUserFolder(userId);
+    const systemPromptPath = join(userFolder, "mind/cortexes/wa/system-prompt.md");
+
+    let systemPromptOverride: string | undefined;
+    try {
+      systemPromptOverride = await Bun.file(systemPromptPath).text();
+    } catch {
+      console.warn("[BrainLoop] WA cortex system-prompt yüklenemedi, ana Cobrain ile işlenecek");
+    }
+
+    const prompt = [
+      `[GELEN KUTUSU — WA-CORTEX]`,
+      `Konu: ${item.subject}`,
+      ``,
+      item.body,
+    ].join("\n");
+
+    console.log(`[BrainLoop] WA Cortex işleniyor: "${item.subject}"`);
+
+    try {
+      const response = await chat(userId, prompt, undefined, undefined, {
+        systemPromptOverride,
+        sessionKey: "wa_cortex",
+      });
+
+      console.log(`[BrainLoop] WA Cortex tamamlandı: ${response.numTurns} turn, $${response.totalCost.toFixed(4)}`);
+
+      // Outbox kontrol et — Cobrain onayı gerekiyor mu?
+      await this.checkWACortexOutbox(userId, userFolder);
+
+      if (this.bot) {
+        sendLogToChannel(this.bot, `💬 WA Cortex — ${item.subject.slice(0, 60)}`, response);
+      }
+    } catch (err) {
+      console.error("[BrainLoop] WA Cortex chat error:", err);
+      if (this.bot) {
+        await sendRawLog(this.bot, `❌ <b>WA Cortex hata</b>\n<code>${String(err).slice(0, 200)}</code>`);
+      }
+    }
+  }
+
+  private async checkWACortexOutbox(userId: number, userFolder: string): Promise<void> {
+    const outboxPath = join(userFolder, "mind/cortexes/wa/outbox.md");
+    try {
+      const content = await Bun.file(outboxPath).text();
+      if (!content.includes("Cobrain Onayı Gerekiyor")) return;
+
+      // Son session'ın ## başlığından itibaren olan kısmı al
+      const sections = content.split(/^(?=## \[)/m);
+      const lastSection = sections[sections.length - 1] ?? "";
+
+      if (!lastSection.includes("Cobrain Onayı Gerekiyor")) return;
+
+      const match = lastSection.match(/### Cobrain Onayı Gerekiyor\n([\s\S]*?)(?=\n###|$)/);
+      const approvalText = match?.[1]?.trim();
+      if (!approvalText) return;
+
+      if (this.bot) {
+        await this.bot.api.sendMessage(
+          userId,
+          `📬 <b>WA Cortex onay bekliyor:</b>\n\n${escapeHtml(approvalText.slice(0, 800))}`,
+          { parse_mode: "HTML" },
+        );
+      }
+    } catch {
+      // outbox.md yoksa sessiz kal
+    }
   }
 
   // ── Code Review Cycle ──────────────────────────────────────────────

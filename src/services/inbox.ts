@@ -23,6 +23,8 @@ export interface InboxItem {
   /** urgent: 30dk, normal: 2sa */
   ttlMs: number;
   processedAt?: number;
+  /** Hangi cortex işleyecek (undefined = ana Cobrain) */
+  cortex?: "wa";
 }
 
 // ── InboxService ──────────────────────────────────────────────────────────

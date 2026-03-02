@@ -41,6 +41,17 @@ export interface ChatResponse {
 // Session ID cache per user
 const userSessions = new Map<number, string>();
 
+// Session ID cache for named cortex sessions (e.g. "wa_cortex")
+// Key: sessionKey string. Not persisted to DB — restarts fine.
+const cortexSessions = new Map<string, string>();
+
+export interface ChatOptions {
+  /** WA cortex veya diğer sub-cortex için system prompt override */
+  systemPromptOverride?: string;
+  /** Ayrı session cache anahtarı (örn: "wa_cortex"). Undefined = ana Cobrain session */
+  sessionKey?: string;
+}
+
 // Concurrency guard: reflects whether _executeChat is actively running
 const activeThinking = new Set<number>();
 
@@ -92,11 +103,12 @@ export function chat(
   message: string | MultimodalMessage,
   traceId?: string,
   modelOverride?: string,
+  options?: ChatOptions,
 ): Promise<ChatResponse> {
   // Chain on the previous pending call so calls are strictly serialized per user
   const prev = pendingChats.get(userId);
   const current: Promise<ChatResponse> = (prev?.catch(() => undefined) ?? Promise.resolve(undefined))
-    .then(() => _executeChat(userId, message, traceId, modelOverride));
+    .then(() => _executeChat(userId, message, traceId, modelOverride, 1, options));
   pendingChats.set(userId, current);
   // Clean up map entry once resolved (avoid memory leak for long-running processes)
   current.finally(() => {
@@ -119,6 +131,7 @@ async function _executeChat(
   traceId?: string,
   modelOverride?: string,
   attempt = 1,
+  options?: ChatOptions,
 ): Promise<ChatResponse> {
   activeThinking.add(userId);
   try {
@@ -204,17 +217,25 @@ async function _executeChat(
     } catch {}
   }
 
-  const mindContent = await readMindFiles(userFolder);
-  const systemPrompt = buildMdSystemPrompt(mindContent, {
-    time: dynamicTime,
-    mood: dynamicMood,
-    recentMemories,
-    sessionState,
-    recentWhatsApp,
-  });
+  let systemPrompt: string;
+  if (options?.systemPromptOverride) {
+    // Sub-cortex (WA cortex vb.) kendi system prompt'unu geçiyor
+    systemPrompt = options.systemPromptOverride;
+  } else {
+    const mindContent = await readMindFiles(userFolder);
+    systemPrompt = buildMdSystemPrompt(mindContent, {
+      time: dynamicTime,
+      mood: dynamicMood,
+      recentMemories,
+      sessionState,
+      recentWhatsApp,
+    });
+  }
 
   // Get or resume session (checks in-memory cache, then DB with TTL)
-  const existingSessionId = await getOrResumeSession(userId);
+  const existingSessionId = options?.sessionKey
+    ? cortexSessions.get(options.sessionKey)
+    : await getOrResumeSession(userId);
 
   // Track tools used + streaming notifier
   const toolsUsed: string[] = [];
@@ -338,16 +359,21 @@ async function _executeChat(
         case "system":
           if (msg.subtype === "init") {
             sessionId = msg.session_id;
-            userSessions.set(userId, sessionId);
-            // Persist to DB for cross-restart recovery
-            try {
-              const userDb = await userManager.getUserDb(userId);
-              const mem = new UserMemory(userDb);
-              mem.setSession(sessionId);
-            } catch (e) {
-              console.warn(`[Cortex] Session persist failed:`, e);
+            if (options?.sessionKey) {
+              // Sub-cortex: in-memory only, no DB persist
+              cortexSessions.set(options.sessionKey, sessionId);
+            } else {
+              userSessions.set(userId, sessionId);
+              // Persist to DB for cross-restart recovery
+              try {
+                const userDb = await userManager.getUserDb(userId);
+                const mem = new UserMemory(userDb);
+                mem.setSession(sessionId);
+              } catch (e) {
+                console.warn(`[Cortex] Session persist failed:`, e);
+              }
             }
-            console.log(`[Cortex] Session: ${sessionId.slice(0, 8)}...`);
+            console.log(`[Cortex] Session${options?.sessionKey ? ` (${options.sessionKey})` : ""}: ${sessionId.slice(0, 8)}...`);
           }
           break;
 
@@ -427,13 +453,17 @@ async function _executeChat(
     // Clear and retry once with a fresh session (call _executeChat directly to avoid queue deadlock)
     if (existingSessionId && errorMessage.includes("exited with code")) {
       console.warn(`[Cortex] Stale session detected, retrying with fresh session...`);
-      userSessions.delete(userId);
-      try {
-        const userDb = await userManager.getUserDb(userId);
-        const mem = new UserMemory(userDb);
-        mem.clearSession();
-      } catch {}
-      return _executeChat(userId, message, traceId, modelOverride, attempt);
+      if (options?.sessionKey) {
+        cortexSessions.delete(options.sessionKey);
+      } else {
+        userSessions.delete(userId);
+        try {
+          const userDb = await userManager.getUserDb(userId);
+          const mem = new UserMemory(userDb);
+          mem.clearSession();
+        } catch {}
+      }
+      return _executeChat(userId, message, traceId, modelOverride, attempt, options);
     }
 
     // Retry on transient API errors (500, overloaded, rate limit)
@@ -442,7 +472,7 @@ async function _executeChat(
       console.warn(`[Cortex] API error (attempt ${attempt}/${MAX_RETRIES}), retrying in ${delay}ms: ${errorMessage.slice(0, 80)}`);
       await new Promise((r) => setTimeout(r, delay));
       activeThinking.delete(userId);
-      return _executeChat(userId, message, traceId, modelOverride, attempt + 1);
+      return _executeChat(userId, message, traceId, modelOverride, attempt + 1, options);
     }
 
     console.error("[Cortex] Chat error:", error);
@@ -451,7 +481,11 @@ async function _executeChat(
     await notifier.complete({ error: errorMessage });
 
     // Clear session on error to start fresh next time
-    userSessions.delete(userId);
+    if (options?.sessionKey) {
+      cortexSessions.delete(options.sessionKey);
+    } else {
+      userSessions.delete(userId);
+    }
 
     return {
       content: `Hata: ${errorMessage}`,
@@ -462,6 +496,7 @@ async function _executeChat(
       numTurns: 0,
       toolsUsed: [],
       model: actualModel,
+      stopReason: null,
     };
   }
   } finally {
