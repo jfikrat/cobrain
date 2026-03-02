@@ -376,6 +376,34 @@ class WhatsAppDBService {
     `).all(chatJid, sinceTimestampSec);
   }
 
+  /**
+   * Son N saatte mesaj gelen aktif DM sohbetleri döndür (gruplar hariç)
+   */
+  getRecentActiveChats(limitHours: number = 24): Array<{ chatJid: string; senderName: string }> {
+    if (!this.db) return [];
+    const cutoffTime = Math.floor(Date.now() / 1000) - (limitHours * 3600);
+    try {
+      return this.db.query<{ chat_jid: string; contact_name: string | null }, [number]>(`
+        SELECT m.chat_jid,
+               COALESCE(c.name, c.notify, m.chat_jid) as contact_name
+        FROM messages m
+        LEFT JOIN contacts c ON c.jid = m.chat_jid
+        LEFT JOIN chats ch ON ch.jid = m.chat_jid
+        WHERE m.timestamp > ?
+          AND (ch.is_group = 0 OR ch.is_group IS NULL)
+          AND m.chat_jid != 'status@broadcast'
+        GROUP BY m.chat_jid
+        ORDER BY MAX(m.timestamp) DESC
+        LIMIT 20
+      `).all(cutoffTime).map(r => ({
+        chatJid: r.chat_jid,
+        senderName: r.contact_name || r.chat_jid.split("@")[0] || "?",
+      }));
+    } catch {
+      return [];
+    }
+  }
+
   close() {
     if (this.db) this.db.close();
   }

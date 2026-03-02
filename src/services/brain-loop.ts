@@ -584,6 +584,20 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
     } catch (err) {
       console.warn("[BrainLoop] State restore failed:", err);
     }
+
+    // WaMailbox seed — restart sonrası son 24 saatte aktif DM geçmişini yükle
+    if (whatsappDB.isAvailable()) {
+      try {
+        const activeChats = whatsappDB.getRecentActiveChats(24);
+        for (const chat of activeChats) {
+          const messages = whatsappDB.getMessages(chat.chatJid, 15);
+          waMailbox.seedFromHistory(chat.chatJid, chat.senderName, messages);
+        }
+        console.log(`[BrainLoop] WaMailbox seeded for ${activeChats.length} chat(s)`);
+      } catch (err) {
+        console.warn("[BrainLoop] WaMailbox seed failed:", err);
+      }
+    }
   }
 
   private persistState(): void {

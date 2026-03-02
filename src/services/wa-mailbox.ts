@@ -82,6 +82,26 @@ class WaMailbox {
     return this.boxes.get(chatJid)?.history ?? [];
   }
 
+  /** Seed history from DB messages after restart — incoming + outgoing */
+  seedFromHistory(
+    chatJid: string,
+    senderName: string,
+    messages: Array<{ content: string | null; message_type: string; timestamp: number | null; is_from_me: number }>,
+  ): void {
+    if (!this.boxes.has(chatJid)) {
+      this.boxes.set(chatJid, { chatJid, senderName, history: [], pending: [] });
+    }
+    const box = this.boxes.get(chatJid)!;
+    box.senderName = senderName;
+    box.history = messages.map(m => ({
+      content: m.content || "[medya]",
+      messageType: m.message_type,
+      direction: m.is_from_me === 1 ? "outgoing" : "incoming",
+      timestamp: (m.timestamp || 0) * 1000, // DB saniye → ms
+    }));
+    this.trimHistory(box);
+  }
+
   /** Get the timestamp of the last outgoing message in history (ms), or 0 if none */
   getLastOutgoingTimestamp(chatJid: string): number {
     const box = this.boxes.get(chatJid);
