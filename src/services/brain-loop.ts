@@ -666,6 +666,13 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
       this.lastCodeReviewDate = state.lastCodeReviewDate;
       this.codeReviewIndex = state.codeReviewIndex;
       this.lastProactiveCheckHour = state.lastProactiveCheckHour ?? null;
+      // lastSeenMsgTimestamps'i session state'den geri yükle
+      if (state.lastSeenMsgTimestamps) {
+        for (const [jid, ts] of Object.entries(state.lastSeenMsgTimestamps)) {
+          this.lastSeenMsgTimestamps.set(jid, ts);
+        }
+        console.log(`[BrainLoop] lastSeenMsgTimestamps restored: ${this.lastSeenMsgTimestamps.size} chat(s)`);
+      }
       console.log(`[BrainLoop] State restored: codeReviewIdx=${this.codeReviewIndex}`);
     } catch (err) {
       console.warn("[BrainLoop] State restore failed:", err);
@@ -678,10 +685,12 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
         for (const chat of activeChats) {
           const messages = whatsappDB.getMessages(chat.chatJid, 15);
           waMailbox.seedFromHistory(chat.chatJid, chat.senderName, messages);
-          // lastSeenMsgTimestamps başlat — restart'ta eski mesajları tekrar işleme
-          const newestMsg = messages[messages.length - 1];
-          if (newestMsg?.timestamp) {
-            this.lastSeenMsgTimestamps.set(chat.chatJid, newestMsg.timestamp);
+          // lastSeenMsgTimestamps: session state'den gelen değer varsa koru, yoksa DB'den seed et
+          if (!this.lastSeenMsgTimestamps.has(chat.chatJid)) {
+            const newestMsg = messages[messages.length - 1];
+            if (newestMsg?.timestamp) {
+              this.lastSeenMsgTimestamps.set(chat.chatJid, newestMsg.timestamp);
+            }
           }
         }
         console.log(`[BrainLoop] WaMailbox seeded for ${activeChats.length} chat(s)`);
@@ -697,6 +706,7 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
         codeReviewIndex: this.codeReviewIndex,
         lastCodeReviewDate: this.lastCodeReviewDate,
         lastProactiveCheckHour: this.lastProactiveCheckHour,
+        lastSeenMsgTimestamps: Object.fromEntries(this.lastSeenMsgTimestamps),
       });
     } catch (err) {
       console.warn("[BrainLoop] State persist failed:", err);

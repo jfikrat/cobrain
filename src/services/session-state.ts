@@ -41,6 +41,8 @@ export interface SessionState {
 
   // WhatsApp context
   recentWhatsApp: WhatsAppNotification[];
+  // chatJid → son görülen incoming mesajın unix timestamp'i (sn). Restart'ta kaybetmemek için persist.
+  lastSeenMsgTimestamps: Record<string, number>;
 
   // Meta
   updatedAt: string;
@@ -61,6 +63,7 @@ export const DEFAULT_SESSION_STATE: SessionState = {
   lastCodeReviewDate: null,
   lastProactiveCheckHour: null,
   recentWhatsApp: [],
+  lastSeenMsgTimestamps: {},
   updatedAt: new Date().toISOString(),
   version: 1,
 };
