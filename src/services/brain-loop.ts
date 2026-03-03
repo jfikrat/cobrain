@@ -482,7 +482,7 @@ class BrainLoop {
           priority: "normal",
           ttlMs: 2 * 60 * 60 * 1000,
           chatJid,
-          processAfter: Date.now() + 60_000, // 60s bekle — Fekrat arada cevap verirse Guard 3 yakalar
+          processAfter: Date.now() + 30_000, // 30s bekle — Fekrat arada cevap verirse Guard 3 yakalar
           cortex: "wa",
         });
         waMailbox.markProcessed(chatJid);
