@@ -658,7 +658,23 @@ class BrainLoop {
       console.log(`[BrainLoop] WA Cortex tamamlandı: ${response.numTurns} turn, $${response.totalCost.toFixed(4)}`);
 
       // WA DM ise cevap verildi olarak işaretle — 60s dedup
-      if (item.chatJid) markReplied(item.chatJid);
+      if (item.chatJid) {
+        markReplied(item.chatJid);
+
+        // Cortex'in gönderdiği mesajları waMailbox'a sync et
+        // 5s bekle — Baileys DB'ye yazma gecikmesi için
+        const chatJid = item.chatJid;
+        setTimeout(() => {
+          const nowSec = Math.floor(Date.now() / 1000);
+          const recentOutgoing = whatsappDB.getRecentOutgoing(chatJid, nowSec - 60);
+          for (const msg of recentOutgoing) {
+            waMailbox.addOutgoing(chatJid, msg.content || "[medya]", (msg.timestamp || 0) * 1000);
+          }
+          if (recentOutgoing.length > 0) {
+            console.log(`[BrainLoop] WA Cortex outgoing synced: ${recentOutgoing.length} msg → waMailbox`);
+          }
+        }, 5000);
+      }
 
       // Outbox kontrol et — Cobrain onayı gerekiyor mu?
       await this.checkWACortexOutbox(userId, userFolder);
