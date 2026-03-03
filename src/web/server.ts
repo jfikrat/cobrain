@@ -201,6 +201,79 @@ export function startWebServer(): void {
         return handleMediaServe(req, mediaMatch[1]);
       }
 
+      // POST /api/whatsapp/send — Agent'ların WA mesajı göndermesi için proxy
+      if (url.pathname === "/api/whatsapp/send" && req.method === "POST") {
+        const authHeader = req.headers.get("authorization");
+        const apiKey = config.COBRAIN_API_KEY;
+        if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
+          return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        try {
+          const body = await req.json() as { to: string; message: string };
+          if (!body.to || !body.message) {
+            return Response.json({ error: "to and message required" }, { status: 400 });
+          }
+          const userId = config.MY_TELEGRAM_ID;
+          const { chat: agentChat } = await import("../agent/chat.ts");
+          await agentChat(userId, `[AGENT_PROXY] WhatsApp gönder: to=${body.to} message="${body.message}"`, undefined, undefined, {
+            sessionKey: "wa_proxy",
+            systemPromptOverride: "Sen bir WhatsApp proxy'sisin. Verilen numaraya mesajı gönder. Sadece send_whatsapp_message tool'unu kullan. Başka bir şey yapma.",
+          });
+          console.log(`[API] WA proxy: ${body.to}`);
+          return Response.json({ ok: true });
+        } catch (err) {
+          return Response.json({ error: String(err).slice(0, 200) }, { status: 500 });
+        }
+      }
+
+      // GET /api/memory/recall — Agent hafıza okuma
+      if (url.pathname === "/api/memory/recall" && req.method === "GET") {
+        const authHeader = req.headers.get("authorization");
+        const apiKey = config.COBRAIN_API_KEY;
+        if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
+          return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        try {
+          const query = url.searchParams.get("query") || "all";
+          const days = parseInt(url.searchParams.get("days") || "30");
+          const userId = config.MY_TELEGRAM_ID;
+          const { FileMemory } = await import("../memory/file-memory.ts");
+          const userFolder = userManager.getUserFolder(userId);
+          const memory = new FileMemory(userFolder);
+          const facts = await memory.getFacts();
+          const events = await memory.getRecentEvents(days);
+          return Response.json({ facts: facts?.slice(0, 3000) || "", events: events?.slice(0, 1000) || "", query });
+        } catch (err) {
+          return Response.json({ error: String(err).slice(0, 200) }, { status: 500 });
+        }
+      }
+
+      // POST /api/memory/remember — Agent hafıza yazma
+      if (url.pathname === "/api/memory/remember" && req.method === "POST") {
+        const authHeader = req.headers.get("authorization");
+        const apiKey = config.COBRAIN_API_KEY;
+        if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
+          return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+        try {
+          const body = await req.json() as { content: string; type?: "semantic" | "episodic"; section?: string };
+          if (!body.content) return Response.json({ error: "content required" }, { status: 400 });
+          const userId = config.MY_TELEGRAM_ID;
+          const { FileMemory } = await import("../memory/file-memory.ts");
+          const userFolder = userManager.getUserFolder(userId);
+          const memory = new FileMemory(userFolder);
+          if (body.type === "episodic") {
+            await memory.logEvent(`[wa-agent] ${body.content}`);
+          } else {
+            await memory.updateFact(body.section || "WhatsApp", `[wa-agent] ${body.content}`);
+          }
+          console.log(`[API] Memory written by agent: "${body.content.slice(0, 60)}"`);
+          return Response.json({ ok: true });
+        } catch (err) {
+          return Response.json({ error: String(err).slice(0, 200) }, { status: 500 });
+        }
+      }
+
       // 404 for unknown routes
       return new Response("Not Found", { status: 404 });
     },
