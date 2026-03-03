@@ -86,6 +86,7 @@ const envSchema = z.object({
   // WA Agent — standalone process
   WA_AGENT_ENABLED: z.string().default("false").transform(v => v === "true" || v === "1"),
   WA_AGENT_PORT: z.coerce.number().default(3001),
+  WA_LOG_CHANNEL_ID: z.coerce.number().optional(),
 
 });
 

@@ -28,6 +28,21 @@ const WA_DB_PATH = process.env.WHATSAPP_DB_PATH || "/home/fjds/projects/whatsapp
 const USER_FOLDER = process.env.COBRAIN_USER_FOLDER || `${process.env.HOME}/.cobrain/users/${process.env.MY_TELEGRAM_ID}`;
 const ALLOWED_GROUP_JIDS = (process.env.WHATSAPP_ALLOWED_GROUP_JIDS || "")
   .split(",").map(j => j.trim()).filter(Boolean);
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const LOG_CHANNEL_ID = process.env.WA_LOG_CHANNEL_ID || "";
+
+// ── Telegram Log Channel ─────────────────────────────────────────────────
+
+async function sendLog(text: string): Promise<void> {
+  if (!LOG_CHANNEL_ID || !BOT_TOKEN) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: LOG_CHANNEL_ID, text: text.slice(0, 4096), parse_mode: "HTML" }),
+    });
+  } catch {}
+}
 
 // ── System Prompt ─────────────────────────────────────────────────────────
 
@@ -263,6 +278,7 @@ Görevin: Bu mesaja ne yapmalısın?
 
     console.log(`[WA Agent] Cobrain yanıtı (${response.length} karakter): ${response.slice(0, 100)}...`);
     markReplied(chatJid);
+    await sendLog(`📨 <b>DM:</b> ${senderName} → ${response.length} karakter yanıt`);
 
     // Cobrain'e WA context raporu gönder
     await reportToCobrain(
@@ -271,6 +287,7 @@ Görevin: Bu mesaja ne yapmalısın?
     );
   } catch (err) {
     console.error(`[WA Agent] AI hatası (${chatJid}):`, err);
+    await sendLog(`❌ <b>WA Hata:</b> ${senderName} — ${String(err).slice(0, 200)}`);
     await reportToCobrain(
       `WA agent hata — ${senderName}`,
       `chatJid: ${chatJid}\nHata: ${String(err).slice(0, 200)}`,
@@ -314,6 +331,7 @@ Görevin: Bu grup mesajlarını değerlendir.
 
     console.log(`[WA Agent] Grup yanıtı (${response.length} karakter): ${response.slice(0, 100)}...`);
     markReplied(groupJid);
+    await sendLog(`👥 <b>Grup:</b> ${groupName} (${messages.length} mesaj)`);
 
     // Cobrain'e WA context raporu
     await reportToCobrain(
@@ -322,6 +340,7 @@ Görevin: Bu grup mesajlarını değerlendir.
     );
   } catch (err) {
     console.error(`[WA Agent] Grup AI hatası (${groupJid}):`, err);
+    await sendLog(`❌ <b>WA Grup Hata:</b> ${groupName} — ${String(err).slice(0, 200)}`);
     await reportToCobrain(
       `WA agent grup hata — ${groupName}`,
       `groupJid: ${groupJid}\nHata: ${String(err).slice(0, 200)}`,
@@ -534,6 +553,7 @@ Bun.serve({
 });
 
 console.log(`[WA Agent] Başlatıldı (port: ${AGENT_PORT}, poll: ${POLL_INTERVAL_MS}ms, gruplar: ${ALLOWED_GROUP_JIDS.length > 0 ? ALLOWED_GROUP_JIDS.join(",") : "yok"})`);
+sendLog(`🟢 <b>WA Agent başlatıldı</b>\nPort: ${AGENT_PORT} | Poll: ${POLL_INTERVAL_MS / 1000}s | Gruplar: ${ALLOWED_GROUP_JIDS.length > 0 ? ALLOWED_GROUP_JIDS.length : "yok"}`);
 
 // ── Start ─────────────────────────────────────────────────────────────────
 
