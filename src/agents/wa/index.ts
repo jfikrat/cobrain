@@ -1,18 +1,18 @@
 /**
  * WA Agent — Bağımsız WhatsApp İletişim Process'i
  *
- * Cobrain'den tamamen bağımsız çalışır:
+ * Cobrain'den bağımsız process olarak çalışır:
  * - Kendi WhatsApp DB poll loop'u (30s)
- * - Kendi Anthropic SDK (function calling, MCP yok)
+ * - AI inference: Cobrain /api/chat üzerinden (OAuth — ANTHROPIC_API_KEY gereksiz)
  * - Cobrain'e HTTP üzerinden rapor/görev
  * - Kendi mini HTTP server (Cobrain'den görev alır)
+ * - Her chat için izole session (sessionKey: wa_<chatJid>)
  *
  * Başlatma: bun run src/agents/wa/index.ts
  * Cobrain startup.ts üzerinden Bun.spawn() ile de başlatılır.
  */
 
 import { Database } from "bun:sqlite";
-import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync, existsSync } from "node:fs";
 
 // ── Config ───────────────────────────────────────────────────────────────
@@ -24,11 +24,6 @@ const POLL_INTERVAL_MS = 30_000;
 const MAX_AGE_SEC = parseInt(process.env.WHATSAPP_STALE_MAX_AGE_SEC || "3600");
 const WA_DB_PATH = process.env.WHATSAPP_DB_PATH || "/home/fjds/projects/whatsapp/db/whatsapp.db";
 const USER_FOLDER = process.env.COBRAIN_USER_FOLDER || `${process.env.HOME}/.cobrain/users/${process.env.MY_TELEGRAM_ID}`;
-const AGENT_MODEL = process.env.AGENT_MODEL || "claude-sonnet-4-6";
-
-// ── Anthropic Client ─────────────────────────────────────────────────────
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ── System Prompt ─────────────────────────────────────────────────────────
 
@@ -178,66 +173,34 @@ async function rememberMemory(content: string, type: "semantic" | "episodic" = "
   } catch { return false; }
 }
 
-// ── Anthropic Function Calling Tools ─────────────────────────────────────
+// ── Message Processing via Cobrain /api/chat ─────────────────────────────
+// ANTHROPIC_API_KEY gereksiz — Cobrain OAuth üzerinden AI çağrısı yapar.
+// Her chat için izole session: sessionKey = "wa_<chatJid>"
 
-const WA_TOOLS: Anthropic.Tool[] = [
-  {
-    name: "send_whatsapp_message",
-    description: "WhatsApp mesajı gönder",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        to: { type: "string", description: "Alıcı telefon numarası (905xxxxxxxxx formatında)" },
-        message: { type: "string", description: "Gönderilecek mesaj" },
-      },
-      required: ["to", "message"],
-    },
-  },
-  {
-    name: "notify_cobrain",
-    description: "Ana Cobrain'e bildirim/onay isteği gönder (önemli durumlarda)",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        subject: { type: "string" },
-        message: { type: "string" },
-        priority: { type: "string", enum: ["urgent", "normal"] },
-      },
-      required: ["subject", "message"],
-    },
-  },
-  {
-    name: "recall_memory",
-    description: "Hafızadan bilgi çek — kişi bilgileri, kurallar, geçmiş olaylar",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        query: { type: "string", description: "Ne aramak istiyorsun? Örn: 'Çağla', 'aile', 'kurallar'" },
-      },
-      required: ["query"],
-    },
-  },
-  {
-    name: "remember_memory",
-    description: "Önemli bir bilgiyi hafızaya kaydet",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        content: { type: "string", description: "Kaydedilecek bilgi" },
-        type: { type: "string", enum: ["semantic", "episodic"], description: "semantic: kalıcı gerçek, episodic: olay/gelişme" },
-        section: { type: "string", description: "Semantic kayıtlar için bölüm (ör: Kişiler, Tercihler). Episodic için gerek yok." },
-      },
-      required: ["content", "type"],
-    },
-  },
-  {
-    name: "skip",
-    description: "Bu mesaja cevap verme, geç",
-    input_schema: { type: "object" as const, properties: {}, required: [] },
-  },
-];
-
-// ── Message Processing ────────────────────────────────────────────────────
+async function askCobrain(prompt: string, sessionKey: string, systemPrompt: string): Promise<string> {
+  try {
+    const res = await fetch(`${COBRAIN_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${API_KEY}` },
+      body: JSON.stringify({
+        message: prompt,
+        sessionKey,
+        silent: true,
+        systemPromptOverride: systemPrompt,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.error(`[WA Agent] /api/chat hata ${res.status}: ${err.slice(0, 200)}`);
+      return "";
+    }
+    const data = await res.json() as { content?: string; response?: string };
+    return data.content || data.response || "";
+  } catch (err) {
+    console.error("[WA Agent] /api/chat erişim hatası:", err);
+    return "";
+  }
+}
 
 async function processMessage(
   chatJid: string,
@@ -250,7 +213,7 @@ async function processMessage(
     `[${m.is_from_me ? "Ben" : senderName}]: ${m.content || "[medya]"}`
   ).join("\n");
 
-  const userMessage = `WhatsApp DM — ${senderName} (jid: ${chatJid})
+  const prompt = `[WA-AGENT] WhatsApp DM — ${senderName} (jid: ${chatJid})
 
 Son mesajlar:
 ${history}
@@ -258,86 +221,26 @@ ${history}
 Hafıza özeti:
 ${memory || "(yok)"}
 
-Ne yapmalısın: cevap ver, geç veya Cobrain'e bildir?`;
+Görevin: Bu mesaja ne yapmalısın?
+- Cevap vereceksen: send_whatsapp_message tool'unu kullan (to: ${chatJid.replace("@s.whatsapp.net", "").replace("@lid", "")})
+- Geçeceksen: açıkla neden
+- Cobrain'e bildirmek istersen: notify_cobrain tool'unu kullan`;
 
-  // Multi-turn agentic loop (max 5 tur)
-  const conversationMessages: Anthropic.MessageParam[] = [
-    { role: "user", content: userMessage },
-  ];
+  const sessionKey = `wa_${chatJid.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
   try {
-    for (let turn = 0; turn < 5; turn++) {
-      const response = await anthropic.messages.create({
-        model: AGENT_MODEL,
-        max_tokens: 1024,
-        system: systemPrompt,
-        tools: WA_TOOLS,
-        messages: conversationMessages,
-      });
+    console.log(`[WA Agent] Cobrain'e soruluyor: ${senderName} (session: ${sessionKey})`);
+    const response = await askCobrain(prompt, sessionKey, systemPrompt);
 
-      // Asistan yanıtını history'e ekle
-      conversationMessages.push({ role: "assistant", content: response.content });
-
-      // stop_reason: end_turn veya tool_use değilse çık
-      if (response.stop_reason === "end_turn") break;
-      if (response.stop_reason !== "tool_use") break;
-
-      // Tool çağrılarını işle ve sonuçları topla
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-      let shouldBreak = false;
-
-      for (const block of response.content) {
-        if (block.type !== "tool_use") continue;
-
-        let toolResult = "";
-
-        if (block.name === "send_whatsapp_message") {
-          const input = block.input as { to: string; message: string };
-          const ok = await sendWhatsApp(input.to, input.message);
-          console.log(`[WA Agent] Mesaj gönderildi: ${input.to} — ${ok ? "OK" : "HATA"}`);
-          if (ok) markReplied(chatJid);
-          toolResult = ok ? "Mesaj gönderildi." : "Hata: mesaj gönderilemedi.";
-          shouldBreak = true; // Mesaj gönderildikten sonra döngüyü bitir
-
-        } else if (block.name === "notify_cobrain") {
-          const input = block.input as { subject: string; message: string; priority?: "urgent" | "normal" };
-          await reportToCobrain(input.subject, input.message, input.priority || "normal");
-          console.log(`[WA Agent] Cobrain'e bildirildi: ${input.subject}`);
-          toolResult = "Cobrain'e bildirildi.";
-          shouldBreak = true;
-
-        } else if (block.name === "recall_memory") {
-          const input = block.input as { query: string };
-          const result = await recallMemory(input.query);
-          console.log(`[WA Agent] Hafıza sorgulandı: "${input.query}" — ${result.length} karakter`);
-          toolResult = result || "(hafızada bu konuda bilgi yok)";
-
-        } else if (block.name === "remember_memory") {
-          const input = block.input as { content: string; type: "semantic" | "episodic"; section?: string };
-          const ok = await rememberMemory(input.content, input.type, input.section);
-          console.log(`[WA Agent] Hafızaya yazıldı (${input.type}): "${input.content.slice(0, 60)}" — ${ok ? "OK" : "HATA"}`);
-          toolResult = ok ? "Hafızaya kaydedildi." : "Hata: kaydedilemedi.";
-
-        } else if (block.name === "skip") {
-          console.log(`[WA Agent] Geçildi: ${senderName}`);
-          toolResult = "Geçildi.";
-          shouldBreak = true;
-        }
-
-        toolResults.push({
-          type: "tool_result",
-          tool_use_id: block.id,
-          content: toolResult,
-        });
-      }
-
-      // Tool sonuçlarını history'e ekle
-      if (toolResults.length > 0) {
-        conversationMessages.push({ role: "user", content: toolResults });
-      }
-
-      if (shouldBreak) break;
+    if (!response) {
+      console.error(`[WA Agent] Cobrain'den yanıt alınamadı: ${chatJid}`);
+      return;
     }
+
+    console.log(`[WA Agent] Cobrain yanıtı (${response.length} karakter): ${response.slice(0, 100)}...`);
+    // Cobrain tool'ları kendi çağırıyor (send_whatsapp_message, notify_cobrain)
+    // Mesaj gönderildiyse dedup için markReplied
+    markReplied(chatJid);
   } catch (err) {
     console.error(`[WA Agent] AI hatası (${chatJid}):`, err);
     await reportToCobrain(
