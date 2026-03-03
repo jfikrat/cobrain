@@ -3,8 +3,10 @@
  *
  * Cobrain'den bağımsız process olarak çalışır:
  * - Kendi WhatsApp DB poll loop'u (30s)
- * - AI inference: Cobrain /api/chat üzerinden (OAuth — ANTHROPIC_API_KEY gereksiz)
- * - Cobrain'e HTTP üzerinden rapor/görev
+ * - DM + Grup mesajları işleme (tek sahip)
+ * - AI inference: Cobrain /api/chat üzerinden (ANTHROPIC_API_KEY gereksiz)
+ * - Doğrudan WA DB outbox'a mesaj yazma (proxy yok)
+ * - Cobrain'e HTTP üzerinden rapor/görev + WA context report
  * - Kendi mini HTTP server (Cobrain'den görev alır)
  * - Her chat için izole session (sessionKey: wa_<chatJid>)
  *
@@ -24,6 +26,8 @@ const POLL_INTERVAL_MS = 30_000;
 const MAX_AGE_SEC = parseInt(process.env.WHATSAPP_STALE_MAX_AGE_SEC || "3600");
 const WA_DB_PATH = process.env.WHATSAPP_DB_PATH || "/home/fjds/projects/whatsapp/db/whatsapp.db";
 const USER_FOLDER = process.env.COBRAIN_USER_FOLDER || `${process.env.HOME}/.cobrain/users/${process.env.MY_TELEGRAM_ID}`;
+const ALLOWED_GROUP_JIDS = (process.env.WHATSAPP_ALLOWED_GROUP_JIDS || "")
+  .split(",").map(j => j.trim()).filter(Boolean);
 
 // ── System Prompt ─────────────────────────────────────────────────────────
 
@@ -88,11 +92,14 @@ function getRecentMessages(chatJid: string, limit = 10) {
   try {
     return d.query<{
       content: string | null; is_from_me: number; timestamp: number | null;
+      sender_name?: string | null;
     }, [string, number]>(`
-      SELECT content, is_from_me, timestamp
-      FROM messages
-      WHERE chat_jid = ?
-      ORDER BY timestamp DESC
+      SELECT m.content, m.is_from_me, m.timestamp,
+             n.sender_name
+      FROM messages m
+      LEFT JOIN notifications n ON m.id = n.message_id
+      WHERE m.chat_jid = ?
+      ORDER BY m.timestamp DESC
       LIMIT ?
     `).all(chatJid, limit).reverse();
   } catch { return []; }
@@ -110,15 +117,36 @@ function getRecentOutgoing(chatJid: string, sinceTs: number) {
   } catch { return []; }
 }
 
+// ── Direct Outbox Write ──────────────────────────────────────────────────
+
+function addToOutbox(to: string, message: string): number | null {
+  const d = getDB();
+  if (!d) return null;
+  try {
+    const jid = to.includes("@") ? to : `${to}@s.whatsapp.net`;
+    const result = d.run(
+      `INSERT INTO outbox (chat_jid, content, status, created_at) VALUES (?, ?, 'pending', datetime('now'))`,
+      [jid, message],
+    );
+    console.log(`[WA Agent] Outbox'a yazıldı: ${jid} (#${result.lastInsertRowid})`);
+    return Number(result.lastInsertRowid);
+  } catch (err) {
+    console.error("[WA Agent] Outbox yazma hatası:", err);
+    return null;
+  }
+}
+
 // ── In-Memory Dedup ───────────────────────────────────────────────────────
 
 const recentReplies = new Map<string, number>(); // chatJid → timestamp
-const DEDUP_TTL_MS = 60_000;
+const DM_DEDUP_TTL_MS = 60_000;
+const GROUP_DEDUP_TTL_MS = 5 * 60_000; // Grup başına 5dk cooldown
 
-function wasRecentlyReplied(chatJid: string): boolean {
+function wasRecentlyReplied(chatJid: string, isGroup: boolean): boolean {
   const ts = recentReplies.get(chatJid);
   if (!ts) return false;
-  if (Date.now() - ts > DEDUP_TTL_MS) { recentReplies.delete(chatJid); return false; }
+  const ttl = isGroup ? GROUP_DEDUP_TTL_MS : DM_DEDUP_TTL_MS;
+  if (Date.now() - ts > ttl) { recentReplies.delete(chatJid); return false; }
   return true;
 }
 
@@ -129,7 +157,7 @@ function markReplied(chatJid: string) {
 // Inbox'ta bekleyen chatJid'ler (processAfter dahil double-push engeli)
 const pendingChats = new Set<string>();
 
-// ── Cobrain HTTP Proxy ────────────────────────────────────────────────────
+// ── Cobrain HTTP ─────────────────────────────────────────────────────────
 
 async function cobrainPost(path: string, body: object): Promise<boolean> {
   try {
@@ -140,10 +168,6 @@ async function cobrainPost(path: string, body: object): Promise<boolean> {
     });
     return res.ok;
   } catch { return false; }
-}
-
-async function sendWhatsApp(to: string, message: string): Promise<boolean> {
-  return cobrainPost("/api/whatsapp/send", { to, message });
 }
 
 async function reportToCobrain(subject: string, message: string, priority: "urgent" | "normal" = "normal") {
@@ -202,10 +226,10 @@ async function askCobrain(prompt: string, sessionKey: string, systemPrompt: stri
   }
 }
 
-async function processMessage(
+async function processDM(
   chatJid: string,
   senderName: string,
-  messages: Array<{ content: string; is_from_me: number }>,
+  messages: Array<{ content: string | null; is_from_me: number }>,
   memory: string,
 ): Promise<void> {
   const systemPrompt = loadSystemPrompt();
@@ -238,9 +262,13 @@ Görevin: Bu mesaja ne yapmalısın?
     }
 
     console.log(`[WA Agent] Cobrain yanıtı (${response.length} karakter): ${response.slice(0, 100)}...`);
-    // Cobrain tool'ları kendi çağırıyor (send_whatsapp_message, notify_cobrain)
-    // Mesaj gönderildiyse dedup için markReplied
     markReplied(chatJid);
+
+    // Cobrain'e WA context raporu gönder
+    await reportToCobrain(
+      `WA DM — ${senderName}`,
+      `chatJid: ${chatJid}\nSon mesaj: ${messages[messages.length - 1]?.content?.slice(0, 200) || "[medya]"}\nAgent yanıtı: ${response.slice(0, 200)}`,
+    );
   } catch (err) {
     console.error(`[WA Agent] AI hatası (${chatJid}):`, err);
     await reportToCobrain(
@@ -251,46 +279,106 @@ Görevin: Bu mesaja ne yapmalısın?
   }
 }
 
+async function processGroup(
+  groupJid: string,
+  groupName: string,
+  messages: Array<{ sender_name: string; content: string | null }>,
+  memory: string,
+): Promise<void> {
+  const systemPrompt = loadSystemPrompt();
+  const msgTexts = messages.map(m => `${m.sender_name}: ${m.content || "[medya]"}`).join("\n");
+
+  const prompt = `[WA-AGENT] WhatsApp Grup — ${groupName} (jid: ${groupJid})
+
+Son mesajlar:
+${msgTexts}
+
+Hafıza özeti:
+${memory || "(yok)"}
+
+Görevin: Bu grup mesajlarını değerlendir.
+- Cevap gerekiyorsa: send_whatsapp_message tool'unu kullan (to: ${groupJid})
+- Bilgi not etmen gerekiyorsa: notify_cobrain tool'unu kullan
+- Geçeceksen: sessizce geç`;
+
+  const sessionKey = `wa_group_${groupJid.replace(/[^a-zA-Z0-9]/g, "_")}`;
+
+  try {
+    console.log(`[WA Agent] Grup işleniyor: ${groupName} (session: ${sessionKey})`);
+    const response = await askCobrain(prompt, sessionKey, systemPrompt);
+
+    if (!response) {
+      console.error(`[WA Agent] Cobrain'den yanıt alınamadı (grup): ${groupJid}`);
+      return;
+    }
+
+    console.log(`[WA Agent] Grup yanıtı (${response.length} karakter): ${response.slice(0, 100)}...`);
+    markReplied(groupJid);
+
+    // Cobrain'e WA context raporu
+    await reportToCobrain(
+      `WA Grup — ${groupName}`,
+      `groupJid: ${groupJid}\nMesaj sayısı: ${messages.length}\n${msgTexts.slice(0, 300)}`,
+    );
+  } catch (err) {
+    console.error(`[WA Agent] Grup AI hatası (${groupJid}):`, err);
+    await reportToCobrain(
+      `WA agent grup hata — ${groupName}`,
+      `groupJid: ${groupJid}\nHata: ${String(err).slice(0, 200)}`,
+      "urgent",
+    );
+  }
+}
+
 // ── Poll Loop ─────────────────────────────────────────────────────────────
 
 async function poll(): Promise<void> {
-  const notifications = getPendingNotifications(10);
+  const notifications = getPendingNotifications(20);
   if (notifications.length === 0) return;
 
   const nowSec = Math.floor(Date.now() / 1000);
-  const dms = notifications.filter(n => !n.is_group && n.chat_jid !== "status@broadcast");
+
+  // Status broadcasts → mark read immediately
+  const statusIds = notifications.filter(n => n.chat_jid === "status@broadcast").map(n => n.id);
+  if (statusIds.length > 0) markNotificationsRead(statusIds);
+
+  // Stale messages → mark read
   const staleIds = notifications
     .filter(n => {
-      if (n.chat_jid === "status@broadcast") return true;
+      if (n.chat_jid === "status@broadcast") return false; // already handled
       const ts = n.message_timestamp || 0;
       return ts > 0 && (nowSec - ts) >= MAX_AGE_SEC;
     })
     .map(n => n.id);
-
   if (staleIds.length > 0) {
     markNotificationsRead(staleIds);
+    console.log(`[WA Agent] ${staleIds.length} stale notification atlandı`);
   }
 
-  const freshDMs = dms.filter(n => {
-    const ts = n.message_timestamp || 0;
-    return ts === 0 || (nowSec - ts) < MAX_AGE_SEC;
-  });
+  // Fresh messages (excluding status + stale)
+  const handledIds = new Set([...statusIds, ...staleIds]);
+  const fresh = notifications.filter(n => !handledIds.has(n.id));
 
-  const bySender = new Map<string, typeof freshDMs>();
-  for (const n of freshDMs) {
-    if (!bySender.has(n.chat_jid)) bySender.set(n.chat_jid, []);
-    bySender.get(n.chat_jid)!.push(n);
-  }
+  // Split into DMs and groups
+  const dms = fresh.filter(n => !n.is_group);
+  const groups = fresh.filter(n => n.is_group);
 
-  // Lazy memory load — sadece işlenecek mesaj varsa
+  // Lazy memory load
   let memory = "";
   let memoryLoaded = false;
 
-  for (const [chatJid, msgs] of bySender) {
+  // ── Process DMs ──
+  const dmBySender = new Map<string, typeof dms>();
+  for (const n of dms) {
+    if (!dmBySender.has(n.chat_jid)) dmBySender.set(n.chat_jid, []);
+    dmBySender.get(n.chat_jid)!.push(n);
+  }
+
+  for (const [chatJid, msgs] of dmBySender) {
     const senderName = msgs[0]?.sender_name || chatJid.split("@")[0] || "?";
 
     // Guard 1: dedup
-    if (wasRecentlyReplied(chatJid)) {
+    if (wasRecentlyReplied(chatJid, false)) {
       markNotificationsRead(msgs.map(m => m.id));
       continue;
     }
@@ -315,7 +403,6 @@ async function poll(): Promise<void> {
       memoryLoaded = true;
     }
 
-    // Tüm recent mesajları çek (history için)
     const history = getRecentMessages(chatJid, 10);
 
     pendingChats.add(chatJid);
@@ -325,7 +412,7 @@ async function poll(): Promise<void> {
     setTimeout(async () => {
       pendingChats.delete(chatJid);
 
-      // Guard 3 tekrar: beklerken Fekrat cevap yazdı mı?
+      // Guard tekrar: beklerken Fekrat cevap yazdı mı?
       const nowSec2 = Math.floor(Date.now() / 1000);
       const outgoing2 = getRecentOutgoing(chatJid, nowSec2 - 120);
       if (outgoing2.length > 0) {
@@ -333,11 +420,63 @@ async function poll(): Promise<void> {
         return;
       }
 
-      console.log(`[WA Agent] İşleniyor: ${senderName}`);
-      await processMessage(chatJid, senderName, history, memory);
+      console.log(`[WA Agent] DM işleniyor: ${senderName}`);
+      await processDM(chatJid, senderName, history, memory);
     }, 30_000);
 
-    console.log(`[WA Agent] Kuyruğa alındı (30s): ${senderName}`);
+    console.log(`[WA Agent] DM kuyruğa alındı (30s): ${senderName}`);
+  }
+
+  // ── Process Groups ──
+  const groupByJid = new Map<string, typeof groups>();
+  for (const n of groups) {
+    if (!groupByJid.has(n.chat_jid)) groupByJid.set(n.chat_jid, []);
+    groupByJid.get(n.chat_jid)!.push(n);
+  }
+
+  for (const [groupJid, msgs] of groupByJid) {
+    const groupName = msgs[0]?.sender_name?.split(" @ ")[1] || groupJid;
+    const isAllowed = ALLOWED_GROUP_JIDS.length > 0 && ALLOWED_GROUP_JIDS.includes(groupJid);
+
+    // İzin verilmeyen gruplarda: sadece markRead
+    if (!isAllowed) {
+      markNotificationsRead(msgs.map(m => m.id));
+      continue;
+    }
+
+    // Guard: grup dedup (5dk cooldown)
+    if (wasRecentlyReplied(groupJid, true)) {
+      markNotificationsRead(msgs.map(m => m.id));
+      continue;
+    }
+
+    // Guard: zaten pending
+    if (pendingChats.has(groupJid)) {
+      markNotificationsRead(msgs.map(m => m.id));
+      continue;
+    }
+
+    // Lazy load memory
+    if (!memoryLoaded) {
+      memory = await recallMemory();
+      memoryLoaded = true;
+    }
+
+    const groupMessages = msgs.map(m => ({
+      sender_name: m.sender_name?.split(" @ ")[0] || "?",
+      content: m.content,
+    }));
+
+    pendingChats.add(groupJid);
+    markNotificationsRead(msgs.map(m => m.id));
+
+    // Gruplar hemen işlenir (DM'lerdeki 30s bekleme yok)
+    console.log(`[WA Agent] Grup işleniyor: ${groupName} (${msgs.length} mesaj)`);
+    processGroup(groupJid, groupName, groupMessages, memory).catch(err => {
+      console.error(`[WA Agent] Grup hata (${groupJid}):`, err);
+    }).finally(() => {
+      pendingChats.delete(groupJid);
+    });
   }
 }
 
@@ -351,6 +490,27 @@ Bun.serve({
     // Health check
     if (url.pathname === "/health") {
       return Response.json({ status: "ok", agent: "wa", uptime: Math.round(process.uptime()) });
+    }
+
+    // POST /send — Doğrudan mesaj gönder (tool hook'ları buraya yönlendirir)
+    if (url.pathname === "/send" && req.method === "POST") {
+      const auth = req.headers.get("authorization");
+      if (!API_KEY || auth !== `Bearer ${API_KEY}`) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      try {
+        const body = await req.json() as { to: string; message: string };
+        if (!body.to || !body.message) {
+          return Response.json({ error: "to and message required" }, { status: 400 });
+        }
+        const id = addToOutbox(body.to, body.message);
+        if (id === null) {
+          return Response.json({ error: "DB write failed" }, { status: 500 });
+        }
+        return Response.json({ ok: true, outboxId: id });
+      } catch {
+        return Response.json({ error: "Invalid request" }, { status: 400 });
+      }
     }
 
     // POST /task — Cobrain'den görev al
@@ -373,7 +533,7 @@ Bun.serve({
   },
 });
 
-console.log(`[WA Agent] Başlatıldı (port: ${AGENT_PORT}, poll: ${POLL_INTERVAL_MS}ms)`);
+console.log(`[WA Agent] Başlatıldı (port: ${AGENT_PORT}, poll: ${POLL_INTERVAL_MS}ms, gruplar: ${ALLOWED_GROUP_JIDS.length > 0 ? ALLOWED_GROUP_JIDS.join(",") : "yok"})`);
 
 // ── Start ─────────────────────────────────────────────────────────────────
 

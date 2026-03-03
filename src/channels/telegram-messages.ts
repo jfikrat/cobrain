@@ -1,7 +1,6 @@
 import type { Bot } from "grammy";
 import { config } from "../config.ts";
 import { think, userManager, type MultimodalMessage } from "../brain/index.ts";
-import { whatsappDB } from "../services/whatsapp-db.ts";
 import { recordInteraction, extractMoodFromMessage, recordUserActivity } from "../services/interaction-tracker.ts";
 import { transcribeAudio, downloadTelegramFileAsBuffer } from "../services/transcribe.ts";
 import { isAuthorized, parseSuggestions, buildSuggestionKeyboard, type TelegramContext } from "./telegram-helpers.ts";
@@ -255,31 +254,6 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
 
     const text = c.message.text;
     if (text.startsWith("/")) return;
-
-    // ============ CEVAPLAMA MODU KONTROLÜ ============
-    const replyState = ctx.replyStates.get(userId);
-    if (replyState) {
-      try {
-        const outboxId = whatsappDB.sendMessage(replyState.chatJid, text);
-        ctx.replyStates.delete(userId);
-
-        await c.reply(
-          `✅ Mesaj gönderildi (#${outboxId})\n\n` +
-          `<b>Kime:</b> ${replyState.chatName}\n` +
-          `<b>Mesaj:</b> ${text.slice(0, 100)}${text.length > 100 ? "..." : ""}\n\n` +
-          `<i>Worker birkaç saniye içinde gönderecek.</i>`,
-          { parse_mode: "HTML" }
-        );
-
-        console.log(`[WhatsApp Reply] ${userId} -> ${replyState.chatName}: ${text.slice(0, 30)}...`);
-        return;
-      } catch (error) {
-        console.error("WhatsApp cevap hatası:", error);
-        await c.reply(`❌ Mesaj gönderilemedi: ${error instanceof Error ? error.message : "Bilinmeyen hata"}`);
-        ctx.replyStates.delete(userId);
-        return;
-      }
-    }
 
     // ============ NORMAL AI SOHBET ============
     await c.replyWithChatAction("typing");

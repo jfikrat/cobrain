@@ -73,10 +73,6 @@ const envSchema = z.object({
   BRAIN_LOOP_SLOW_TICK_MS: z.coerce.number().default(300_000),
   BRAIN_LOOP_KNOWLEDGE_PATH: z.string().default("knowledge"),
 
-  // v0.8: WhatsApp notification settings
-  WHATSAPP_STALE_MAX_AGE_SEC: z.coerce.number().default(3600),
-  WHATSAPP_ALLOWED_GROUP_JIDS: z.string().default(""),
-
   // v1.0: REST API
   COBRAIN_API_KEY: z.string().default(""),
 

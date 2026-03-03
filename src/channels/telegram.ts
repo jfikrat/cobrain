@@ -4,7 +4,6 @@ import { config } from "../config.ts";
 import { heartbeat } from "../services/heartbeat.ts";
 import { think, clearSession, userManager } from "../brain/index.ts";
 import { initPermissions, clearAllPending } from "../agent/permissions.ts";
-import { whatsappDB } from "../services/whatsapp-db.ts";
 import { initTelegramMcp } from "../agent/tools/telegram.ts";
 import { UserMemory } from "../memory/sqlite.ts";
 import { parseSuggestions, buildSuggestionKeyboard, type TelegramContext, type LiveLocationEntry } from "./telegram-helpers.ts";
@@ -16,8 +15,6 @@ const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
 // Shared mutable state
 const telegramCtx: TelegramContext = {
-  cachedAnalysis: [],
-  replyStates: new Map(),
   liveLocationCache: new Map(),
 };
 
@@ -60,8 +57,6 @@ export async function startBot(): Promise<void> {
     { command: "web", description: "Web arayüzü linki al" },
     { command: "mode", description: "Permission modunu değiştir" },
     { command: "phase", description: "Session phase durumu / override" },
-    { command: "scan", description: "WhatsApp mesajlarını tara" },
-    { command: "reply", description: "WhatsApp'a cevap yaz" },
   ]);
 
   // Heartbeat: bot started
@@ -84,14 +79,6 @@ export async function startBot(): Promise<void> {
   // Bot info'yu al ve logla
   const botInfo = await bot.api.getMe();
   console.log(`Bot başlatıldı: @${botInfo.username}`);
-
-  // WhatsApp durumunu kontrol et
-  const waStatus = whatsappDB.getWorkerStatus();
-  if (waStatus.connected) {
-    console.log(`WhatsApp bağlı: ${waStatus.user}`);
-  } else {
-    console.log("WhatsApp worker bağlı değil!");
-  }
 
   // Startup notification
   const userId = config.MY_TELEGRAM_ID;
@@ -144,7 +131,6 @@ export function stopBot(): Promise<void> {
     clearInterval(telegramHeartbeatInterval);
     telegramHeartbeatInterval = null;
   }
-  whatsappDB.close();
   return bot.stop();
 }
 

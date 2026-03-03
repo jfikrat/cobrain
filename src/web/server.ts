@@ -205,31 +205,6 @@ export function startWebServer(): void {
         return handleMediaServe(req, mediaMatch[1]);
       }
 
-      // POST /api/whatsapp/send — Agent'ların WA mesajı göndermesi için proxy
-      if (url.pathname === "/api/whatsapp/send" && req.method === "POST") {
-        const authHeader = req.headers.get("authorization");
-        const apiKey = config.COBRAIN_API_KEY;
-        if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
-          return Response.json({ error: "Unauthorized" }, { status: 401 });
-        }
-        try {
-          const body = await req.json() as { to: string; message: string };
-          if (!body.to || !body.message) {
-            return Response.json({ error: "to and message required" }, { status: 400 });
-          }
-          const userId = config.MY_TELEGRAM_ID;
-          const { chat: agentChat } = await import("../agent/chat.ts");
-          await agentChat(userId, `[AGENT_PROXY] WhatsApp gönder: to=${body.to} message="${body.message}"`, undefined, undefined, {
-            sessionKey: "wa_proxy",
-            systemPromptOverride: "Sen bir WhatsApp proxy'sisin. Verilen numaraya mesajı gönder. Sadece send_whatsapp_message tool'unu kullan. Başka bir şey yapma.",
-          });
-          console.log(`[API] WA proxy: ${body.to}`);
-          return Response.json({ ok: true });
-        } catch (err) {
-          return Response.json({ error: String(err).slice(0, 200) }, { status: 500 });
-        }
-      }
-
       // GET /api/memory/recall — Agent hafıza okuma
       if (url.pathname === "/api/memory/recall" && req.method === "GET") {
         const authHeader = req.headers.get("authorization");
