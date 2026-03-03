@@ -111,8 +111,10 @@ export function startWebServer(): void {
 
           // Mirror to Telegram (silent=true ise atla — agent iç çağrıları için)
           if (!silent) {
-            const label = sessionKey ? `📡 *[${sessionKey}]:*` : `📡 *API:*`;
-            bot.api.sendMessage(userId, `${label} ${message}`, { parse_mode: "Markdown" }).catch(() => {});
+            const label = sessionKey ? `📡 [${sessionKey}]:` : `📡 API:`;
+            const mirrorText = `${label} ${message}`.slice(0, 4096);
+            bot.api.sendMessage(userId, mirrorText, { parse_mode: "Markdown" })
+              .catch(() => bot.api.sendMessage(userId, mirrorText).catch(() => {}));
           }
 
           const chatOptions = (sessionKey || systemPromptOverride)
@@ -121,7 +123,7 @@ export function startWebServer(): void {
           const response = await chat(userId, message, undefined, model, chatOptions);
 
           if (!silent) {
-            const cleanMirror = response.content.replace(/<suggestions>[\s\S]*?<\/suggestions>\s*$/, '').trimEnd();
+            const cleanMirror = response.content.replace(/<suggestions>[\s\S]*?<\/suggestions>\s*$/, '').trimEnd().slice(0, 4096);
             bot.api.sendMessage(userId, cleanMirror).catch(() => {});
           }
 
