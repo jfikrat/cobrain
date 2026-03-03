@@ -631,7 +631,7 @@ class BrainLoop {
   private async processWACortexItem(item: import("./inbox.ts").InboxItem): Promise<void> {
     const userId = config.MY_TELEGRAM_ID;
     const userFolder = userManager.getUserFolder(userId);
-    const systemPromptPath = join(userFolder, "mind/cortexes/wa/system-prompt.md");
+    const systemPromptPath = join(userFolder, "agents/wa/system-prompt.md");
 
     let systemPromptOverride: string | undefined;
     try {
@@ -691,7 +691,7 @@ class BrainLoop {
   }
 
   private async checkWACortexOutbox(userId: number, userFolder: string): Promise<void> {
-    const outboxPath = join(userFolder, "mind/cortexes/wa/outbox.md");
+    const outboxPath = join(userFolder, "agents/wa/outbox.md");
     try {
       const content = await Bun.file(outboxPath).text();
       if (!content.includes("Cobrain Onayı Gerekiyor")) return;
