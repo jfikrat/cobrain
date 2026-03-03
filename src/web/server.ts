@@ -240,8 +240,8 @@ export function startWebServer(): void {
           const { FileMemory } = await import("../memory/file-memory.ts");
           const userFolder = userManager.getUserFolder(userId);
           const memory = new FileMemory(userFolder);
-          const facts = await memory.getFacts();
-          const events = await memory.getRecentEvents(days);
+          const facts = await memory.readFacts();
+          const events = await memory.readRecentEvents(days);
           return Response.json({ facts: facts?.slice(0, 3000) || "", events: events?.slice(0, 1000) || "", query });
         } catch (err) {
           return Response.json({ error: String(err).slice(0, 200) }, { status: 500 });
@@ -265,7 +265,7 @@ export function startWebServer(): void {
           if (body.type === "episodic") {
             await memory.logEvent(`[wa-agent] ${body.content}`);
           } else {
-            await memory.updateFact(body.section || "WhatsApp", `[wa-agent] ${body.content}`);
+            await memory.storeFact(body.section || "WhatsApp", `[wa-agent] ${body.content}`);
           }
           console.log(`[API] Memory written by agent: "${body.content.slice(0, 60)}"`);
           return Response.json({ ok: true });
