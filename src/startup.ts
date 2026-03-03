@@ -23,6 +23,7 @@ import { startProjectionScheduler, stopProjectionScheduler } from "./brain/proje
 import { userManager } from "./services/user-manager.ts";
 
 import { initInbox } from "./services/inbox.ts";
+import { resolve } from "node:path";
 
 console.log(`
    ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗███╗   ██╗
@@ -105,6 +106,23 @@ if (config.ENABLE_AUTONOMOUS) {
     // Start BrainLoop (events routed directly to Cortex)
     brainLoop.start(bot);
     console.log("[Startup] BrainLoop started");
+
+    // Start WA Agent (standalone process)
+    if (config.WA_AGENT_ENABLED) {
+      const waAgentPath = resolve(import.meta.dir, "agents/wa/index.ts");
+      const waProc = Bun.spawn(["bun", "run", waAgentPath], {
+        env: {
+          ...process.env,
+          WA_AGENT_PORT: String(config.WA_AGENT_PORT),
+        },
+        stdout: "inherit",
+        stderr: "inherit",
+        onExit(proc, code) {
+          console.warn(`[WA Agent] Process çıktı (code: ${code})`);
+        },
+      });
+      console.log(`[Startup] WA Agent started (pid: ${waProc.pid}, port: ${config.WA_AGENT_PORT})`);
+    }
   }, 1000);
 }
 
