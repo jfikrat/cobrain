@@ -96,22 +96,71 @@ export function startWebServer(): void {
 
         try {
           const body = await req.json();
-          const { message, model } = body as { message: string; model?: string };
+          const {
+            message,
+            model,
+            sessionKey,  // Agent'lar için izole session — ana session kirlenmez
+            silent,      // true ise Telegram mirror kapalı (agent-to-agent çağrılar için)
+          } = body as { message: string; model?: string; sessionKey?: string; silent?: boolean };
           if (!message) {
             return Response.json({ error: "message required" }, { status: 400 });
           }
 
-          // Mirror API question to Telegram BEFORE processing (so it appears above the response)
           const userId = config.MY_TELEGRAM_ID;
-          bot.api.sendMessage(userId, `📡 *API:* ${message}`, { parse_mode: "Markdown" }).catch(() => {});
 
-          const response = await chat(config.MY_TELEGRAM_ID, message, undefined, model);
+          // Mirror to Telegram (silent=true ise atla — agent iç çağrıları için)
+          if (!silent) {
+            const label = sessionKey ? `📡 *[${sessionKey}]:*` : `📡 *API:*`;
+            bot.api.sendMessage(userId, `${label} ${message}`, { parse_mode: "Markdown" }).catch(() => {});
+          }
 
-          // Mirror response to Telegram (fire-and-forget, strip suggestions)
-          const cleanMirror = response.content.replace(/<suggestions>[\s\S]*?<\/suggestions>\s*$/, '').trimEnd();
-          bot.api.sendMessage(userId, cleanMirror).catch(() => {});
+          const response = await chat(userId, message, undefined, model, sessionKey ? { sessionKey } : undefined);
+
+          if (!silent) {
+            const cleanMirror = response.content.replace(/<suggestions>[\s\S]*?<\/suggestions>\s*$/, '').trimEnd();
+            bot.api.sendMessage(userId, cleanMirror).catch(() => {});
+          }
 
           return Response.json(response);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          return Response.json({ error: msg }, { status: 500 });
+        }
+      }
+
+      // POST /api/report — Agent'ların Cobrain'e rapor/mesaj gönderdiği endpoint
+      // Agent'lar tamamlandığında veya onay istediklerinde buraya POST atar → inbox'a düşer
+      if (url.pathname === "/api/report" && req.method === "POST") {
+        const authHeader = req.headers.get("authorization");
+        const apiKey = config.COBRAIN_API_KEY;
+        if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
+          return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        try {
+          const body = await req.json();
+          const {
+            agentId,
+            subject,
+            message: reportBody,
+            priority = "normal",
+          } = body as { agentId: string; subject: string; message: string; priority?: "urgent" | "normal" };
+
+          if (!agentId || !subject || !reportBody) {
+            return Response.json({ error: "agentId, subject, message required" }, { status: 400 });
+          }
+
+          const { inbox } = await import("../services/inbox.ts");
+          await inbox.push({
+            from: "brain-loop",
+            subject: `[agent:${agentId}] ${subject}`,
+            body: `Agent raporu — ${agentId}\n\n${reportBody}`,
+            priority: priority as "urgent" | "normal",
+            ttlMs: 2 * 60 * 60 * 1000,
+          });
+
+          console.log(`[API] Agent report received: ${agentId} — "${subject}"`);
+          return Response.json({ ok: true, queued: true });
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
           return Response.json({ error: msg }, { status: 500 });
