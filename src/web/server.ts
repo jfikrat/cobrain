@@ -101,7 +101,8 @@ export function startWebServer(): void {
             model,
             sessionKey,  // Agent'lar için izole session — ana session kirlenmez
             silent,      // true ise Telegram mirror kapalı (agent-to-agent çağrılar için)
-          } = body as { message: string; model?: string; sessionKey?: string; silent?: boolean };
+            systemPromptOverride,  // WA Agent vb. için custom system prompt
+          } = body as { message: string; model?: string; sessionKey?: string; silent?: boolean; systemPromptOverride?: string };
           if (!message) {
             return Response.json({ error: "message required" }, { status: 400 });
           }
@@ -114,7 +115,10 @@ export function startWebServer(): void {
             bot.api.sendMessage(userId, `${label} ${message}`, { parse_mode: "Markdown" }).catch(() => {});
           }
 
-          const response = await chat(userId, message, undefined, model, sessionKey ? { sessionKey } : undefined);
+          const chatOptions = (sessionKey || systemPromptOverride)
+            ? { ...(sessionKey && { sessionKey }), ...(systemPromptOverride && { systemPromptOverride }) }
+            : undefined;
+          const response = await chat(userId, message, undefined, model, chatOptions);
 
           if (!silent) {
             const cleanMirror = response.content.replace(/<suggestions>[\s\S]*?<\/suggestions>\s*$/, '').trimEnd();

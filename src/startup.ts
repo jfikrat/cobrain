@@ -24,6 +24,9 @@ import { userManager } from "./services/user-manager.ts";
 
 import { initInbox } from "./services/inbox.ts";
 import { resolve } from "node:path";
+import type { Subprocess } from "bun";
+
+let waAgentProc: Subprocess | null = null;
 
 console.log(`
    ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗███╗   ██╗
@@ -110,7 +113,7 @@ if (config.ENABLE_AUTONOMOUS) {
     // Start WA Agent (standalone process)
     if (config.WA_AGENT_ENABLED) {
       const waAgentPath = resolve(import.meta.dir, "agents/wa/index.ts");
-      const waProc = Bun.spawn(["bun", "run", waAgentPath], {
+      waAgentProc = Bun.spawn(["bun", "run", waAgentPath], {
         env: {
           ...process.env,
           WA_AGENT_PORT: String(config.WA_AGENT_PORT),
@@ -119,15 +122,23 @@ if (config.ENABLE_AUTONOMOUS) {
         stderr: "inherit",
         onExit(proc, code) {
           console.warn(`[WA Agent] Process çıktı (code: ${code})`);
+          waAgentProc = null;
         },
       });
-      console.log(`[Startup] WA Agent started (pid: ${waProc.pid}, port: ${config.WA_AGENT_PORT})`);
+      console.log(`[Startup] WA Agent started (pid: ${waAgentProc.pid}, port: ${config.WA_AGENT_PORT})`);
     }
   }, 1000);
 }
 
 const shutdown = async () => {
   console.log("\nKapatılıyor...");
+
+  // Kill WA Agent child process
+  if (waAgentProc) {
+    console.log(`[Shutdown] WA Agent kapatılıyor (pid: ${waAgentProc.pid})...`);
+    waAgentProc.kill();
+    waAgentProc = null;
+  }
 
   await brainLoop.stop();
   stopProjectionScheduler();
