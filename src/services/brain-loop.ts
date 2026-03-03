@@ -339,11 +339,11 @@ class BrainLoop {
             ttlMs: 2 * 60 * 60 * 1000,
             chatJid,
             processAfter: Date.now() + 60_000, // 60s bekle — Fekrat arada cevap verirse Guard 3 yakalar
-            // cortex: "wa", // DISABLED — mimari düzenlenene kadar
+            cortex: "wa",
           });
           waMailbox.markProcessed(chatJid);
           processedJids.add(chatJid);
-          console.log(`[BrainLoop] WA DM → Inbox: ${senderName} (processAfter: 60s)`);
+          console.log(`[BrainLoop] WA DM → Inbox: ${senderName} (processAfter: 60s, cortex: wa)`);
 
           // lastSeenMsgTimestamps güncelle — timestamp scan duplikasyon yapmaz
           const maxMsgTs = Math.max(...msgs.map(m => m.message_timestamp || 0));
@@ -483,10 +483,10 @@ class BrainLoop {
           ttlMs: 2 * 60 * 60 * 1000,
           chatJid,
           processAfter: Date.now() + 60_000, // 60s bekle — Fekrat arada cevap verirse Guard 3 yakalar
-          // cortex: "wa", // DISABLED — mimari düzenlenene kadar
+          cortex: "wa",
         });
         waMailbox.markProcessed(chatJid);
-        console.log(`[BrainLoop] WA DM (ts-scan) → Inbox: ${senderName} (${newMsgs.length} msg, processAfter: 60s)`);
+        console.log(`[BrainLoop] WA DM (ts-scan) → Inbox: ${senderName} (${newMsgs.length} msg, processAfter: 60s, cortex: wa)`);
       } catch (err) {
         console.error(`[BrainLoop] timestampScan ${chatJid} error:`, err);
       }
