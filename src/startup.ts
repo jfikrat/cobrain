@@ -26,6 +26,7 @@ import { initInbox } from "./services/inbox.ts";
 import { resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { loadRegistry } from "./agents/registry.ts";
+import { initTopicRoutes } from "./channels/telegram-router.ts";
 
 let waAgentProc: Subprocess | null = null;
 
@@ -76,11 +77,12 @@ if (config.ENABLE_AUTONOMOUS && !config.MINIMAL_AUTONOMY) {
   initTaskQueue({ enabled: true });
 }
 
-// Load agent registry (before bot starts, so topic routes are ready)
+// Load agent registry + topic routes (before bot starts, so topic routes are ready)
 if (config.COBRAIN_HUB_ID) {
   const userFolder = userManager.getUserFolder(config.MY_TELEGRAM_ID);
   await loadRegistry(userFolder);
-  console.log("[Startup] Agent registry loaded");
+  initTopicRoutes();
+  console.log("[Startup] Agent registry loaded, topic routes initialized");
 }
 
 // Start Telegram bot
