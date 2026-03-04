@@ -81,6 +81,7 @@ export async function handleGroupMessage(
     systemPromptOverride: systemPrompt,
     sessionKey,
     channel: `telegram:${route.name}`,
+    silent: true, // Agent gruplarında tool bildirimleri ana chat'e düşmesin
   });
 
   return response.content;
