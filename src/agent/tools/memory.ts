@@ -20,8 +20,10 @@ function getMemory(userId: number): FileMemory {
   return memoryCache.get(userId)!;
 }
 
-export const rememberTool = (userId: number) =>
-  tool(
+// ── Tool Factories (FileMemory-based) ────────────────────────────────────
+
+function createRememberToolFrom(memory: FileMemory) {
+  return tool(
     "remember",
     "Önemli bir bilgiyi uzun vadeli hafızaya kaydet. Kişisel bilgiler, tercihler, gerçekler için kullan.",
     {
@@ -37,16 +39,14 @@ export const rememberTool = (userId: number) =>
     },
     async ({ content, type, section }) => {
       try {
-        const memory = getMemory(userId);
-
         if (type === "episodic") {
           await memory.logEvent(content);
-          console.log(`[Memory] Event logged for user ${userId}: ${content.slice(0, 60)}...`);
+          console.log(`[Memory] Event logged: ${content.slice(0, 60)}...`);
           return toolSuccess(`Olay kaydedildi: ${content.slice(0, 60)}`);
         } else {
           const sectionName = section || inferSection(content, type);
           await memory.storeFact(sectionName, content);
-          console.log(`[Memory] Fact stored [${sectionName}] for user ${userId}: ${content.slice(0, 60)}...`);
+          console.log(`[Memory] Fact stored [${sectionName}]: ${content.slice(0, 60)}...`);
           return toolSuccess(`Hafızaya kaydedildi [${sectionName}]: ${content.slice(0, 60)}`);
         }
       } catch (error) {
@@ -54,9 +54,10 @@ export const rememberTool = (userId: number) =>
       }
     }
   );
+}
 
-export const recallTool = (userId: number) =>
-  tool(
+function createRecallToolFrom(memory: FileMemory) {
+  return tool(
     "recall",
     "Hafızada ara. Daha önce kaydedilen gerçekler ve olayları getir.",
     {
@@ -65,8 +66,6 @@ export const recallTool = (userId: number) =>
     },
     async ({ query, days }) => {
       try {
-        const memory = getMemory(userId);
-
         if (query === "all") {
           const all = await memory.readAll(days);
           if (!all) return toolSuccess("Hafıza boş.");
@@ -96,11 +95,11 @@ export const recallTool = (userId: number) =>
       }
     }
   );
+}
 
-export const memoryStatsTool = (userId: number) =>
-  tool("memory_stats", "Hafıza dosyalarının içeriğini ve boyutunu göster.", {}, async () => {
+function createStatsToolFrom(memory: FileMemory) {
+  return tool("memory_stats", "Hafıza dosyalarının içeriğini ve boyutunu göster.", {}, async () => {
     try {
-      const memory = getMemory(userId);
       const facts = await memory.readFacts();
       const events = await memory.readRecentEvents(90);
 
@@ -114,14 +113,36 @@ export const memoryStatsTool = (userId: number) =>
       return toolError("İstatistik hatası", error);
     }
   });
+}
 
-export function createMemoryServer(userId: number) {
+// ── Server Builders ─────────────────────────────────────────────────────
+
+function _buildServer(memory: FileMemory) {
   return createSdkMcpServer({
     name: "cobrain-memory",
     version: "2.0.0",
-    tools: [rememberTool(userId), recallTool(userId), memoryStatsTool(userId)],
+    tools: [createRememberToolFrom(memory), createRecallToolFrom(memory), createStatsToolFrom(memory)],
   });
 }
+
+// ── Public API ──────────────────────────────────────────────────────────
+
+/** Existing API — userId-based (Cobrain main agent) */
+export function createMemoryServer(userId: number) {
+  const memory = getMemory(userId);
+  return _buildServer(memory);
+}
+
+/** New API — path-based (WA Agent, standalone agents) */
+export function createMemoryServerFromPath(userFolder: string) {
+  const memory = new FileMemory(userFolder);
+  return _buildServer(memory);
+}
+
+// Legacy exports for backwards compatibility (used by mcp-servers.ts cache)
+export const rememberTool = (userId: number) => createRememberToolFrom(getMemory(userId));
+export const recallTool = (userId: number) => createRecallToolFrom(getMemory(userId));
+export const memoryStatsTool = (userId: number) => createStatsToolFrom(getMemory(userId));
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

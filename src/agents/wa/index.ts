@@ -4,9 +4,8 @@
  * Cobrain'den bağımsız process olarak çalışır:
  * - Kendi WhatsApp DB poll loop'u (30s)
  * - DM + Grup mesajları işleme (tek sahip)
- * - AI inference: Cobrain /api/chat üzerinden (ANTHROPIC_API_KEY gereksiz)
+ * - AI inference: Kendi Agent SDK instance'ı (HTTP bağımlılığı yok)
  * - Doğrudan WA DB outbox'a mesaj yazma (proxy yok)
- * - Cobrain'e HTTP üzerinden rapor/görev + WA context report
  * - Kendi mini HTTP server (Cobrain'den görev alır)
  * - Her chat için izole session (sessionKey: wa_<chatJid>)
  *
@@ -15,10 +14,10 @@
  */
 
 import { Database } from "bun:sqlite";
+import { waChat } from "./chat.ts";
 
 // ── Config ───────────────────────────────────────────────────────────────
 
-const COBRAIN_URL = process.env.WEB_URL || "http://localhost:3000";
 const API_KEY = process.env.COBRAIN_API_KEY || "";
 const AGENT_PORT = parseInt(process.env.WA_AGENT_PORT || "3001");
 const POLL_INTERVAL_MS = 30_000;
@@ -203,80 +202,13 @@ function markReplied(chatJid: string) {
 // Inbox'ta bekleyen chatJid'ler (processAfter dahil double-push engeli)
 const pendingChats = new Set<string>();
 
-// ── Cobrain HTTP ─────────────────────────────────────────────────────────
-
-async function cobrainPost(path: string, body: object): Promise<boolean> {
-  try {
-    const res = await fetch(`${COBRAIN_URL}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${API_KEY}` },
-      body: JSON.stringify(body),
-    });
-    return res.ok;
-  } catch { return false; }
-}
-
-async function reportToCobrain(subject: string, message: string, priority: "urgent" | "normal" = "normal") {
-  await cobrainPost("/api/report", { agentId: "wa", subject, message, priority });
-}
-
-async function recallMemory(query = "contacts rules"): Promise<string> {
-  try {
-    const res = await fetch(`${COBRAIN_URL}/api/memory/recall?query=${encodeURIComponent(query)}&days=30`, {
-      headers: { "Authorization": `Bearer ${API_KEY}` },
-    });
-    if (!res.ok) return "";
-    const data = await res.json() as { facts?: string; events?: string };
-    const parts = [data.facts || "", data.events || ""].filter(Boolean);
-    return parts.join("\n\n---\n\n").slice(0, 3000);
-  } catch { return ""; }
-}
-
-async function rememberMemory(content: string, type: "semantic" | "episodic" = "episodic", section?: string): Promise<boolean> {
-  try {
-    const res = await fetch(`${COBRAIN_URL}/api/memory/remember`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${API_KEY}` },
-      body: JSON.stringify({ content, type, section }),
-    });
-    return res.ok;
-  } catch { return false; }
-}
-
-// ── Message Processing via Cobrain /api/chat ─────────────────────────────
-// ANTHROPIC_API_KEY gereksiz — Cobrain OAuth üzerinden AI çağrısı yapar.
-// Her chat için izole session: sessionKey = "wa_<chatJid>"
-
-async function askCobrain(prompt: string, sessionKey: string, systemPrompt: string): Promise<string> {
-  try {
-    const res = await fetch(`${COBRAIN_URL}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${API_KEY}` },
-      body: JSON.stringify({
-        message: prompt,
-        sessionKey,
-        silent: true,
-        systemPromptOverride: systemPrompt,
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      console.error(`[WA Agent] /api/chat hata ${res.status}: ${err.slice(0, 200)}`);
-      return "";
-    }
-    const data = await res.json() as { content?: string; response?: string };
-    return data.content || data.response || "";
-  } catch (err) {
-    console.error("[WA Agent] /api/chat erişim hatası:", err);
-    return "";
-  }
-}
+// ── Message Processing via Agent SDK ─────────────────────────────────────
+// Doğrudan Agent SDK — HTTP katmanı yok
 
 async function processDM(
   chatJid: string,
   senderName: string,
   messages: Array<{ content: string | null; is_from_me: number }>,
-  memory: string,
 ): Promise<void> {
   const systemPrompt = await buildWaSystemPrompt();
   const history = messages.map(m =>
@@ -288,42 +220,28 @@ async function processDM(
 Son mesajlar:
 ${history}
 
-Hafıza özeti:
-${memory || "(yok)"}
-
 Görevin: Bu mesaja ne yapmalısın?
 - Cevap vereceksen: send_whatsapp_message tool'unu kullan (to: ${chatJid.replace("@s.whatsapp.net", "").replace("@lid", "")})
-- Geçeceksen: açıkla neden
-- Cobrain'e bildirmek istersen: notify_cobrain tool'unu kullan`;
+- Gerekirse recall tool'unu kullanarak hafızayı kontrol et
+- Geçeceksen: açıkla neden`;
 
   const sessionKey = `wa_${chatJid.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
   try {
-    console.log(`[WA Agent] Cobrain'e soruluyor: ${senderName} (session: ${sessionKey})`);
-    const response = await askCobrain(prompt, sessionKey, systemPrompt);
+    console.log(`[WA Agent] SDK'ya soruluyor: ${senderName} (session: ${sessionKey})`);
+    const result = await waChat(prompt, sessionKey, systemPrompt);
 
-    if (!response) {
-      console.error(`[WA Agent] Cobrain'den yanıt alınamadı: ${chatJid}`);
+    if (!result.content) {
+      console.error(`[WA Agent] SDK'dan yanıt alınamadı: ${chatJid}`);
       return;
     }
 
-    console.log(`[WA Agent] Cobrain yanıtı (${response.length} karakter): ${response.slice(0, 100)}...`);
+    console.log(`[WA Agent] SDK yanıtı (${result.content.length} karakter, ${result.numTurns} turn, tools: ${result.toolsUsed.join(",")})`);
     markReplied(chatJid);
-    await sendLog(`📨 <b>DM:</b> ${senderName} → ${response.length} karakter yanıt`);
-
-    // Cobrain'e WA context raporu gönder
-    await reportToCobrain(
-      `WA DM — ${senderName}`,
-      `chatJid: ${chatJid}\nSon mesaj: ${messages[messages.length - 1]?.content?.slice(0, 200) || "[medya]"}\nAgent yanıtı: ${response.slice(0, 200)}`,
-    );
+    await sendLog(`📨 <b>DM:</b> ${senderName} → ${result.content.length} karakter, ${result.numTurns} turn`);
   } catch (err) {
     console.error(`[WA Agent] AI hatası (${chatJid}):`, err);
     await sendLog(`❌ <b>WA Hata:</b> ${senderName} — ${String(err).slice(0, 200)}`);
-    await reportToCobrain(
-      `WA agent hata — ${senderName}`,
-      `chatJid: ${chatJid}\nHata: ${String(err).slice(0, 200)}`,
-      "urgent",
-    );
   }
 }
 
@@ -331,7 +249,6 @@ async function processGroup(
   groupJid: string,
   groupName: string,
   messages: Array<{ sender_name: string; content: string | null }>,
-  memory: string,
 ): Promise<void> {
   const systemPrompt = await buildWaSystemPrompt();
   const msgTexts = messages.map(m => `${m.sender_name}: ${m.content || "[medya]"}`).join("\n");
@@ -341,42 +258,29 @@ async function processGroup(
 Son mesajlar:
 ${msgTexts}
 
-Hafıza özeti:
-${memory || "(yok)"}
-
 Görevin: Bu grup mesajlarını değerlendir.
 - Cevap gerekiyorsa: send_whatsapp_message tool'unu kullan (to: ${groupJid})
-- Bilgi not etmen gerekiyorsa: notify_cobrain tool'unu kullan
+- Bilgi kaydetmen gerekiyorsa: remember tool'unu kullan
+- Gerekirse recall ile hafızayı kontrol et
 - Geçeceksen: sessizce geç`;
 
   const sessionKey = `wa_group_${groupJid.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
   try {
     console.log(`[WA Agent] Grup işleniyor: ${groupName} (session: ${sessionKey})`);
-    const response = await askCobrain(prompt, sessionKey, systemPrompt);
+    const result = await waChat(prompt, sessionKey, systemPrompt);
 
-    if (!response) {
-      console.error(`[WA Agent] Cobrain'den yanıt alınamadı (grup): ${groupJid}`);
+    if (!result.content) {
+      console.error(`[WA Agent] SDK'dan yanıt alınamadı (grup): ${groupJid}`);
       return;
     }
 
-    console.log(`[WA Agent] Grup yanıtı (${response.length} karakter): ${response.slice(0, 100)}...`);
+    console.log(`[WA Agent] Grup yanıtı (${result.content.length} karakter, ${result.numTurns} turn, tools: ${result.toolsUsed.join(",")})`);
     markReplied(groupJid);
-    await sendLog(`👥 <b>Grup:</b> ${groupName} (${messages.length} mesaj)`);
-
-    // Cobrain'e WA context raporu
-    await reportToCobrain(
-      `WA Grup — ${groupName}`,
-      `groupJid: ${groupJid}\nMesaj sayısı: ${messages.length}\n${msgTexts.slice(0, 300)}`,
-    );
+    await sendLog(`👥 <b>Grup:</b> ${groupName} (${messages.length} mesaj, ${result.numTurns} turn)`);
   } catch (err) {
     console.error(`[WA Agent] Grup AI hatası (${groupJid}):`, err);
     await sendLog(`❌ <b>WA Grup Hata:</b> ${groupName} — ${String(err).slice(0, 200)}`);
-    await reportToCobrain(
-      `WA agent grup hata — ${groupName}`,
-      `groupJid: ${groupJid}\nHata: ${String(err).slice(0, 200)}`,
-      "urgent",
-    );
   }
 }
 
@@ -413,10 +317,6 @@ async function poll(): Promise<void> {
   const dms = fresh.filter(n => !n.is_group);
   const groups = fresh.filter(n => n.is_group);
 
-  // Lazy memory load
-  let memory = "";
-  let memoryLoaded = false;
-
   // ── Process DMs ──
   const dmBySender = new Map<string, typeof dms>();
   for (const n of dms) {
@@ -447,12 +347,6 @@ async function poll(): Promise<void> {
       continue;
     }
 
-    // Lazy load memory
-    if (!memoryLoaded) {
-      memory = await recallMemory();
-      memoryLoaded = true;
-    }
-
     const history = getRecentMessages(chatJid, 10);
 
     pendingChats.add(chatJid);
@@ -471,7 +365,7 @@ async function poll(): Promise<void> {
       }
 
       console.log(`[WA Agent] DM işleniyor: ${senderName}`);
-      await processDM(chatJid, senderName, history, memory);
+      await processDM(chatJid, senderName, history);
     }, 30_000);
 
     console.log(`[WA Agent] DM kuyruğa alındı (30s): ${senderName}`);
@@ -506,12 +400,6 @@ async function poll(): Promise<void> {
       continue;
     }
 
-    // Lazy load memory
-    if (!memoryLoaded) {
-      memory = await recallMemory();
-      memoryLoaded = true;
-    }
-
     const groupMessages = msgs.map(m => ({
       sender_name: m.sender_name?.split(" @ ")[0] || "?",
       content: m.content,
@@ -522,7 +410,7 @@ async function poll(): Promise<void> {
 
     // Gruplar hemen işlenir (DM'lerdeki 30s bekleme yok)
     console.log(`[WA Agent] Grup işleniyor: ${groupName} (${msgs.length} mesaj)`);
-    processGroup(groupJid, groupName, groupMessages, memory).catch(err => {
+    processGroup(groupJid, groupName, groupMessages).catch(err => {
       console.error(`[WA Agent] Grup hata (${groupJid}):`, err);
     }).finally(() => {
       pendingChats.delete(groupJid);
