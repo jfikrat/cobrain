@@ -20,7 +20,7 @@ import { waChat } from "./chat.ts";
 
 const API_KEY = process.env.COBRAIN_API_KEY || "";
 const AGENT_PORT = parseInt(process.env.WA_AGENT_PORT || "3001");
-const POLL_INTERVAL_MS = 30_000;
+const POLL_INTERVAL_MS = 10_000;
 const MAX_AGE_SEC = parseInt(process.env.WHATSAPP_STALE_MAX_AGE_SEC || "3600");
 const WA_DB_PATH = process.env.WHATSAPP_DB_PATH || "/home/fjds/projects/whatsapp/db/whatsapp.db";
 const USER_FOLDER = process.env.COBRAIN_USER_FOLDER || `${process.env.HOME}/.cobrain/users/${process.env.MY_TELEGRAM_ID}`;
