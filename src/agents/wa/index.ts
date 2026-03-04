@@ -15,7 +15,6 @@
  */
 
 import { Database } from "bun:sqlite";
-import { readFileSync, existsSync } from "node:fs";
 
 // ── Config ───────────────────────────────────────────────────────────────
 
@@ -44,13 +43,45 @@ async function sendLog(text: string): Promise<void> {
   } catch {}
 }
 
-// ── System Prompt ─────────────────────────────────────────────────────────
+// ── System Prompt (Mind Files) ────────────────────────────────────────────
 
-function loadSystemPrompt(): string {
-  const path = `${USER_FOLDER}/agents/wa/system-prompt.md`;
-  if (existsSync(path)) return readFileSync(path, "utf-8");
-  return `Sen Cobrain'in WhatsApp agent'ısın. T1-T2 kişilere uygun, kısa, doğal Türkçe cevaplar yaz.
+const WA_MIND_DIR = `${USER_FOLDER}/agents/wa/mind`;
+const SHARED_MIND_DIR = `${USER_FOLDER}/mind`;
+
+const WA_MIND_FILES = ["identity.md", "rules.md", "tone.md"];
+const SHARED_FILES = ["contacts.md"];
+
+async function buildWaSystemPrompt(): Promise<string> {
+  const sections: string[] = [];
+
+  // WA-specific mind files
+  for (const file of WA_MIND_FILES) {
+    try {
+      const content = await Bun.file(`${WA_MIND_DIR}/${file}`).text();
+      if (content.trim()) sections.push(content.trim());
+    } catch {}
+  }
+
+  // Shared files (contacts — aynı kişiler, hangi kanaldan olursa olsun)
+  for (const file of SHARED_FILES) {
+    try {
+      const content = await Bun.file(`${SHARED_MIND_DIR}/${file}`).text();
+      if (content.trim()) sections.push(content.trim());
+    } catch {}
+  }
+
+  // WA context (session state)
+  try {
+    const content = await Bun.file(`${WA_MIND_DIR}/context.md`).text();
+    if (content.trim()) sections.push(content.trim());
+  } catch {}
+
+  if (sections.length === 0) {
+    return `Sen Cobrain'in WhatsApp agent'ısın. Türkçe, kısa, doğal cevaplar yaz.
 Emin değilsen cevap verme — Cobrain'e bildir.`;
+  }
+
+  return sections.join("\n\n---\n\n");
 }
 
 // ── WhatsApp DB ───────────────────────────────────────────────────────────
@@ -247,7 +278,7 @@ async function processDM(
   messages: Array<{ content: string | null; is_from_me: number }>,
   memory: string,
 ): Promise<void> {
-  const systemPrompt = loadSystemPrompt();
+  const systemPrompt = await buildWaSystemPrompt();
   const history = messages.map(m =>
     `[${m.is_from_me ? "Ben" : senderName}]: ${m.content || "[medya]"}`
   ).join("\n");
@@ -302,7 +333,7 @@ async function processGroup(
   messages: Array<{ sender_name: string; content: string | null }>,
   memory: string,
 ): Promise<void> {
-  const systemPrompt = loadSystemPrompt();
+  const systemPrompt = await buildWaSystemPrompt();
   const msgTexts = messages.map(m => `${m.sender_name}: ${m.content || "[medya]"}`).join("\n");
 
   const prompt = `[WA-AGENT] WhatsApp Grup — ${groupName} (jid: ${groupJid})
