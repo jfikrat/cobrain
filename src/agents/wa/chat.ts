@@ -3,17 +3,22 @@
  *
  * Cobrain HTTP API yerine doğrudan Agent SDK kullanır.
  * - In-memory session (1h TTL)
- * - MCP: memory, time, gateway
+ * - MCP: memory, time, whatsapp (doğrudan outbox)
  * - Max 5 turn, 2 retry
  * - Sub-agent yok
  */
 
 import {
   query,
+  tool,
+  createSdkMcpServer,
   type SDKResultMessage,
 } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
+import { Database } from "bun:sqlite";
 import { createMemoryServerFromPath } from "../../agent/tools/memory.ts";
 import { getTimeServer } from "../../agent/tools/time.ts";
+import { toolSuccess, toolError } from "../../utils/tool-response.ts";
 
 // ── Config ───────────────────────────────────────────────────────────────
 
@@ -55,10 +60,62 @@ setInterval(() => {
   }
 }, 30 * 60 * 1000);
 
+// ── WhatsApp Send Tool (doğrudan outbox DB) ─────────────────────────────
+
+const WA_DB_PATH = process.env.WHATSAPP_DB_PATH || "/home/fjds/projects/whatsapp/db/whatsapp.db";
+
+let waDb: Database | null = null;
+
+function getWaDb(): Database | null {
+  if (waDb) return waDb;
+  try {
+    waDb = new Database(WA_DB_PATH);
+    waDb.run("PRAGMA journal_mode = WAL");
+    return waDb;
+  } catch (err) {
+    console.error("[WA SDK] DB bağlanamadı:", err);
+    return null;
+  }
+}
+
+const sendWhatsAppTool = tool(
+  "send_whatsapp_message",
+  "WhatsApp mesajı gönder. Kişinin telefon numarasını veya JID'ini ver.",
+  {
+    to: z.string().describe("Alıcı telefon numarası (ör: 905551234567) veya JID (ör: 905551234567@s.whatsapp.net)"),
+    message: z.string().describe("Gönderilecek mesaj metni"),
+  },
+  async ({ to, message }) => {
+    try {
+      const db = getWaDb();
+      if (!db) return toolError("DB bağlantısı yok", new Error("WA DB unavailable"));
+
+      const jid = to.includes("@") ? to : `${to}@s.whatsapp.net`;
+      const result = db.run(
+        `INSERT INTO outbox (chat_jid, content, status, created_at) VALUES (?, ?, 'pending', datetime('now'))`,
+        [jid, message],
+      );
+      console.log(`[WA SDK] Outbox'a yazıldı: ${jid} (#${result.lastInsertRowid})`);
+      return toolSuccess(`Mesaj gönderildi: ${jid} (outbox #${result.lastInsertRowid})`);
+    } catch (error) {
+      return toolError("Mesaj gönderilemedi", error);
+    }
+  }
+);
+
+function createWaSendServer() {
+  return createSdkMcpServer({
+    name: "wa-send",
+    version: "1.0.0",
+    tools: [sendWhatsAppTool],
+  });
+}
+
 // ── MCP Servers (lazy init, shared) ──────────────────────────────────────
 
 let memoryServer: ReturnType<typeof createMemoryServerFromPath> | null = null;
 let timeServer: ReturnType<typeof getTimeServer> | null = null;
+let waSendServer: ReturnType<typeof createWaSendServer> | null = null;
 
 function getMemoryMcp() {
   if (!memoryServer) memoryServer = createMemoryServerFromPath(USER_FOLDER);
@@ -68,6 +125,11 @@ function getMemoryMcp() {
 function getTimeMcp() {
   if (!timeServer) timeServer = getTimeServer();
   return timeServer;
+}
+
+function getWaSendMcp() {
+  if (!waSendServer) waSendServer = createWaSendServer();
+  return waSendServer;
 }
 
 // ── Retry Logic ──────────────────────────────────────────────────────────
@@ -121,11 +183,7 @@ async function _execute(
         mcpServers: {
           memory: getMemoryMcp(),
           time: getTimeMcp(),
-          gateway: {
-            type: "stdio" as const,
-            command: "bun",
-            args: ["run", "/home/fjds/projects/gateway/src/index.ts"],
-          },
+          whatsapp: getWaSendMcp(),
         },
 
         // Tool logging hooks only — no permission/notifier
