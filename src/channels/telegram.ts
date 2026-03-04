@@ -10,6 +10,7 @@ import { parseSuggestions, buildSuggestionKeyboard, type TelegramContext, type L
 import { registerCommands } from "./telegram-commands.ts";
 import { registerCallbacks } from "./telegram-callbacks.ts";
 import { registerMessageHandlers } from "./telegram-messages.ts";
+import { initGroupRoutes } from "./telegram-router.ts";
 
 const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
@@ -24,6 +25,9 @@ export function getLiveLocation(userId: number): LiveLocationEntry | null {
 
 // Initialize Telegram MCP with bot instance
 initTelegramMcp(bot);
+
+// Initialize group-based agent routing
+initGroupRoutes();
 
 // Register all handlers
 registerCommands(bot, telegramCtx);

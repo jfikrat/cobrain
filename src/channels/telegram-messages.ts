@@ -4,6 +4,7 @@ import { think, userManager, type MultimodalMessage } from "../brain/index.ts";
 import { recordInteraction, extractMoodFromMessage, recordUserActivity } from "../services/interaction-tracker.ts";
 import { transcribeAudio, downloadTelegramFileAsBuffer } from "../services/transcribe.ts";
 import { isAuthorized, parseSuggestions, buildSuggestionKeyboard, type TelegramContext } from "./telegram-helpers.ts";
+import { getGroupRoute, handleGroupMessage } from "./telegram-router.ts";
 
 // Live location log throttle
 const liveLocationLastLog = new Map<number, number>();
@@ -254,6 +255,30 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
 
     const text = c.message.text;
     if (text.startsWith("/")) return;
+
+    // ============ GRUP ROUTING ============
+    if (c.chat.type === "group" || c.chat.type === "supergroup") {
+      const route = getGroupRoute(c.chat.id);
+      if (!route) return; // bilinmeyen grup → sessiz kal
+
+      await c.replyWithChatAction("typing");
+      const groupTypingInterval = setInterval(() => {
+        c.replyWithChatAction("typing").catch(() => {});
+      }, 4000);
+
+      try {
+        const response = await handleGroupMessage(userId, c.chat.id, route, text);
+        clearInterval(groupTypingInterval);
+        const { text: clean, suggestions } = parseSuggestions(response);
+        const keyboard = buildSuggestionKeyboard(suggestions);
+        await c.reply(clean, { parse_mode: "Markdown", ...(keyboard && { reply_markup: keyboard }) })
+          .catch(() => c.reply(clean, { ...(keyboard && { reply_markup: keyboard }) }));
+      } catch (err) {
+        clearInterval(groupTypingInterval);
+        console.error(`[TG Router] Grup hata (${route.name}):`, err);
+      }
+      return;
+    }
 
     // ============ NORMAL AI SOHBET ============
     await c.replyWithChatAction("typing");
