@@ -15,8 +15,9 @@ interface GroupRoute {
 const GROUP_ROUTES = new Map<number, GroupRoute>();
 
 export function initGroupRoutes(): void {
-  if (config.WA_LOG_CHANNEL_ID) {
-    GROUP_ROUTES.set(config.WA_LOG_CHANNEL_ID, {
+  // WA Agent chat grubu — kullanıcı burada WA agent persona'sıyla konuşur
+  if (config.WA_AGENT_CHAT_ID) {
+    GROUP_ROUTES.set(config.WA_AGENT_CHAT_ID, {
       name: "wa-agent",
       mindDir: "agents/wa/mind",
       sharedMindFiles: ["contacts.md"],
