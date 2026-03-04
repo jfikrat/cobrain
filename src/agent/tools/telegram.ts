@@ -12,6 +12,7 @@ import {
   registerAgent,
   archiveAgent,
   getAgentById,
+  updateAgentActivity,
   type AgentType,
 } from "../../agents/registry.ts";
 import { scaffoldAgentMindFiles } from "../../agents/templates/index.ts";
@@ -354,6 +355,39 @@ const setTypingTool = tool(
   }
 );
 
+// ============ PROACTIVE TOPIC MESSAGING ============
+
+/**
+ * Send a message to a Telegram forum topic (programmatic use).
+ */
+export async function sendToTopic(
+  chatId: number,
+  threadId: number,
+  text: string,
+  parseMode?: "HTML" | "Markdown",
+): Promise<void> {
+  if (!telegramBot) throw new Error("Telegram bot not initialized");
+  await telegramBot.api.sendMessage(chatId, text, {
+    message_thread_id: threadId,
+    parse_mode: parseMode,
+  });
+}
+
+const sendTopicMessageTool = tool(
+  "telegram_send_topic_message",
+  "Telegram forum topic'ine mesaj gönderir. Proaktif mesajlar için kullan.",
+  {
+    chatId: z.number().describe("Supergroup chat ID"),
+    threadId: z.number().describe("Topic thread ID"),
+    text: z.string().describe("Mesaj metni"),
+    parseMode: z.enum(["HTML", "Markdown"]).optional().describe("Parse mode"),
+  },
+  async ({ chatId, threadId, text, parseMode }) => {
+    await sendToTopic(chatId, threadId, text, parseMode);
+    return { success: true, message: "Topic'e mesaj gönderildi" };
+  },
+);
+
 // ============ FORUM TOPIC TOOLS ============
 
 const createForumTopicTool = tool(
@@ -501,6 +535,97 @@ const agentArchiveTool = tool(
   }
 );
 
+// ============ CROSS-AGENT VISIBILITY ============
+
+const agentGetHistoryTool = tool(
+  "agent_get_history",
+  "Bir agent'ın son etkileşimlerini getirir. Diğer agent'ların ne konuştuğunu görmek için kullan.",
+  {
+    agentId: z.string().describe("Agent ID (slug, örn: 'kod', 'arastirma')"),
+    limit: z.number().optional().default(5).describe("Kaç etkileşim getirilsin"),
+  },
+  async ({ agentId, limit }) => {
+    const { getAgentHistorySummary } = await import("../../agents/interaction-log.ts");
+    const userFolder = userManager.getUserFolder(config.MY_TELEGRAM_ID);
+    const summary = await getAgentHistorySummary(userFolder, agentId, limit);
+    return { summary };
+  },
+);
+
+// ============ DELEGATION ============
+
+const agentDelegateTool = tool(
+  "agent_delegate",
+  "Başka bir agent'a mesaj delege eder. Hedef agent'ın session'ında çalıştırır, cevabı döndürür ve opsiyonel olarak topic'e yazar.",
+  {
+    agentId: z.string().describe("Hedef agent ID (slug, örn: 'kod', 'arastirma')"),
+    message: z.string().describe("Agent'a gönderilecek mesaj"),
+    postToTopic: z.boolean().optional().default(true).describe("Cevabı agent'ın topic'ine yaz"),
+  },
+  async ({ agentId, message, postToTopic }) => {
+    const { buildRouteSystemPrompt } = await import("../../channels/telegram-router.ts");
+    const { chat: agentChat } = await import("../chat.ts");
+    const { logAgentInteraction } = await import("../../agents/interaction-log.ts");
+    const { sendToTopic: sendToTopicFn } = await import("./telegram.ts");
+
+    const agent = getAgentById(agentId);
+    if (!agent) throw new Error(`Agent "${agentId}" bulunamadı`);
+    if (agent.status !== "active") throw new Error(`Agent "${agentId}" aktif değil`);
+
+    const userFolder = userManager.getUserFolder(config.MY_TELEGRAM_ID);
+
+    // Build system prompt from agent's mind files
+    const systemPrompt = await buildRouteSystemPrompt(
+      {
+        name: agent.name,
+        mindDir: agent.mindDir,
+        sharedMindFiles: agent.sharedMindFiles,
+        sessionKeyPrefix: agent.sessionKeyPrefix,
+      },
+      userFolder,
+    );
+
+    // Run in agent's isolated session
+    const sessionKey = `${agent.sessionKeyPrefix}_delegated`;
+    const response = await agentChat(config.MY_TELEGRAM_ID, message, undefined, undefined, {
+      systemPromptOverride: systemPrompt,
+      sessionKey,
+      channel: `telegram:hub:${agentId}:delegated`,
+      silent: true,
+    });
+
+    // Log the interaction
+    logAgentInteraction(userFolder, {
+      timestamp: new Date().toISOString(),
+      agentId,
+      userMessage: `[Delegasyon] ${message}`,
+      agentResponse: response.content,
+      channel: `telegram:hub:${agentId}:delegated`,
+      toolsUsed: response.toolsUsed,
+      costUsd: response.totalCost,
+    }).catch((err) => console.warn("[Delegate] Log failed:", err));
+
+    // Post to agent's topic
+    if (postToTopic && config.COBRAIN_HUB_ID && agent.topicId) {
+      try {
+        const topicMsg = `📨 <b>Delegasyon</b>\n\n<b>Soru:</b> ${message.slice(0, 200)}\n\n<b>Cevap:</b> ${response.content.slice(0, 3000)}`;
+        await sendToTopicFn(config.COBRAIN_HUB_ID, agent.topicId, topicMsg, "HTML");
+      } catch (err) {
+        console.warn("[Delegate] Topic mesajı gönderilemedi:", err);
+      }
+    }
+
+    updateAgentActivity(agentId);
+
+    return {
+      agentId,
+      response: response.content,
+      toolsUsed: response.toolsUsed,
+      costUsd: response.totalCost,
+    };
+  },
+);
+
 // ============ MCP SERVER ============
 
 /**
@@ -531,6 +656,8 @@ export function createTelegramServer() {
       getChatInfoTool,
       sendMessageWithButtonsTool,
       setTypingTool,
+      // Proactive topic messaging
+      sendTopicMessageTool,
       // Forum tools
       createForumTopicTool,
       closeForumTopicTool,
@@ -538,6 +665,9 @@ export function createTelegramServer() {
       // Agent lifecycle
       agentCreateTool,
       agentArchiveTool,
+      // Cross-agent visibility + delegation
+      agentGetHistoryTool,
+      agentDelegateTool,
     ],
   });
 }

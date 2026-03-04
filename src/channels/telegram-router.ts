@@ -2,6 +2,7 @@ import { userManager } from "../services/user-manager.ts";
 import { chat } from "../agent/chat.ts";
 import { config } from "../config.ts";
 import { getAgentByTopicId, listActiveAgents, updateAgentActivity, type AgentEntry } from "../agents/registry.ts";
+import { logAgentInteraction } from "../agents/interaction-log.ts";
 
 interface GroupRoute {
   name: string;
@@ -72,7 +73,7 @@ function agentToTopicRoute(agent: AgentEntry): TopicRoute {
 /**
  * Grup route'u için mind dosyalarından system prompt oluştur.
  */
-async function buildRouteSystemPrompt(route: GroupRoute, userFolder: string): Promise<string> {
+export async function buildRouteSystemPrompt(route: GroupRoute | TopicRoute, userFolder: string): Promise<string> {
   const sections: string[] = [];
   const mindDir = `${userFolder}/${route.mindDir}`;
   const sharedDir = `${userFolder}/mind`;
@@ -156,6 +157,17 @@ export async function handleTopicMessage(
   });
 
   updateAgentActivity(route.agentId);
+
+  // Log interaction for cross-agent visibility
+  logAgentInteraction(userFolder, {
+    timestamp: new Date().toISOString(),
+    agentId: route.agentId,
+    userMessage: text,
+    agentResponse: response.content,
+    channel: `telegram:hub:${route.agentId}`,
+    toolsUsed: response.toolsUsed,
+    costUsd: response.totalCost,
+  }).catch((err) => console.warn("[TopicRouter] Log failed:", err));
 
   return response.content;
 }

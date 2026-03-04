@@ -25,7 +25,7 @@ import { userManager } from "./services/user-manager.ts";
 import { initInbox } from "./services/inbox.ts";
 import { resolve } from "node:path";
 import type { Subprocess } from "bun";
-import { loadRegistry } from "./agents/registry.ts";
+import { loadRegistry, getAgentById } from "./agents/registry.ts";
 import { initTopicRoutes } from "./channels/telegram-router.ts";
 
 let waAgentProc: Subprocess | null = null;
@@ -122,11 +122,18 @@ if (config.ENABLE_AUTONOMOUS) {
 
     // Start WA Agent (standalone process)
     if (config.WA_AGENT_ENABLED) {
+      // Auto-discover WA agent topic ID from registry
+      const waTopicId = config.COBRAIN_HUB_ID
+        ? getAgentById("whatsapp")?.topicId
+        : undefined;
+
       const waAgentPath = resolve(import.meta.dir, "agents/wa/index.ts");
       waAgentProc = Bun.spawn(["bun", "run", waAgentPath], {
         env: {
           ...process.env,
           WA_AGENT_PORT: String(config.WA_AGENT_PORT),
+          ...(config.COBRAIN_HUB_ID ? { COBRAIN_HUB_ID: String(config.COBRAIN_HUB_ID) } : {}),
+          ...(waTopicId ? { WA_AGENT_TOPIC_ID: String(waTopicId) } : {}),
         },
         stdout: "inherit",
         stderr: "inherit",

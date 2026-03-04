@@ -28,11 +28,33 @@ const ALLOWED_GROUP_JIDS = (process.env.WHATSAPP_ALLOWED_GROUP_JIDS || "")
   .split(",").map(j => j.trim()).filter(Boolean);
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const LOG_CHANNEL_ID = process.env.WA_LOG_CHANNEL_ID || "";
+const HUB_CHAT_ID = parseInt(process.env.COBRAIN_HUB_ID || "0") || undefined;
+const WA_TOPIC_ID = parseInt(process.env.WA_AGENT_TOPIC_ID || "0") || undefined;
 
 // ── Telegram Log Channel ─────────────────────────────────────────────────
 
 async function sendLog(text: string): Promise<void> {
-  if (!LOG_CHANNEL_ID || !BOT_TOKEN) return;
+  if (!BOT_TOKEN) return;
+
+  // Prefer hub topic if available
+  if (HUB_CHAT_ID && WA_TOPIC_ID) {
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: HUB_CHAT_ID,
+          message_thread_id: WA_TOPIC_ID,
+          text: text.slice(0, 4096),
+          parse_mode: "HTML",
+        }),
+      });
+      if (res.ok) return;
+    } catch {}
+  }
+
+  // Fallback: flat log channel
+  if (!LOG_CHANNEL_ID) return;
   try {
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: "POST",

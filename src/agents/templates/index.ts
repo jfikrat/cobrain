@@ -10,7 +10,7 @@ import type { AgentType } from "../registry.ts";
 const TEMPLATES_DIR = resolve(import.meta.dir);
 
 // Types that have template directories
-const TEMPLATE_TYPES: AgentType[] = ["genel", "kod", "arastirma"];
+const TEMPLATE_TYPES: AgentType[] = ["genel", "kod", "arastirma", "whatsapp"];
 
 /**
  * Scaffold mind files for a new agent.
