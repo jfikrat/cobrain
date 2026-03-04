@@ -92,7 +92,7 @@ const sendWhatsAppTool = tool(
 
       const jid = to.includes("@") ? to : `${to}@s.whatsapp.net`;
       const result = db.run(
-        `INSERT INTO outbox (chat_jid, content, status, created_at) VALUES (?, ?, 'pending', datetime('now'))`,
+        `INSERT INTO outbox (to_jid, content, status, created_at) VALUES (?, ?, 'pending', strftime('%s', 'now'))`,
         [jid, message],
       );
       console.log(`[WA SDK] Outbox'a yazıldı: ${jid} (#${result.lastInsertRowid})`);
