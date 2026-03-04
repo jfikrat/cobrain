@@ -189,6 +189,8 @@ function markReplied(chatJid: string) {
 
 // Inbox'ta bekleyen chatJid'ler (processAfter dahil double-push engeli)
 const pendingChats = new Set<string>();
+// Debounce timer'ları — her yeni mesajda timer sıfırlanır
+const dmTimers = new Map<string, Timer>();
 
 // ── Message Processing via Agent SDK ─────────────────────────────────────
 // Doğrudan Agent SDK — HTTP katmanı yok
@@ -331,25 +333,24 @@ async function poll(): Promise<void> {
       continue;
     }
 
-    // Guard 2: zaten pending
-    if (pendingChats.has(chatJid)) {
-      markNotificationsRead(msgs.map(m => m.id));
-      continue;
-    }
-
-    const history = getRecentMessages(chatJid, 10);
-
-    pendingChats.add(chatJid);
     markNotificationsRead(msgs.map(m => m.id));
 
-    // 5s beklet — üst üste mesajlar gruplansın, sonra işle
-    setTimeout(async () => {
+    // Debounce: her yeni mesajda timer sıfırla (üst üste mesajlar gruplansın)
+    const existing = dmTimers.get(chatJid);
+    if (existing) clearTimeout(existing);
+
+    pendingChats.add(chatJid);
+    const timer = setTimeout(async () => {
+      dmTimers.delete(chatJid);
       pendingChats.delete(chatJid);
+      // History'yi İŞLEM ANINDA al — bekleme sırasında gelen mesajlar da dahil
+      const history = getRecentMessages(chatJid, 10);
       console.log(`[WA Agent] DM işleniyor: ${senderName}`);
       await processDM(chatJid, senderName, history);
     }, 5_000);
+    dmTimers.set(chatJid, timer);
 
-    console.log(`[WA Agent] DM kuyruğa alındı (5s): ${senderName}`);
+    console.log(`[WA Agent] DM kuyruğa alındı/yenilendi (5s): ${senderName}`);
   }
 
   // ── Process Groups ──
