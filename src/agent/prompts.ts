@@ -37,6 +37,7 @@ export interface DynamicContext {
     conversationPhase: string;
     lastUserMessage: string;
   };
+  channel?: string; // "telegram" | "api" | "wa" etc.
 }
 
 /**
@@ -176,6 +177,10 @@ function buildUserContext(
 function buildDynamicContextXml(ctx: DynamicContext): string {
   let xml = `<dynamic-context>
   <time now="${escapeXml(ctx.time.now)}" dayPart="${escapeXml(ctx.time.dayPart)}" isWeekend="${ctx.time.isWeekend}"/>`;
+
+  if (ctx.channel) {
+    xml += `\n  <channel>${escapeXml(ctx.channel)}</channel>`;
+  }
 
   if (ctx.mood) {
     xml += `\n  <mood current="${escapeXml(ctx.mood.current)}" energy="${ctx.mood.energy}" trend="${escapeXml(ctx.mood.trend)}"/>`;

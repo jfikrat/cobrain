@@ -13,7 +13,7 @@ import {
   type WebSocketData,
 } from "./websocket.ts";
 import { handleMediaUpload, handleMediaTranscribe, handleMediaServe } from "./media.ts";
-import { chat } from "../agent/chat.ts";
+import { chat, type ChatOptions } from "../agent/chat.ts";
 import { bot } from "../channels/telegram.ts";
 import { userManager } from "../services/user-manager.ts";
 import indexHtml from "./public/index.html";
@@ -117,9 +117,11 @@ export function startWebServer(): void {
               .catch(() => bot.api.sendMessage(userId, mirrorText).catch(() => {}));
           }
 
-          const chatOptions = (sessionKey || systemPromptOverride)
-            ? { ...(sessionKey && { sessionKey }), ...(systemPromptOverride && { systemPromptOverride }) }
-            : undefined;
+          const chatOptions: ChatOptions = {
+            channel: "api",
+            ...(sessionKey && { sessionKey }),
+            ...(systemPromptOverride && { systemPromptOverride }),
+          };
           const response = await chat(userId, message, undefined, model, chatOptions);
 
           if (!silent) {

@@ -50,6 +50,8 @@ export interface ChatOptions {
   systemPromptOverride?: string;
   /** Ayrı session cache anahtarı (örn: "wa_cortex"). Undefined = ana Cobrain session */
   sessionKey?: string;
+  /** Mesajın geldiği kanal: "telegram" | "api" | "wa" */
+  channel?: string;
 }
 
 // Concurrency guard: reflects whether _executeChat is actively running
@@ -229,6 +231,7 @@ async function _executeChat(
       recentMemories,
       sessionState,
       recentWhatsApp,
+      channel: options?.channel,
     });
   }
 
