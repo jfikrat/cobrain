@@ -121,6 +121,7 @@ export function startWebServer(): void {
             channel: "api",
             ...(sessionKey && { sessionKey }),
             ...(systemPromptOverride && { systemPromptOverride }),
+            ...(silent && { silent }),
           };
           const response = await chat(userId, message, undefined, model, chatOptions);
 

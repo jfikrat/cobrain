@@ -52,6 +52,8 @@ export interface ChatOptions {
   sessionKey?: string;
   /** Mesajın geldiği kanal: "telegram" | "api" | "wa" */
   channel?: string;
+  /** true ise ToolStreamNotifier (Telegram bildirim) devre dışı */
+  silent?: boolean;
 }
 
 // Concurrency guard: reflects whether _executeChat is actively running
@@ -240,9 +242,9 @@ async function _executeChat(
     ? cortexSessions.get(options.sessionKey)
     : await getOrResumeSession(userId);
 
-  // Track tools used + streaming notifier
+  // Track tools used + streaming notifier (silent mode = no Telegram notifications)
   const toolsUsed: string[] = [];
-  const notifier = new ToolStreamNotifier(userId);
+  const notifier = options?.silent ? null : new ToolStreamNotifier(userId);
   let lastAssistantContent = "";
   let sessionId = "";
   let totalCost = 0;
@@ -414,7 +416,7 @@ async function _executeChat(
     );
 
     // Finalize streaming notification
-    await notifier.complete({ cost: totalCost, stopReason });
+    if (notifier) await notifier.complete({ cost: totalCost, stopReason });
 
     // Heartbeat: agent completed successfully
     heartbeat("ai_agent", { event: "completed", turns: numTurns, tools: toolsUsed.length, cost: totalCost });
@@ -481,7 +483,7 @@ async function _executeChat(
     console.error("[Cortex] Chat error:", error);
 
     // Finalize streaming notification with error
-    await notifier.complete({ error: errorMessage });
+    if (notifier) await notifier.complete({ error: errorMessage });
 
     // Clear session on error to start fresh next time
     if (options?.sessionKey) {
