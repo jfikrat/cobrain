@@ -158,6 +158,12 @@ export function startWebServer(): void {
             return Response.json({ error: "agentId, subject, message required" }, { status: 400 });
           }
 
+          // WA Agent kendi işini askCobrain() ile hallediyor — raporları inbox'a düşürme, sadece logla
+          if (agentId === "wa") {
+            console.log(`[API] WA Agent report (log-only): "${subject}"`);
+            return Response.json({ ok: true, logged: true });
+          }
+
           const { inbox } = await import("../services/inbox.ts");
           await inbox.push({
             from: "brain-loop",
