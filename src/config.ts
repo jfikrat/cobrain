@@ -48,7 +48,7 @@ const envSchema = z.object({
 
   // v0.5: Gemini API (for voice transcription)
   GEMINI_API_KEY: z.string().default(""),
-  TRANSCRIPTION_MODEL: z.string().default("gemini-3-flash-preview"),
+  TRANSCRIPTION_MODEL: z.string().default("gemini-3.1-flash-lite-preview"),
 
   // v0.6: Agent model
   AGENT_MODEL: z.string().default("claude-sonnet-4-6"),
