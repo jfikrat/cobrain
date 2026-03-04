@@ -216,20 +216,25 @@ Görevin: Bu mesaja ne yapmalısın?
   const sessionKey = `wa_${chatJid.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
   try {
-    console.log(`[WA Agent] SDK'ya soruluyor: ${senderName} (session: ${sessionKey})`);
-    const result = await waChat(prompt, sessionKey, systemPrompt);
+    await sendLog(`🔄 <b>DM başladı:</b> ${senderName}\n💬 ${messages[messages.length - 1]?.content?.slice(0, 100) || "[medya]"}`);
+
+    const result = await waChat(prompt, sessionKey, systemPrompt, {
+      onToolUse: (toolName) => {
+        sendLog(`🔧 <b>Tool:</b> ${toolName}`);
+      },
+    });
 
     if (!result.content) {
-      console.error(`[WA Agent] SDK'dan yanıt alınamadı: ${chatJid}`);
+      await sendLog(`⚠️ <b>DM:</b> ${senderName} — yanıt alınamadı`);
       return;
     }
 
-    console.log(`[WA Agent] SDK yanıtı (${result.content.length} karakter, ${result.numTurns} turn, tools: ${result.toolsUsed.join(",")})`);
     markReplied(chatJid);
-    await sendLog(`📨 <b>DM:</b> ${senderName} → ${result.content.length} karakter, ${result.numTurns} turn`);
+    const toolList = result.toolsUsed.length > 0 ? `\n🔧 Tools: ${result.toolsUsed.join(", ")}` : "";
+    await sendLog(`📨 <b>DM:</b> ${senderName}\n↩️ ${result.content.slice(0, 200)}${toolList}\n⚙️ ${result.numTurns} turn`);
   } catch (err) {
     console.error(`[WA Agent] AI hatası (${chatJid}):`, err);
-    await sendLog(`❌ <b>WA Hata:</b> ${senderName} — ${String(err).slice(0, 200)}`);
+    await sendLog(`❌ <b>DM Hata:</b> ${senderName}\n${String(err).slice(0, 200)}`);
   }
 }
 
@@ -255,20 +260,25 @@ Görevin: Bu grup mesajlarını değerlendir.
   const sessionKey = `wa_group_${groupJid.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
   try {
-    console.log(`[WA Agent] Grup işleniyor: ${groupName} (session: ${sessionKey})`);
-    const result = await waChat(prompt, sessionKey, systemPrompt);
+    await sendLog(`🔄 <b>Grup başladı:</b> ${groupName} (${messages.length} mesaj)\n💬 ${msgTexts.slice(0, 150)}`);
+
+    const result = await waChat(prompt, sessionKey, systemPrompt, {
+      onToolUse: (toolName) => {
+        sendLog(`🔧 <b>Tool:</b> ${toolName}`);
+      },
+    });
 
     if (!result.content) {
-      console.error(`[WA Agent] SDK'dan yanıt alınamadı (grup): ${groupJid}`);
+      await sendLog(`⚠️ <b>Grup:</b> ${groupName} — yanıt alınamadı`);
       return;
     }
 
-    console.log(`[WA Agent] Grup yanıtı (${result.content.length} karakter, ${result.numTurns} turn, tools: ${result.toolsUsed.join(",")})`);
     markReplied(groupJid);
-    await sendLog(`👥 <b>Grup:</b> ${groupName} (${messages.length} mesaj, ${result.numTurns} turn)`);
+    const toolList = result.toolsUsed.length > 0 ? `\n🔧 Tools: ${result.toolsUsed.join(", ")}` : "";
+    await sendLog(`👥 <b>Grup:</b> ${groupName}\n↩️ ${result.content.slice(0, 200)}${toolList}\n⚙️ ${result.numTurns} turn`);
   } catch (err) {
     console.error(`[WA Agent] Grup AI hatası (${groupJid}):`, err);
-    await sendLog(`❌ <b>WA Grup Hata:</b> ${groupName} — ${String(err).slice(0, 200)}`);
+    await sendLog(`❌ <b>Grup Hata:</b> ${groupName}\n${String(err).slice(0, 200)}`);
   }
 }
 

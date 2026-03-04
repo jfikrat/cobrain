@@ -149,12 +149,18 @@ export interface WaChatResponse {
   numTurns: number;
 }
 
+export interface WaChatOptions {
+  /** Her tool çağrısında tetiklenir */
+  onToolUse?: (toolName: string) => void;
+}
+
 export async function waChat(
   prompt: string,
   sessionKey: string,
   systemPrompt: string,
+  options?: WaChatOptions,
 ): Promise<WaChatResponse> {
-  return _execute(prompt, sessionKey, systemPrompt, 1);
+  return _execute(prompt, sessionKey, systemPrompt, 1, options);
 }
 
 // ── Internal ─────────────────────────────────────────────────────────────
@@ -164,6 +170,7 @@ async function _execute(
   sessionKey: string,
   systemPrompt: string,
   attempt: number,
+  options?: WaChatOptions,
 ): Promise<WaChatResponse> {
   const existingSessionId = getSession(sessionKey);
   const toolsUsed: string[] = [];
@@ -192,6 +199,7 @@ async function _execute(
             ({ tool_name }) => {
               toolsUsed.push(tool_name);
               console.log(`[WA SDK] Tool: ${tool_name}`);
+              options?.onToolUse?.(tool_name);
               return undefined; // auto-approve
             },
           ],
@@ -256,7 +264,7 @@ async function _execute(
     if (existingSessionId && errorMessage.includes("exited with code")) {
       console.warn(`[WA SDK] Stale session, retrying fresh...`);
       sessions.delete(sessionKey);
-      return _execute(prompt, sessionKey, systemPrompt, attempt);
+      return _execute(prompt, sessionKey, systemPrompt, attempt, options);
     }
 
     // Retry on transient API errors
@@ -264,7 +272,7 @@ async function _execute(
       const delay = RETRY_DELAYS_MS[attempt - 1] ?? 3000;
       console.warn(`[WA SDK] Retry ${attempt}/${MAX_RETRIES} in ${delay}ms: ${errorMessage.slice(0, 80)}`);
       await new Promise(r => setTimeout(r, delay));
-      return _execute(prompt, sessionKey, systemPrompt, attempt + 1);
+      return _execute(prompt, sessionKey, systemPrompt, attempt + 1, options);
     }
 
     console.error("[WA SDK] Chat error:", error);
