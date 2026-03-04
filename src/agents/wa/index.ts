@@ -342,14 +342,14 @@ async function poll(): Promise<void> {
     pendingChats.add(chatJid);
     markNotificationsRead(msgs.map(m => m.id));
 
-    // 30s beklet sonra işle (kullanıcının cevap verip vermediğini AI değerlendirir)
+    // 5s beklet — üst üste mesajlar gruplansın, sonra işle
     setTimeout(async () => {
       pendingChats.delete(chatJid);
       console.log(`[WA Agent] DM işleniyor: ${senderName}`);
       await processDM(chatJid, senderName, history);
-    }, 30_000);
+    }, 5_000);
 
-    console.log(`[WA Agent] DM kuyruğa alındı (30s): ${senderName}`);
+    console.log(`[WA Agent] DM kuyruğa alındı (5s): ${senderName}`);
   }
 
   // ── Process Groups ──
