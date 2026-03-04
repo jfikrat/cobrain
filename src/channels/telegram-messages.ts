@@ -346,7 +346,9 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
     }
 
     // ============ GRUP ROUTING ============
-    if (c.chat.type === "group" || c.chat.type === "supergroup") {
+    // Hub supergroup'u buradan hariç tut — yukarıda topic route yoksa normal Cobrain'e düşsün
+    const isHub = config.COBRAIN_HUB_ID && c.chat.id === config.COBRAIN_HUB_ID;
+    if ((c.chat.type === "group" || c.chat.type === "supergroup") && !isHub) {
       const route = getGroupRoute(c.chat.id);
       if (!route) return; // bilinmeyen grup → sessiz kal
 
