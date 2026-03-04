@@ -193,14 +193,24 @@ async function _execute(
           whatsapp: getWaSendMcp(),
         },
 
-        // Tool logging hooks only — no permission/notifier
+        // Tool logging + auto-approve hooks — no permission/notifier
         hooks: {
           PreToolUse: [
-            ({ tool_name }) => {
-              toolsUsed.push(tool_name);
-              console.log(`[WA SDK] Tool: ${tool_name}`);
-              options?.onToolUse?.(tool_name);
-              return undefined; // auto-approve
+            {
+              hooks: [
+                (hookInput: any) => {
+                  const toolName = hookInput.tool_name;
+                  toolsUsed.push(toolName);
+                  console.log(`[WA SDK] Tool: ${toolName}`);
+                  options?.onToolUse?.(toolName);
+                  return {
+                    hookSpecificOutput: {
+                      hookEventName: "PreToolUse" as const,
+                      permissionDecision: "allow" as const,
+                    },
+                  };
+                },
+              ],
             },
           ],
         },
