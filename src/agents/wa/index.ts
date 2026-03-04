@@ -150,18 +150,6 @@ function getRecentMessages(chatJid: string, limit = 10) {
   } catch { return []; }
 }
 
-function getRecentOutgoing(chatJid: string, sinceTs: number) {
-  const d = getDB();
-  if (!d) return [];
-  try {
-    return d.query<{ content: string | null; timestamp: number }, [string, number]>(`
-      SELECT content, timestamp FROM messages
-      WHERE chat_jid = ? AND is_from_me = 1 AND timestamp >= ?
-      ORDER BY timestamp DESC LIMIT 5
-    `).all(chatJid, sinceTs);
-  } catch { return []; }
-}
-
 // ── Direct Outbox Write ──────────────────────────────────────────────────
 
 function addToOutbox(to: string, message: string): number | null {
@@ -339,31 +327,14 @@ async function poll(): Promise<void> {
       continue;
     }
 
-    // Guard 3: Fekrat son 120s cevap yazdıysa
-    const recentOutgoing = getRecentOutgoing(chatJid, nowSec - 120);
-    if (recentOutgoing.length > 0) {
-      markNotificationsRead(msgs.map(m => m.id));
-      console.log(`[WA Agent] Geçildi (user replied): ${senderName}`);
-      continue;
-    }
-
     const history = getRecentMessages(chatJid, 10);
 
     pendingChats.add(chatJid);
     markNotificationsRead(msgs.map(m => m.id));
 
-    // 30s beklet sonra işle
+    // 30s beklet sonra işle (kullanıcının cevap verip vermediğini AI değerlendirir)
     setTimeout(async () => {
       pendingChats.delete(chatJid);
-
-      // Guard tekrar: beklerken Fekrat cevap yazdı mı?
-      const nowSec2 = Math.floor(Date.now() / 1000);
-      const outgoing2 = getRecentOutgoing(chatJid, nowSec2 - 120);
-      if (outgoing2.length > 0) {
-        console.log(`[WA Agent] Geçildi (user replied during wait): ${senderName}`);
-        return;
-      }
-
       console.log(`[WA Agent] DM işleniyor: ${senderName}`);
       await processDM(chatJid, senderName, history);
     }, 30_000);
