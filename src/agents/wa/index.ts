@@ -203,15 +203,16 @@ async function processDM(
     `[${m.is_from_me ? "Ben" : senderName}]: ${m.content || "[medya]"}`
   ).join("\n");
 
-  const prompt = `[WA-AGENT] WhatsApp DM — ${senderName} (jid: ${chatJid})
+  const toNumber = chatJid.replace("@s.whatsapp.net", "").replace("@lid", "");
+  const prompt = `WhatsApp DM — ${senderName}
 
 Son mesajlar:
 ${history}
 
-Görevin: Bu mesaja ne yapmalısın?
-- Cevap vereceksen: send_whatsapp_message tool'unu kullan (to: ${chatJid.replace("@s.whatsapp.net", "").replace("@lid", "")})
-- Gerekirse recall tool'unu kullanarak hafızayı kontrol et
-- Geçeceksen: açıkla neden`;
+Kurallarına göre bu kişiye cevap ver. Cevap vereceksen mcp__whatsapp__send_whatsapp_message tool'unu MUTLAKA kullan.
+to: "${toNumber}"
+Hafızayı kontrol etmen gerekiyorsa mcp__memory__recall tool'unu kullan.
+Cevap vermeyeceksen nedenini kısaca açıkla.`;
 
   const sessionKey = `wa_${chatJid.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
@@ -246,16 +247,15 @@ async function processGroup(
   const systemPrompt = await buildWaSystemPrompt();
   const msgTexts = messages.map(m => `${m.sender_name}: ${m.content || "[medya]"}`).join("\n");
 
-  const prompt = `[WA-AGENT] WhatsApp Grup — ${groupName} (jid: ${groupJid})
+  const prompt = `WhatsApp Grup — ${groupName}
 
 Son mesajlar:
 ${msgTexts}
 
-Görevin: Bu grup mesajlarını değerlendir.
-- Cevap gerekiyorsa: send_whatsapp_message tool'unu kullan (to: ${groupJid})
-- Bilgi kaydetmen gerekiyorsa: remember tool'unu kullan
-- Gerekirse recall ile hafızayı kontrol et
-- Geçeceksen: sessizce geç`;
+Kurallarına göre bu grup mesajlarını değerlendir. Cevap vereceksen mcp__whatsapp__send_whatsapp_message tool'unu MUTLAKA kullan.
+to: "${groupJid}"
+Bilgi kaydetmen gerekiyorsa mcp__memory__remember tool'unu kullan.
+Cevap vermeyeceksen sessizce geç.`;
 
   const sessionKey = `wa_group_${groupJid.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
