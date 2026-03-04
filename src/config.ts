@@ -89,6 +89,8 @@ const envSchema = z.object({
   WA_LOG_CHANNEL_ID: z.coerce.number().optional(),
   WA_AGENT_CHAT_ID: z.coerce.number().optional(),
 
+  // v1.5: Multi-Agent Hub (Telegram Forum Mode)
+  COBRAIN_HUB_ID: z.coerce.number().optional(),
 });
 
 // Type for safe config loading result

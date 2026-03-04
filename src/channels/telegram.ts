@@ -10,7 +10,7 @@ import { parseSuggestions, buildSuggestionKeyboard, type TelegramContext, type L
 import { registerCommands } from "./telegram-commands.ts";
 import { registerCallbacks } from "./telegram-callbacks.ts";
 import { registerMessageHandlers } from "./telegram-messages.ts";
-import { initGroupRoutes } from "./telegram-router.ts";
+import { initGroupRoutes, initTopicRoutes } from "./telegram-router.ts";
 
 const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
@@ -28,6 +28,11 @@ initTelegramMcp(bot);
 
 // Initialize group-based agent routing
 initGroupRoutes();
+
+// Initialize hub topic routing (if configured)
+if (config.COBRAIN_HUB_ID) {
+  initTopicRoutes();
+}
 
 // Register all handlers
 registerCommands(bot, telegramCtx);

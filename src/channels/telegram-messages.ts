@@ -4,7 +4,7 @@ import { think, userManager, type MultimodalMessage } from "../brain/index.ts";
 import { recordInteraction, extractMoodFromMessage, recordUserActivity } from "../services/interaction-tracker.ts";
 import { transcribeAudio, downloadTelegramFileAsBuffer } from "../services/transcribe.ts";
 import { isAuthorized, parseSuggestions, buildSuggestionKeyboard, type TelegramContext } from "./telegram-helpers.ts";
-import { getGroupRoute, handleGroupMessage } from "./telegram-router.ts";
+import { getGroupRoute, handleGroupMessage, getTopicRoute, handleTopicMessage } from "./telegram-router.ts";
 
 // Live location log throttle
 const liveLocationLastLog = new Map<number, number>();
@@ -62,6 +62,34 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
       }
 
       console.log(`[Voice] ${userId}: "${transcript.slice(0, 50)}..."`);
+
+      // Hub topic routing for voice
+      const threadId = c.message.message_thread_id;
+      if (
+        c.chat.type === "supergroup" &&
+        config.COBRAIN_HUB_ID &&
+        c.chat.id === config.COBRAIN_HUB_ID &&
+        threadId
+      ) {
+        const topicRoute = getTopicRoute(threadId);
+        if (topicRoute) {
+          await c.replyWithChatAction("typing");
+          const topicVoiceInterval = setInterval(() => {
+            c.replyWithChatAction("typing").catch(() => {});
+          }, 4000);
+          try {
+            const topicResponse = await handleTopicMessage(userId, c.chat.id, threadId, topicRoute, transcript);
+            clearInterval(topicVoiceInterval);
+            const voiceMsg = `🎤 <i>${transcript}</i>\n\n${topicResponse}`;
+            await c.reply(voiceMsg, { parse_mode: "HTML", message_thread_id: threadId })
+              .catch(() => c.reply(`🎤 ${transcript}\n\n${topicResponse}`, { message_thread_id: threadId }));
+          } catch (err) {
+            clearInterval(topicVoiceInterval);
+            console.error(`[TG Hub] Voice topic hata (${topicRoute.name}):`, err);
+          }
+          return;
+        }
+      }
 
       await c.replyWithChatAction("typing");
       const voiceTypingInterval = setInterval(() => {
@@ -153,6 +181,27 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
           },
         ],
       };
+
+      // Hub topic routing for photos — route to topic agent as text prompt
+      const photoThreadId = c.message.message_thread_id;
+      if (
+        c.chat.type === "supergroup" &&
+        config.COBRAIN_HUB_ID &&
+        c.chat.id === config.COBRAIN_HUB_ID &&
+        photoThreadId
+      ) {
+        const topicRoute = getTopicRoute(photoThreadId);
+        if (topicRoute) {
+          try { await bot.api.deleteMessage(c.chat.id, processingMsg.message_id); } catch {}
+          const photoPrompt = caption
+            ? `[Kullanıcı bir resim gönderdi: "${caption}"] Resmi göremiyorsun ama açıklama ile yardımcı ol.`
+            : "[Kullanıcı bir resim gönderdi] Resmi göremiyorsun, bunu belirt.";
+          const topicPhotoResponse = await handleTopicMessage(userId, c.chat.id, photoThreadId, topicRoute, photoPrompt);
+          await c.reply(topicPhotoResponse, { message_thread_id: photoThreadId })
+            .catch(() => c.reply(topicPhotoResponse, { message_thread_id: photoThreadId }));
+          return;
+        }
+      }
 
       await userManager.ensureUser(userId);
       const response = await think(userId, multimodalMessage);
@@ -255,6 +304,46 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
 
     const text = c.message.text;
     if (text.startsWith("/")) return;
+
+    // ============ HUB TOPIC ROUTING ============
+    if (
+      c.chat.type === "supergroup" &&
+      config.COBRAIN_HUB_ID &&
+      c.chat.id === config.COBRAIN_HUB_ID
+    ) {
+      const threadId = c.message.message_thread_id;
+      if (threadId) {
+        const topicRoute = getTopicRoute(threadId);
+        if (topicRoute) {
+          await c.replyWithChatAction("typing");
+          const topicTypingInterval = setInterval(() => {
+            c.replyWithChatAction("typing").catch(() => {});
+          }, 4000);
+
+          try {
+            const response = await handleTopicMessage(userId, c.chat.id, threadId, topicRoute, text);
+            clearInterval(topicTypingInterval);
+            const { text: clean, suggestions } = parseSuggestions(response);
+            const keyboard = buildSuggestionKeyboard(suggestions);
+            await c.reply(clean, {
+              parse_mode: "Markdown",
+              message_thread_id: threadId,
+              ...(keyboard && { reply_markup: keyboard }),
+            }).catch(() =>
+              c.reply(clean, {
+                message_thread_id: threadId,
+                ...(keyboard && { reply_markup: keyboard }),
+              })
+            );
+          } catch (err) {
+            clearInterval(topicTypingInterval);
+            console.error(`[TG Hub] Topic hata (${topicRoute.name}):`, err);
+          }
+          return;
+        }
+      }
+      // threadId yoksa veya route yoksa → "Genel" topic → normal Cobrain (fall through)
+    }
 
     // ============ GRUP ROUTING ============
     if (c.chat.type === "group" || c.chat.type === "supergroup") {
