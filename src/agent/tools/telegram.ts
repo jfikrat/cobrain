@@ -564,7 +564,7 @@ const agentDelegateTool = tool(
   },
   async ({ agentId, message, postToTopic }) => {
     const { buildRouteSystemPrompt } = await import("../../channels/telegram-router.ts");
-    const { chat: agentChat } = await import("../chat.ts");
+    const { _executeChat: agentChat } = await import("../chat.ts");
     const { logAgentInteraction } = await import("../../agents/interaction-log.ts");
     const { sendToTopic: sendToTopicFn } = await import("./telegram.ts");
 
@@ -587,7 +587,7 @@ const agentDelegateTool = tool(
 
     // Run in agent's isolated session
     const sessionKey = `${agent.sessionKeyPrefix}_delegated`;
-    const response = await agentChat(config.MY_TELEGRAM_ID, message, undefined, undefined, {
+    const response = await agentChat(config.MY_TELEGRAM_ID, message, undefined, undefined, 1, {
       systemPromptOverride: systemPrompt,
       sessionKey,
       channel: `telegram:hub:${agentId}:delegated`,

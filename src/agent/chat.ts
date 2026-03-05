@@ -162,7 +162,12 @@ function isRetryableError(message: string): boolean {
   return RETRYABLE_PATTERNS.some((p) => message.toLowerCase().includes(p.toLowerCase()));
 }
 
-async function _executeChat(
+/**
+ * Direct chat execution — bypasses per-user serialization queue.
+ * Used by agent_delegate to avoid deadlock (parent chat waits for delegation,
+ * delegation waits for queue → deadlock).
+ */
+export async function _executeChat(
   userId: number,
   message: string | MultimodalMessage,
   traceId?: string,
