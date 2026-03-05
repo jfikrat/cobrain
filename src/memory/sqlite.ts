@@ -125,6 +125,13 @@ export class UserMemory {
       // Column already exists, ignore
     }
 
+    // Add session_key column for hub agent session persistence
+    try {
+      this.db.run(`ALTER TABLE sessions ADD COLUMN session_key TEXT DEFAULT NULL`);
+    } catch {
+      // Column already exists, ignore
+    }
+
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_conv_messages ON conversation_messages(conversation_id, timestamp)`);
   }
 
@@ -244,6 +251,45 @@ export class UserMemory {
 
   clearSession(): void {
     this.db.run("UPDATE sessions SET status = 'inactive' WHERE status = 'active'");
+  }
+
+  // ========== KEYED SESSION METHODS (hub agents) ==========
+
+  getSessionByKey(key: string): Session | null {
+    const row = this.db
+      .query<
+        { id: string; status: string; message_count: number; created_at: string; last_used_at: string | null },
+        [string]
+      >("SELECT * FROM sessions WHERE status = 'active' AND session_key = ? ORDER BY last_used_at DESC LIMIT 1")
+      .get(key);
+
+    if (row) {
+      this.db.run("UPDATE sessions SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?", [row.id]);
+      return {
+        id: row.id,
+        status: row.status,
+        messageCount: row.message_count,
+        createdAt: row.created_at,
+        lastUsedAt: new Date().toISOString(),
+      };
+    }
+
+    return null;
+  }
+
+  setSessionByKey(key: string, sessionId: string): void {
+    // Deactivate previous active session for this key
+    this.db.run("UPDATE sessions SET status = 'inactive' WHERE status = 'active' AND session_key = ?", [key]);
+    // Insert new active session with key
+    this.db.run(
+      `INSERT INTO sessions (id, session_key, status, last_used_at) VALUES (?, ?, 'active', CURRENT_TIMESTAMP)
+       ON CONFLICT(id) DO UPDATE SET session_key = ?, status = 'active', last_used_at = CURRENT_TIMESTAMP`,
+      [sessionId, key, key]
+    );
+  }
+
+  clearSessionByKey(key: string): void {
+    this.db.run("UPDATE sessions SET status = 'inactive' WHERE status = 'active' AND session_key = ?", [key]);
   }
 
   // ========== PREFERENCES METHODS ==========

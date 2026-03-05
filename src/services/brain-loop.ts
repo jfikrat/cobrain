@@ -22,6 +22,7 @@ import { escapeHtml } from "../utils/escape-html.ts";
 import { chat, isUserBusy } from "../agent/chat.ts";
 import { mneme } from "../mneme/mneme.ts";
 import { inbox } from "./inbox.ts";
+import { readLoopConfig, type LoopConfig, DEFAULT_LOOP_CONFIG } from "../agent/tools/agent-loop.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -77,7 +78,10 @@ class BrainLoop {
   private codeReviewIndex = 0;
   private lastCodeReviewDate: string | null = null;
   private lastProactiveCheckHour: string | null = null;
-  private lastAgentBehaviorCheckHour: string | null = null;
+
+  // Agent loop state
+  private agentLoopCache = new Map<string, { config: LoopConfig; loadedAt: number }>();
+  private agentLastTriggered = new Map<string, number>();
 
   // ── Lifecycle ────────────────────────────────────────────────────────
 
@@ -125,6 +129,12 @@ class BrainLoop {
     }
 
     try {
+      await this.checkAgentLoops();
+    } catch (err) {
+      console.error("[BrainLoop] checkAgentLoops error:", err);
+    }
+
+    try {
       await this.processInbox();
     } catch (err) {
       console.error("[BrainLoop] processInbox error:", err);
@@ -153,12 +163,6 @@ class BrainLoop {
       await this.checkProactiveBehaviors();
     } catch (err) {
       console.error("[BrainLoop] checkProactiveBehaviors error:", err);
-    }
-
-    try {
-      await this.checkAgentBehaviors();
-    } catch (err) {
-      console.error("[BrainLoop] checkAgentBehaviors error:", err);
     }
 
     // Code review cycle is disabled in minimal autonomy mode.
@@ -258,48 +262,89 @@ class BrainLoop {
     console.log(`[BrainLoop] Proactive check pushed: ${hourKey}`);
   }
 
-  // ── Agent Behaviors Check ────────────────────────────────────────────
+  // ── Agent Loop System ──────────────────────────────────────────────
   //
-  // Saatte bir, aktif saatlerde (07-23) her agent'ın topic'ine heartbeat
-  // mesajı gönderir. Agent kendi behaviors.md'sini okuyup aksiyon alır.
+  // Her fastTick'te çalışır. Agent'ların loop.json dosyasını okuyup
+  // dinamik olarak heartbeat gönderir. Precondition registry ile
+  // lightweight check yapabilir.
 
-  private async checkAgentBehaviors(): Promise<void> {
-    const now = new Date();
-    const hour = now.getHours();
+  private static readonly LOOP_CACHE_TTL_MS = 30_000; // 30s cache
 
-    // Sadece aktif saatlerde
+  private static readonly PRECONDITIONS: Record<string, () => boolean> = {
+    hasPendingWAMessages: () => {
+      const { hasPendingWAMessages } = require("../agent/tools/whatsapp.ts");
+      return hasPendingWAMessages();
+    },
+  };
+
+  private async getLoopConfig(agentId: string): Promise<LoopConfig> {
+    const cached = this.agentLoopCache.get(agentId);
+    if (cached && Date.now() - cached.loadedAt < BrainLoop.LOOP_CACHE_TTL_MS) {
+      return cached.config;
+    }
+
+    const loopConfig = await readLoopConfig(agentId);
+    this.agentLoopCache.set(agentId, { config: loopConfig, loadedAt: Date.now() });
+    return loopConfig;
+  }
+
+  private async checkAgentLoops(): Promise<void> {
+    if (!config.COBRAIN_HUB_ID || !this.bot) return;
+
+    const now = Date.now();
+    const hour = new Date().getHours();
+
+    // Sadece aktif saatlerde (07:00-23:00)
     if (hour < 7 || hour >= 23) return;
 
-    // Saatte bir kez
-    const hourKey = `${now.toISOString().slice(0, 10)}-${String(hour).padStart(2, "0")}`;
-    if (this.lastAgentBehaviorCheckHour === hourKey) return;
-    this.lastAgentBehaviorCheckHour = hourKey;
-
-    // Dinamik agent listesi
     const { listActiveAgents } = await import("../agents/registry.ts");
     const agents = listActiveAgents();
     if (agents.length === 0) return;
 
-    // Hub ID gerekli
-    if (!config.COBRAIN_HUB_ID) return;
-
-    const dayNames = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
-    const dayName = dayNames[now.getDay()];
-    const timeStr = `${String(hour).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    const dateStr = now.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
-
     for (const agent of agents) {
-      // WA agent ayrı çalışır
-      if (agent.type === "whatsapp") continue;
-
       try {
-        await this.bot!.api.sendMessage(config.COBRAIN_HUB_ID,
-          `[HEARTBEAT]\nSaat: ${timeStr} (${dayName}, ${dateStr})\n\nbehaviors.md'ini oku. Şu an yapman gereken proaktif bir şey var mı?\n\nEvet → yap ve gerekirse müdüre bildir.\nHayır → sessiz kal.`,
-          { message_thread_id: agent.topicId }
+        const loopConfig = await this.getLoopConfig(agent.id);
+
+        // Expired override temizle
+        if (loopConfig.activeUntil && loopConfig.activeUntil < now) {
+          loopConfig.activeIntervalMs = null;
+          loopConfig.activeUntil = null;
+          loopConfig.reason = null;
+          // Cache güncelle (dosya yazma pahalı, sadece cache'i güncelle)
+          this.agentLoopCache.set(agent.id, { config: loopConfig, loadedAt: Date.now() });
+        }
+
+        // Effective interval hesapla
+        const effectiveInterval = (loopConfig.activeUntil && loopConfig.activeUntil > now && loopConfig.activeIntervalMs)
+          ? loopConfig.activeIntervalMs
+          : loopConfig.intervalMs;
+
+        // Son tetiklemeden bu yana yeterli süre geçti mi?
+        const lastTriggered = this.agentLastTriggered.get(agent.id) ?? 0;
+        if (now - lastTriggered < effectiveInterval) continue;
+
+        // Precondition varsa kontrol et
+        if (loopConfig.precondition) {
+          const check = BrainLoop.PRECONDITIONS[loopConfig.precondition];
+          if (check && !check()) continue;
+        }
+
+        // Heartbeat gönder
+        const nowDate = new Date();
+        const dayNames = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+        const dayName = dayNames[nowDate.getDay()];
+        const timeStr = `${String(nowDate.getHours()).padStart(2, "0")}:${String(nowDate.getMinutes()).padStart(2, "0")}`;
+        const dateStr = nowDate.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
+
+        await this.bot.api.sendMessage(config.COBRAIN_HUB_ID,
+          `[HEARTBEAT]\nSaat: ${timeStr} (${dayName}, ${dateStr})\n\nbehaviors.md'ini oku. Şu an yapman gereken proaktif bir şey var mı?\nEvet → yap. Hayır → sessiz kal.`,
+          { message_thread_id: agent.topicId },
         );
-        console.log(`[BrainLoop] Agent heartbeat sent: ${agent.id} (topic: ${agent.topicId})`);
+
+        this.agentLastTriggered.set(agent.id, now);
+        console.log(`[BrainLoop] Agent loop: ${agent.id} (interval: ${effectiveInterval}ms${loopConfig.activeUntil ? ", active mode" : ""})`);
       } catch (err) {
-        console.warn(`[BrainLoop] Agent heartbeat failed for ${agent.id}:`, err);
+        console.warn(`[BrainLoop] Agent loop failed for ${agent.id}:`, err);
       }
     }
   }
@@ -447,7 +492,6 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
       this.lastCodeReviewDate = state.lastCodeReviewDate;
       this.codeReviewIndex = state.codeReviewIndex;
       this.lastProactiveCheckHour = state.lastProactiveCheckHour ?? null;
-      this.lastAgentBehaviorCheckHour = state.lastAgentBehaviorCheckHour ?? null;
       console.log(`[BrainLoop] State restored: codeReviewIdx=${this.codeReviewIndex}`);
     } catch (err) {
       console.warn("[BrainLoop] State restore failed:", err);
@@ -460,7 +504,6 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
         codeReviewIndex: this.codeReviewIndex,
         lastCodeReviewDate: this.lastCodeReviewDate,
         lastProactiveCheckHour: this.lastProactiveCheckHour,
-        lastAgentBehaviorCheckHour: this.lastAgentBehaviorCheckHour,
       });
     } catch (err) {
       console.warn("[BrainLoop] State persist failed:", err);

@@ -10,6 +10,8 @@ import { createMoodServer } from "./tools/mood.ts";
 import { createCalendarServer } from "./tools/calendar.ts";
 import { createGmailServer } from "./tools/gmail.ts";
 import { createGDriveServer } from "./tools/gdrive.ts";
+import { createWhatsAppServer } from "./tools/whatsapp.ts";
+import { createAgentLoopServer } from "./tools/agent-loop.ts";
 
 // Per-user server caches
 const userMemoryServers = new Map<number, ReturnType<typeof createMemoryServer>>();
@@ -73,6 +75,22 @@ export function getGDriveServer() {
     gdriveServer = createGDriveServer();
   }
   return gdriveServer;
+}
+
+// Shared WhatsApp server
+let waServer: ReturnType<typeof createWhatsAppServer> | null = null;
+
+export function getWhatsAppServer() {
+  if (!waServer) waServer = createWhatsAppServer();
+  return waServer;
+}
+
+// Shared agent-loop server
+let agentLoopServer: ReturnType<typeof createAgentLoopServer> | null = null;
+
+export function getAgentLoopServer() {
+  if (!agentLoopServer) agentLoopServer = createAgentLoopServer();
+  return agentLoopServer;
 }
 
 // Re-export getTimeServer for convenience
