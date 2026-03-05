@@ -242,7 +242,7 @@ function buildDynamicContextXml(ctx: DynamicContext): string {
   }
 
   if (ctx.hubAgents && ctx.hubAgents.agents.length > 0) {
-    xml += `\n  <hub-agents hint="agent_delegate ve agent_get_history tool'larıyla etkileşim kurabilirsin">`;
+    xml += `\n  <hub-agents hint="Agent'larla etkileşim için: agent_delegate (mesaj gönder), agent_get_history (geçmişi oku). Kaynak kodu arama — bu tool'ları kullan.">`;
     for (const agent of ctx.hubAgents.agents) {
       const lastActive = agent.lastActiveAgo ? ` lastActive="${escapeXml(agent.lastActiveAgo)}"` : "";
       xml += `\n    <agent id="${escapeXml(agent.id)}" name="${escapeXml(agent.name)}" type="${escapeXml(agent.type)}"${lastActive}/>`;
