@@ -48,7 +48,7 @@ const envSchema = z.object({
 
   // v0.5: Gemini API (for voice transcription)
   GEMINI_API_KEY: z.string().default(""),
-  TRANSCRIPTION_MODEL: z.string().default("gemini-3-flash-preview"),
+  TRANSCRIPTION_MODEL: z.string().default("gemini-3.1-flash-lite-preview"),
 
   // v0.6: Agent model
   AGENT_MODEL: z.string().default("claude-sonnet-4-6"),
@@ -73,10 +73,6 @@ const envSchema = z.object({
   BRAIN_LOOP_SLOW_TICK_MS: z.coerce.number().default(300_000),
   BRAIN_LOOP_KNOWLEDGE_PATH: z.string().default("knowledge"),
 
-  // v0.8: WhatsApp notification settings
-  WHATSAPP_STALE_MAX_AGE_SEC: z.coerce.number().default(3600),
-  WHATSAPP_ALLOWED_GROUP_JIDS: z.string().default(""),
-
   // v1.0: REST API
   COBRAIN_API_KEY: z.string().default(""),
 
@@ -90,7 +86,11 @@ const envSchema = z.object({
   // WA Agent — standalone process
   WA_AGENT_ENABLED: z.string().default("false").transform(v => v === "true" || v === "1"),
   WA_AGENT_PORT: z.coerce.number().default(3001),
+  WA_LOG_CHANNEL_ID: z.coerce.number().optional(),
+  WA_AGENT_CHAT_ID: z.coerce.number().optional(),
 
+  // v1.5: Multi-Agent Hub (Telegram Forum Mode)
+  COBRAIN_HUB_ID: z.coerce.number().optional(),
 });
 
 // Type for safe config loading result

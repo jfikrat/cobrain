@@ -2,10 +2,9 @@
  * BrainLoop — Unified autonomous loop (Cortex direct edition)
  *
  * Architecture:
- * - fastTick (30s): WhatsApp group poll → inbox, due reminders → inbox
+ * - fastTick (30s): due reminders → inbox
  * - slowTick (5min): periodic check → inbox, code review cycle
  *
- * WA DMs are handled by the standalone WA Agent process (src/agents/wa/index.ts).
  * All AI reasoning is handled by Cortex (Sonnet) directly via inbox.
  */
 
@@ -18,7 +17,6 @@ import { FileMemory } from "../memory/file-memory.ts";
 import { getSessionState, updateSessionState } from "./session-state.ts";
 import { expectations } from "./expectations.ts";
 import { heartbeat } from "./heartbeat.ts";
-import { whatsappDB } from "./whatsapp-db.ts";
 import { getTaskQueue } from "./task-queue.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
 import { chat, isUserBusy } from "../agent/chat.ts";
@@ -120,12 +118,6 @@ class BrainLoop {
     heartbeat("brain_loop", { event: "fast_tick" });
 
     try {
-      await this.pollWhatsApp();
-    } catch (err) {
-      console.error("[BrainLoop] pollWhatsApp error:", err);
-    }
-
-    try {
       await this.checkDueReminders();
     } catch (err) {
       console.error("[BrainLoop] checkDueReminders error:", err);
@@ -172,92 +164,6 @@ class BrainLoop {
 
       this.persistState();
     }
-  }
-
-  // ── WhatsApp Group Polling → Inbox ───────────────────────────────────
-  // WA DMs are handled by the standalone WA Agent process.
-  // This method only processes group messages from the notifications table.
-
-  private async pollWhatsApp(): Promise<void> {
-    if (!this.bot || !whatsappDB.isAvailable()) return;
-
-    const allNotifications = whatsappDB.getPendingNotifications(10);
-    if (allNotifications.length === 0) {
-      heartbeat("whatsapp_notifications", { sent: 0, dms: 0, groups: 0, stale: 0 });
-      return;
-    }
-
-    const nowSec = Math.floor(Date.now() / 1000);
-    const maxAgeSec = config.WHATSAPP_STALE_MAX_AGE_SEC;
-    const allowedGroupJids = config.WHATSAPP_ALLOWED_GROUP_JIDS
-      ? config.WHATSAPP_ALLOWED_GROUP_JIDS.split(",").map(j => j.trim()).filter(Boolean)
-      : [];
-
-    // Mark status updates as read immediately
-    const statusIds = allNotifications.filter(n => n.chat_jid === "status@broadcast").map(n => n.id);
-    if (statusIds.length > 0) whatsappDB.markNotificationsRead(statusIds);
-
-    // DMs → mark as read (handled by WA Agent)
-    const dmIds = allNotifications
-      .filter(n => !n.is_group && n.chat_jid !== "status@broadcast")
-      .map(n => n.id);
-    if (dmIds.length > 0) whatsappDB.markNotificationsRead(dmIds);
-
-    // Group messages
-    const allGroupMsgs = allNotifications.filter(n => n.is_group);
-    const validGroups: typeof allGroupMsgs = [];
-    const staleCount: number[] = [];
-
-    for (const n of allGroupMsgs) {
-      const msgTs = n.message_timestamp || 0;
-      if (msgTs === 0 || (nowSec - msgTs) < maxAgeSec) {
-        validGroups.push(n);
-      } else {
-        staleCount.push(n.id);
-      }
-    }
-
-    if (staleCount.length > 0) {
-      whatsappDB.markNotificationsRead(staleCount);
-      console.log(`[BrainLoop] Skipped ${staleCount.length} stale group notifications`);
-    }
-
-    if (validGroups.length > 0) {
-      const byGroup = new Map<string, typeof validGroups>();
-      for (const notif of validGroups) {
-        if (!byGroup.has(notif.chat_jid)) byGroup.set(notif.chat_jid, []);
-        byGroup.get(notif.chat_jid)!.push(notif);
-      }
-
-      for (const [groupJid, msgs] of byGroup) {
-        const groupName = msgs[0]!.sender_name?.split(" @ ")[1] || groupJid;
-        try {
-          const replyAllowed = allowedGroupJids.length > 0 && allowedGroupJids.includes(groupJid);
-          const msgTexts = msgs.map(m => `${m.sender_name || "?"}: ${m.content || "[medya]"}`).join("\n");
-
-          await inbox.push({
-            from: "brain-loop",
-            subject: `[whatsapp_group] ${groupName}`,
-            body: `Bağlam: [whatsapp_group] ${groupName}\nCevap izni: ${replyAllowed ? "evet" : "hayır"}\n\n${msgTexts}`,
-            priority: "normal",
-            ttlMs: 2 * 60 * 60 * 1000,
-          });
-          console.log(`[BrainLoop] WA Grup → Inbox: ${groupName}`);
-
-          whatsappDB.markNotificationsRead(msgs.map(m => m.id));
-        } catch (groupError) {
-          console.error(`[BrainLoop] Group ${groupJid} error:`, groupError);
-          if (this.bot) await sendRawLog(this.bot, `❌ <b>WA Grup hata</b> — ${escapeHtml(groupName)}\n<code>${String(groupError).slice(0, 200)}</code>`);
-        }
-      }
-    }
-
-    heartbeat("whatsapp_notifications", {
-      sent: validGroups.length,
-      dms: dmIds.length,
-      groups: validGroups.length,
-      stale: staleCount.length,
-    });
   }
 
   // ── Due Reminders → Inbox ────────────────────────────────────────────

@@ -30,6 +30,19 @@ export interface DynamicContext {
     isGroup: boolean;
     minutesAgo: number;
   }>;
+  hubAgents?: {
+    agents: Array<{
+      id: string;
+      name: string;
+      type: string;
+      lastActiveAgo?: string;
+    }>;
+    recentActivity?: Array<{
+      agentId: string;
+      summary: string;
+      minutesAgo: number;
+    }>;
+  };
   sessionState?: {
     lastTopic: string | null;
     topicContext: string;
@@ -37,6 +50,7 @@ export interface DynamicContext {
     conversationPhase: string;
     lastUserMessage: string;
   };
+  channel?: string; // "telegram" | "api" | "wa" etc.
 }
 
 /**
@@ -177,6 +191,10 @@ function buildDynamicContextXml(ctx: DynamicContext): string {
   let xml = `<dynamic-context>
   <time now="${escapeXml(ctx.time.now)}" dayPart="${escapeXml(ctx.time.dayPart)}" isWeekend="${ctx.time.isWeekend}"/>`;
 
+  if (ctx.channel) {
+    xml += `\n  <channel>${escapeXml(ctx.channel)}</channel>`;
+  }
+
   if (ctx.mood) {
     xml += `\n  <mood current="${escapeXml(ctx.mood.current)}" energy="${ctx.mood.energy}" trend="${escapeXml(ctx.mood.trend)}"/>`;
   }
@@ -221,6 +239,22 @@ function buildDynamicContextXml(ctx: DynamicContext): string {
       xml += `\n    <message ${attrs.join(' ')}>${escapeXml(wa.preview)}</message>`;
     }
     xml += `\n  </recent-whatsapp>`;
+  }
+
+  if (ctx.hubAgents && ctx.hubAgents.agents.length > 0) {
+    xml += `\n  <hub-agents hint="Agent'larla etkileşim için: agent_delegate (mesaj gönder), agent_get_history (geçmişi oku). Kaynak kodu arama — bu tool'ları kullan.">`;
+    for (const agent of ctx.hubAgents.agents) {
+      const lastActive = agent.lastActiveAgo ? ` lastActive="${escapeXml(agent.lastActiveAgo)}"` : "";
+      xml += `\n    <agent id="${escapeXml(agent.id)}" name="${escapeXml(agent.name)}" type="${escapeXml(agent.type)}"${lastActive}/>`;
+    }
+    if (ctx.hubAgents.recentActivity && ctx.hubAgents.recentActivity.length > 0) {
+      xml += `\n    <recent-activity>`;
+      for (const act of ctx.hubAgents.recentActivity) {
+        xml += `\n      <interaction agent="${escapeXml(act.agentId)}" minutes-ago="${act.minutesAgo}">${escapeXml(act.summary)}</interaction>`;
+      }
+      xml += `\n    </recent-activity>`;
+    }
+    xml += `\n  </hub-agents>`;
   }
 
   xml += `\n</dynamic-context>`;

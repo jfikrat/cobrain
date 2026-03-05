@@ -1,16 +1,7 @@
 import { InlineKeyboard } from "grammy";
 import { config } from "../config.ts";
-import type { PendingChat } from "../services/whatsapp-db.ts";
-import type { PendingMessage } from "../services/whatsapp.ts";
-import type { MessageAnalysis } from "../services/analyzer.ts";
 
 // ============ TYPES ============
-
-export interface ReplyState {
-  chatJid: string;
-  chatName: string;
-  messageId: number; // Telegram mesaj ID (editleyebilmek için)
-}
 
 export interface LiveLocationEntry {
   latitude: number;
@@ -19,8 +10,6 @@ export interface LiveLocationEntry {
 }
 
 export interface TelegramContext {
-  cachedAnalysis: MessageAnalysis[];
-  replyStates: Map<number, ReplyState>;
   liveLocationCache: Map<number, LiveLocationEntry>;
 }
 
@@ -53,18 +42,4 @@ export function buildSuggestionKeyboard(suggestions: string[]): InlineKeyboard |
 
 export function isAuthorized(userId: number): boolean {
   return userId === config.MY_TELEGRAM_ID;
-}
-
-/** PendingChat -> PendingMessage dönüşümü */
-export function toPendingMessage(chat: PendingChat): PendingMessage {
-  return {
-    id: chat.chatJid,
-    chatId: chat.chatJid,
-    chatName: chat.chatName,
-    senderName: chat.senderName,
-    message: chat.lastMessage,
-    timestamp: chat.lastMessageTime,
-    isGroup: chat.isGroup,
-    waitingMinutes: chat.waitingMinutes,
-  };
 }

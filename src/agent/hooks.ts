@@ -191,7 +191,7 @@ export function createPreToolUseHooks(params: {
   toolsUsed: string[];
   traceId?: string;
   permissionMode: string;
-  notifier: ToolStreamNotifier;
+  notifier: ToolStreamNotifier | null;
 }) {
   const { userId, toolsUsed, traceId, permissionMode, notifier } = params;
 
@@ -220,14 +220,16 @@ export function createPreToolUseHooks(params: {
             }
           }
 
-          // Stream status to single Telegram message
-          try {
-            const statusMessage = getToolStatusMessage(toolName, toolInput);
-            if (statusMessage) {
-              await notifier.append(statusMessage);
+          // Stream status to single Telegram message (skip if silent/null)
+          if (notifier) {
+            try {
+              const statusMessage = getToolStatusMessage(toolName, toolInput);
+              if (statusMessage) {
+                await notifier.append(statusMessage);
+              }
+            } catch (error) {
+              console.error("[Cortex] Failed to append status:", error);
             }
-          } catch (error) {
-            console.error("[Cortex] Failed to append status:", error);
           }
 
           // User's permission mode or fallback to global config

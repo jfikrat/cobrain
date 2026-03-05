@@ -13,7 +13,7 @@ import {
   type WebSocketData,
 } from "./websocket.ts";
 import { handleMediaUpload, handleMediaTranscribe, handleMediaServe } from "./media.ts";
-import { chat } from "../agent/chat.ts";
+import { chat, type ChatOptions } from "../agent/chat.ts";
 import { bot } from "../channels/telegram.ts";
 import { userManager } from "../services/user-manager.ts";
 import indexHtml from "./public/index.html";
@@ -101,7 +101,8 @@ export function startWebServer(): void {
             model,
             sessionKey,  // Agent'lar için izole session — ana session kirlenmez
             silent,      // true ise Telegram mirror kapalı (agent-to-agent çağrılar için)
-          } = body as { message: string; model?: string; sessionKey?: string; silent?: boolean };
+            systemPromptOverride,  // WA Agent vb. için custom system prompt
+          } = body as { message: string; model?: string; sessionKey?: string; silent?: boolean; systemPromptOverride?: string };
           if (!message) {
             return Response.json({ error: "message required" }, { status: 400 });
           }
@@ -110,14 +111,22 @@ export function startWebServer(): void {
 
           // Mirror to Telegram (silent=true ise atla — agent iç çağrıları için)
           if (!silent) {
-            const label = sessionKey ? `📡 *[${sessionKey}]:*` : `📡 *API:*`;
-            bot.api.sendMessage(userId, `${label} ${message}`, { parse_mode: "Markdown" }).catch(() => {});
+            const label = sessionKey ? `📡 [${sessionKey}]:` : `📡 API:`;
+            const mirrorText = `${label} ${message}`.slice(0, 4096);
+            bot.api.sendMessage(userId, mirrorText, { parse_mode: "Markdown" })
+              .catch(() => bot.api.sendMessage(userId, mirrorText).catch(() => {}));
           }
 
-          const response = await chat(userId, message, undefined, model, sessionKey ? { sessionKey } : undefined);
+          const chatOptions: ChatOptions = {
+            channel: "api",
+            ...(sessionKey && { sessionKey }),
+            ...(systemPromptOverride && { systemPromptOverride }),
+            ...(silent && { silent }),
+          };
+          const response = await chat(userId, message, undefined, model, chatOptions);
 
           if (!silent) {
-            const cleanMirror = response.content.replace(/<suggestions>[\s\S]*?<\/suggestions>\s*$/, '').trimEnd();
+            const cleanMirror = response.content.replace(/<suggestions>[\s\S]*?<\/suggestions>\s*$/, '').trimEnd().slice(0, 4096);
             bot.api.sendMessage(userId, cleanMirror).catch(() => {});
           }
 
@@ -148,6 +157,12 @@ export function startWebServer(): void {
 
           if (!agentId || !subject || !reportBody) {
             return Response.json({ error: "agentId, subject, message required" }, { status: 400 });
+          }
+
+          // WA Agent kendi işini askCobrain() ile hallediyor — raporları inbox'a düşürme, sadece logla
+          if (agentId === "wa") {
+            console.log(`[API] WA Agent report (log-only): "${subject}"`);
+            return Response.json({ ok: true, logged: true });
           }
 
           const { inbox } = await import("../services/inbox.ts");
@@ -199,31 +214,6 @@ export function startWebServer(): void {
       const mediaMatch = url.pathname.match(/^\/api\/media\/([a-f0-9-]+)$/);
       if (mediaMatch?.[1] && req.method === "GET") {
         return handleMediaServe(req, mediaMatch[1]);
-      }
-
-      // POST /api/whatsapp/send — Agent'ların WA mesajı göndermesi için proxy
-      if (url.pathname === "/api/whatsapp/send" && req.method === "POST") {
-        const authHeader = req.headers.get("authorization");
-        const apiKey = config.COBRAIN_API_KEY;
-        if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
-          return Response.json({ error: "Unauthorized" }, { status: 401 });
-        }
-        try {
-          const body = await req.json() as { to: string; message: string };
-          if (!body.to || !body.message) {
-            return Response.json({ error: "to and message required" }, { status: 400 });
-          }
-          const userId = config.MY_TELEGRAM_ID;
-          const { chat: agentChat } = await import("../agent/chat.ts");
-          await agentChat(userId, `[AGENT_PROXY] WhatsApp gönder: to=${body.to} message="${body.message}"`, undefined, undefined, {
-            sessionKey: "wa_proxy",
-            systemPromptOverride: "Sen bir WhatsApp proxy'sisin. Verilen numaraya mesajı gönder. Sadece send_whatsapp_message tool'unu kullan. Başka bir şey yapma.",
-          });
-          console.log(`[API] WA proxy: ${body.to}`);
-          return Response.json({ ok: true });
-        } catch (err) {
-          return Response.json({ error: String(err).slice(0, 200) }, { status: 500 });
-        }
       }
 
       // GET /api/memory/recall — Agent hafıza okuma

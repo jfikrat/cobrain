@@ -81,7 +81,7 @@ export async function think(userId: number, message: string | MultimodalMessage,
   try {
     let response: ThinkResponse;
 
-    response = await thinkWithAgentSDK(userId, message, traceId);
+    response = await thinkWithAgentSDK(userId, message, traceId, channel);
 
     // Event: completed
     if (eventStore) {
@@ -149,12 +149,13 @@ async function thinkWithAgentSDK(
   userId: number,
   message: string | MultimodalMessage,
   traceId?: string,
+  channel?: string,
 ): Promise<ThinkResponse> {
   const hasImages = typeof message !== "string" && message.images && message.images.length > 0;
   const textMessage = typeof message === "string" ? message : message.text;
   console.log(`[Brain] Using Agent SDK for user ${userId}${hasImages ? " (with images)" : ""}`);
 
-  const response = await agentChat(userId, message, traceId);
+  const response = await agentChat(userId, message, traceId, undefined, channel ? { channel } : undefined);
 
   // Save messages to database (like CLI mode does)
   try {
