@@ -5,6 +5,7 @@
  */
 
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { rename } from "node:fs/promises";
 import { userManager } from "./user-manager.ts";
 
@@ -99,7 +100,7 @@ export function getSessionState(userId: number): SessionState {
     const filePath = getStatePath(userId);
     const file = Bun.file(filePath);
     // Bun.file doesn't throw on missing — check size synchronously
-    const text = require("node:fs").readFileSync(filePath, "utf-8");
+    const text = readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(text) as Partial<SessionState>;
     const state: SessionState = { ...DEFAULT_SESSION_STATE, ...parsed };
     stateCache.set(userId, state);

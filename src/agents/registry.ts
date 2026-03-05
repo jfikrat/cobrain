@@ -5,6 +5,7 @@
 
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { invalidateHubContextCache } from "./hub-context.ts";
 
 export type AgentType = "genel" | "whatsapp" | "kod" | "arastirma" | "custom";
 
@@ -140,10 +141,7 @@ export function updateAgentActivity(id: string): void {
     saveRegistry(_userFolder, _registry).catch(() => {});
   }
   // Invalidate hub context cache so next chat turn sees fresh data
-  try {
-    const { invalidateHubContextCache } = require("../agents/hub-context.ts");
-    invalidateHubContextCache();
-  } catch {}
+  invalidateHubContextCache();
 }
 
 export function listActiveAgents(): AgentEntry[] {

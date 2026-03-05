@@ -6,6 +6,7 @@
  */
 
 import { join } from "node:path";
+import { rename } from "node:fs/promises";
 import { z } from "zod";
 import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { toolSuccess, toolError } from "../../utils/tool-response.ts";
@@ -57,7 +58,9 @@ export async function readLoopConfig(agentId: string): Promise<LoopConfig> {
 
 async function writeLoopConfig(agentId: string, loopConfig: LoopConfig): Promise<void> {
   const path = getLoopPath(agentId);
-  await Bun.write(path, JSON.stringify(loopConfig, null, 2));
+  const tmp = `${path}.tmp.${Date.now()}`;
+  await Bun.write(tmp, JSON.stringify(loopConfig, null, 2));
+  await rename(tmp, path);
 }
 
 // ── agent_set_loop Tool ──────────────────────────────────────────────────────

@@ -10,6 +10,7 @@
 
 import { join } from "node:path";
 import { mkdirSync, existsSync } from "node:fs";
+import { rename } from "node:fs/promises";
 
 export class FileMemory {
   private memoryDir: string;
@@ -24,6 +25,13 @@ export class FileMemory {
     this.archiveDir = join(this.memoryDir, "archive");
     mkdirSync(this.memoryDir, { recursive: true });
     mkdirSync(this.archiveDir, { recursive: true });
+  }
+
+  /** Atomic write: tmpfile + rename */
+  private async atomicWrite(path: string, content: string): Promise<void> {
+    const tmp = `${path}.tmp.${Date.now()}`;
+    await Bun.write(tmp, content);
+    await rename(tmp, path);
   }
 
   // ── Facts (kalıcı gerçekler/tercihler) ──────────────────────────────────
@@ -53,7 +61,7 @@ export class FileMemory {
       }
     }
 
-    await Bun.write(this.factsPath, existing);
+    await this.atomicWrite(this.factsPath, existing);
   }
 
   async readFacts(): Promise<string> {
@@ -83,7 +91,7 @@ export class FileMemory {
       updated = existing.slice(0, insertAt) + `- ${description}\n` + existing.slice(insertAt);
     }
 
-    await Bun.write(this.eventsPath, updated);
+    await this.atomicWrite(this.eventsPath, updated);
   }
 
   /**
@@ -135,13 +143,13 @@ export class FileMemory {
     if (archive.length === 0) return 0;
 
     // Write keep back
-    await Bun.write(this.eventsPath, keep.join("\n\n").trim() + "\n");
+    await this.atomicWrite(this.eventsPath, keep.join("\n\n").trim() + "\n");
 
     // Append to monthly archive file
     const archiveMonth = archive[0]!.match(/^## (\d{4}-\d{2})/)?.[1] ?? today().slice(0, 7);
     const archivePath = join(this.archiveDir, `${archiveMonth}-events.md`);
     const existing = await this.readFile(archivePath);
-    await Bun.write(archivePath, (existing ? existing + "\n\n" : "") + archive.join("\n\n").trim() + "\n");
+    await this.atomicWrite(archivePath, (existing ? existing + "\n\n" : "") + archive.join("\n\n").trim() + "\n");
 
     return archive.length;
   }

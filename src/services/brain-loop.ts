@@ -22,6 +22,7 @@ import { chat, isUserBusy } from "../agent/chat.ts";
 import { mneme } from "../mneme/mneme.ts";
 import { inbox } from "./inbox.ts";
 import { readLoopConfig, type LoopConfig, DEFAULT_LOOP_CONFIG } from "../agent/tools/agent-loop.ts";
+import { hasPendingWAMessages } from "../agent/tools/whatsapp.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -270,10 +271,7 @@ class BrainLoop {
   private static readonly LOOP_CACHE_TTL_MS = 30_000; // 30s cache
 
   private static readonly PRECONDITIONS: Record<string, () => boolean> = {
-    hasPendingWAMessages: () => {
-      const { hasPendingWAMessages } = require("../agent/tools/whatsapp.ts");
-      return hasPendingWAMessages();
-    },
+    hasPendingWAMessages: () => hasPendingWAMessages(),
   };
 
   private async getLoopConfig(agentId: string): Promise<LoopConfig> {
