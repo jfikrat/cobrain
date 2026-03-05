@@ -19,7 +19,7 @@ import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
 
 // Split modules
-import { getMemoryServer, getTelegramMcpServer, getMoodServer, getTimeServer, getCalendarServer, getGmailServer } from "./mcp-servers.ts";
+import { getMemoryServer, getTelegramMcpServer, getMoodServer, getTimeServer, getCalendarServer, getGmailServer, getWhatsAppServer, getAgentLoopServer } from "./mcp-servers.ts";
 import { extractTextContent, buildMessageContent, type MultimodalMessage } from "./message-builder.ts";
 import { createPreToolUseHooks, ToolStreamNotifier } from "./hooks.ts";
 
@@ -54,6 +54,11 @@ export interface ChatOptions {
   channel?: string;
   /** true ise ToolStreamNotifier (Telegram bildirim) devre dışı */
   silent?: boolean;
+  /**
+   * Hub agent topic mesajları için: tool bildirimleri bu chat/thread'e yazılır.
+   * Verilmezse userId'ye (DM) yazılır. silent=true ise görmezden gelinir.
+   */
+  notifierTarget?: { chatId: number; threadId: number };
 }
 
 // Concurrency guard: reflects whether _executeChat is actively running
@@ -292,7 +297,11 @@ export async function _executeChat(
 
   // Track tools used + streaming notifier (silent mode = no Telegram notifications)
   const toolsUsed: string[] = [];
-  const notifier = options?.silent ? null : new ToolStreamNotifier(userId);
+  const notifier = options?.silent
+    ? null
+    : options?.notifierTarget
+      ? new ToolStreamNotifier(userId, options.notifierTarget.chatId, options.notifierTarget.threadId)
+      : new ToolStreamNotifier(userId);
   let lastAssistantContent = "";
   let sessionId = "";
   let totalCost = 0;
@@ -392,7 +401,9 @@ export async function _executeChat(
           mood: getMoodServer(userId),
           calendar: getCalendarServer(),
           gmail: getGmailServer(userId),
-          // Gateway - helm, squad, whatsapp via single MCP gateway
+          whatsapp: getWhatsAppServer(),
+          agentLoop: getAgentLoopServer(),
+          // Gateway - helm, squad via single MCP gateway
           gateway: {
             type: "stdio" as const,
             command: "bun",

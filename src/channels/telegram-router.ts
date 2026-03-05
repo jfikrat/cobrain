@@ -153,7 +153,8 @@ export async function handleTopicMessage(
     systemPromptOverride: systemPrompt,
     sessionKey,
     channel: `telegram:hub:${route.agentId}`,
-    silent: true,
+    silent: false,
+    notifierTarget: { chatId, threadId: messageThreadId },
   });
 
   updateAgentActivity(route.agentId);

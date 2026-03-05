@@ -17,6 +17,8 @@ export class ToolStreamNotifier {
   private messageId: number | null = null;
   private lines: string[] = [];
   private userId: number;
+  private chatId: number;        // DM → same as userId; Hub topic → group chat ID
+  private threadId?: number;     // Forum topic thread ID (Hub agent mesajları için)
   private lastEditTime = 0;
   private pendingEdit: Timer | null = null;
   private startTime = Date.now();
@@ -26,8 +28,10 @@ export class ToolStreamNotifier {
   private static readonly MAX_MSG_LENGTH = 4096;
   private static readonly HEADER = "🧠 Cortex çalışıyor...";
 
-  constructor(userId: number) {
+  constructor(userId: number, chatId?: number, threadId?: number) {
     this.userId = userId;
+    this.chatId = chatId ?? userId;
+    this.threadId = threadId;
   }
 
   async append(line: string): Promise<void> {
@@ -99,10 +103,14 @@ export class ToolStreamNotifier {
 
     try {
       if (!this.messageId) {
-        const msg = await bot.api.sendMessage(this.userId, text);
+        const msg = await bot.api.sendMessage(
+          this.chatId,
+          text,
+          this.threadId ? { message_thread_id: this.threadId } : {},
+        );
         this.messageId = msg.message_id;
       } else {
-        await bot.api.editMessageText(this.userId, this.messageId, text);
+        await bot.api.editMessageText(this.chatId, this.messageId, text);
       }
       this.lastEditTime = Date.now();
     } catch (error) {
