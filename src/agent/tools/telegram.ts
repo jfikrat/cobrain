@@ -4,6 +4,7 @@
  */
 
 import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+import { toolSuccess, toolError, toolJson } from "../../utils/tool-response.ts";
 import { z } from "zod";
 import type { Bot } from "grammy";
 import { InputFile } from "grammy";
@@ -548,7 +549,7 @@ const agentGetHistoryTool = tool(
     const { getAgentHistorySummary } = await import("../../agents/interaction-log.ts");
     const userFolder = userManager.getUserFolder(config.MY_TELEGRAM_ID);
     const summary = await getAgentHistorySummary(userFolder, agentId, limit);
-    return summary || `Agent "${agentId}" için henüz etkileşim kaydı yok.`;
+    return toolSuccess(summary || `Agent "${agentId}" için henüz etkileşim kaydı yok.`);
   },
 );
 
@@ -617,7 +618,7 @@ const agentDelegateTool = tool(
 
     updateAgentActivity(agentId);
 
-    return `[${agent.name}]\n${response.content}`;
+    return toolSuccess(`[${agent.name}]\n${response.content}`);
   },
 );
 
