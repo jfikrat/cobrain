@@ -69,6 +69,39 @@ export function isUserBusy(userId: number): boolean {
 // Session TTL: 2 hours - after this, start a fresh session
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
+async function getOrResumeCortexSession(
+  userId: number,
+  sessionKey: string,
+): Promise<string | undefined> {
+  // 1. In-memory cache
+  const cached = cortexSessions.get(sessionKey);
+  if (cached) return cached;
+
+  // 2. DB lookup
+  try {
+    const userDb = await userManager.getUserDb(userId);
+    const memory = new UserMemory(userDb);
+    const session = memory.getSessionByKey(sessionKey);
+    if (!session?.lastUsedAt) return undefined;
+
+    // 3. TTL check (same logic as main session)
+    const age = Date.now() - new Date(session.lastUsedAt).getTime();
+    const hour = new Date().getHours();
+    const effectiveTTL = hour >= 23 || hour < 8 ? SESSION_TTL_MS * 3 : SESSION_TTL_MS;
+    if (age > effectiveTTL) {
+      console.log(`[Cortex] Keyed session ${sessionKey} expired (${Math.round(age / 60000)}min), starting fresh`);
+      return undefined;
+    }
+
+    // 4. Populate cache
+    console.log(`[Cortex] Resuming keyed session ${sessionKey} from DB (${Math.round(age / 60000)}min old)`);
+    cortexSessions.set(sessionKey, session.id);
+    return session.id;
+  } catch {
+    return undefined;
+  }
+}
+
 async function getOrResumeSession(userId: number): Promise<string | undefined> {
   // 1. In-memory cache (process lifetime)
   const cached = userSessions.get(userId);
@@ -221,6 +254,15 @@ async function _executeChat(
     } catch {}
   }
 
+  // Hub agent awareness — only for main Cobrain, not sub-cortex
+  let hubAgents: DynamicContext['hubAgents'] = undefined;
+  if (config.COBRAIN_HUB_ID && !options?.systemPromptOverride) {
+    try {
+      const { buildHubAgentContext } = await import("../agents/hub-context.ts");
+      hubAgents = await buildHubAgentContext(userFolder);
+    } catch {}
+  }
+
   let systemPrompt: string;
   if (options?.systemPromptOverride) {
     // Sub-cortex (WA cortex vb.) kendi system prompt'unu geçiyor
@@ -233,13 +275,14 @@ async function _executeChat(
       recentMemories,
       sessionState,
       recentWhatsApp,
+      hubAgents,
       channel: options?.channel,
     });
   }
 
   // Get or resume session (checks in-memory cache, then DB with TTL)
   const existingSessionId = options?.sessionKey
-    ? cortexSessions.get(options.sessionKey)
+    ? await getOrResumeCortexSession(userId, options.sessionKey)
     : await getOrResumeSession(userId);
 
   // Track tools used + streaming notifier (silent mode = no Telegram notifications)
@@ -365,8 +408,14 @@ async function _executeChat(
           if (msg.subtype === "init") {
             sessionId = msg.session_id;
             if (options?.sessionKey) {
-              // Sub-cortex: in-memory only, no DB persist
               cortexSessions.set(options.sessionKey, sessionId);
+              // DB persist for cross-restart recovery
+              try {
+                const userDb = await userManager.getUserDb(userId);
+                new UserMemory(userDb).setSessionByKey(options.sessionKey, sessionId);
+              } catch (e) {
+                console.warn(`[Cortex] Keyed session persist failed:`, e);
+              }
             } else {
               userSessions.set(userId, sessionId);
               // Persist to DB for cross-restart recovery
@@ -460,6 +509,10 @@ async function _executeChat(
       console.warn(`[Cortex] Stale session detected, retrying with fresh session...`);
       if (options?.sessionKey) {
         cortexSessions.delete(options.sessionKey);
+        try {
+          const userDb = await userManager.getUserDb(userId);
+          new UserMemory(userDb).clearSessionByKey(options.sessionKey);
+        } catch {}
       } else {
         userSessions.delete(userId);
         try {
@@ -488,6 +541,10 @@ async function _executeChat(
     // Clear session on error to start fresh next time
     if (options?.sessionKey) {
       cortexSessions.delete(options.sessionKey);
+      try {
+        const userDb = await userManager.getUserDb(userId);
+        new UserMemory(userDb).clearSessionByKey(options.sessionKey);
+      } catch {}
     } else {
       userSessions.delete(userId);
     }

@@ -139,6 +139,11 @@ export function updateAgentActivity(id: string): void {
   if (_userFolder && _registry) {
     saveRegistry(_userFolder, _registry).catch(() => {});
   }
+  // Invalidate hub context cache so next chat turn sees fresh data
+  try {
+    const { invalidateHubContextCache } = require("../agents/hub-context.ts");
+    invalidateHubContextCache();
+  } catch {}
 }
 
 export function listActiveAgents(): AgentEntry[] {
