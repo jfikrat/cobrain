@@ -38,7 +38,6 @@ export interface SessionState {
   codeReviewIndex: number;
   lastCodeReviewDate: string | null;
   lastProactiveCheckHour: string | null;
-  lastAgentBehaviorCheckHour: string | null;
 
   // WhatsApp context
   recentWhatsApp: WhatsAppNotification[];
@@ -63,7 +62,6 @@ export const DEFAULT_SESSION_STATE: SessionState = {
   codeReviewIndex: 0,
   lastCodeReviewDate: null,
   lastProactiveCheckHour: null,
-  lastAgentBehaviorCheckHour: null,
   recentWhatsApp: [],
   lastSeenMsgTimestamps: {},
   updatedAt: new Date().toISOString(),

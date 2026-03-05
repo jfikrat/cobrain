@@ -89,6 +89,9 @@ const envSchema = z.object({
   WA_LOG_CHANNEL_ID: z.coerce.number().optional(),
   WA_AGENT_CHAT_ID: z.coerce.number().optional(),
 
+  // WhatsApp DB path (hub-based WA agent)
+  WHATSAPP_DB_PATH: z.string().default("/home/fjds/projects/whatsapp/db/whatsapp.db"),
+
   // v1.5: Multi-Agent Hub (Telegram Forum Mode)
   COBRAIN_HUB_ID: z.coerce.number().optional(),
 });

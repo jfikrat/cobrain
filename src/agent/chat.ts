@@ -19,7 +19,7 @@ import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
 
 // Split modules
-import { getMemoryServer, getTelegramMcpServer, getMoodServer, getTimeServer, getCalendarServer, getGmailServer } from "./mcp-servers.ts";
+import { getMemoryServer, getTelegramMcpServer, getMoodServer, getTimeServer, getCalendarServer, getGmailServer, getWhatsAppServer, getAgentLoopServer } from "./mcp-servers.ts";
 import { extractTextContent, buildMessageContent, type MultimodalMessage } from "./message-builder.ts";
 import { createPreToolUseHooks, ToolStreamNotifier } from "./hooks.ts";
 
@@ -392,7 +392,9 @@ export async function _executeChat(
           mood: getMoodServer(userId),
           calendar: getCalendarServer(),
           gmail: getGmailServer(userId),
-          // Gateway - helm, squad, whatsapp via single MCP gateway
+          whatsapp: getWhatsAppServer(),
+          agentLoop: getAgentLoopServer(),
+          // Gateway - helm, squad via single MCP gateway
           gateway: {
             type: "stdio" as const,
             command: "bun",

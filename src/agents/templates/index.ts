@@ -35,7 +35,7 @@ export async function scaffoldAgentMindFiles(
   try {
     const files = await readdir(sourceDir);
     for (const file of files) {
-      if (!file.endsWith(".md")) continue;
+      if (!file.endsWith(".md") && !file.endsWith(".json")) continue;
       await copyFile(join(sourceDir, file), join(targetDir, file));
     }
   } catch (err) {

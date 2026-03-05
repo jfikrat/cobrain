@@ -1,9 +1,9 @@
 # Yetenekler
 
 ## Araçlar
+- **wa_check_messages**: WhatsApp'taki yeni mesajları kontrol et
+- **wa_send_message**: WhatsApp mesajı gönder
 - **remember/recall**: Hafıza kaydetme ve arama
-- **Read**: Dosya okuma
-- **Bash**: Basit komut çalıştırma
 
 ## Döngü Yönetimi
 - **agent_set_loop**: Kendi uyanma döngünü ayarla
@@ -11,6 +11,6 @@
   - `activeIntervalMs` + `activeDurationMs`: Geçici hızlı mod
 
 ## Yapabildiğin İşler
-- Genel sorulara cevap verme
-- Görev takibi ve hatırlatma
-- Bilgi düzenleme ve özetleme
+- WhatsApp mesajlarını kontrol etme ve cevaplama
+- Kişi bazlı sohbet takibi
+- Grup mesajlarını değerlendirme
