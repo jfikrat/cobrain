@@ -374,6 +374,11 @@ async function _executeChat(
         // Allow Skill tool to run without permission prompts
         allowedTools: ["Skill"],
 
+        // Disable ToolSearch — it defers all MCP tools and causes infinite loops
+        // when agent tries to load them via tool_reference. Without ToolSearch,
+        // SDK loads all MCP tools upfront into the context.
+        disallowedTools: ["ToolSearch"],
+
         // MCP Servers (createSdkMcpServer returns full config)
         mcpServers: {
           memory: getMemoryServer(userId),
