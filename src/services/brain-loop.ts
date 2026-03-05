@@ -8,12 +8,10 @@
  * All AI reasoning is handled by Cortex (Sonnet) directly via inbox.
  */
 
-import { resolve } from "node:path";
 import { Bot } from "grammy";
 import { config } from "../config.ts";
 import { userManager } from "./user-manager.ts";
 import { getRemindersService } from "./reminders.ts";
-import { FileMemory } from "../memory/file-memory.ts";
 import { getSessionState, updateSessionState } from "./session-state.ts";
 import { expectations } from "./expectations.ts";
 import { heartbeat } from "./heartbeat.ts";
@@ -52,22 +50,6 @@ async function sendRawLog(bot: Bot, msg: string): Promise<void> {
 const FAST_TICK_MS = config.BRAIN_LOOP_FAST_TICK_MS;
 const SLOW_TICK_MS = config.BRAIN_LOOP_SLOW_TICK_MS;
 
-const CODE_REVIEW_FILES = [
-  "src/agent/chat.ts",
-  "src/services/brain-loop.ts",
-  "src/brain/index.ts",
-  "src/memory/file-memory.ts",
-  "src/channels/telegram.ts",
-  "src/agent/prompts.ts",
-  "src/brain/event-store.ts",
-  "src/services/scheduler.ts",
-  "src/services/task-queue.ts",
-  "src/config.ts",
-];
-
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const HAIKU_MODEL = "claude-haiku-4-5-20250121";
-const PROJECT_ROOT = resolve(import.meta.dir, "../..");
 
 // ── BrainLoop Class ──────────────────────────────────────────────────────
 
@@ -75,8 +57,6 @@ class BrainLoop {
   private bot: Bot | null = null;
   private fastIntervalId: ReturnType<typeof setInterval> | null = null;
   private slowIntervalId: ReturnType<typeof setInterval> | null = null;
-  private codeReviewIndex = 0;
-  private lastCodeReviewDate: string | null = null;
   private lastProactiveCheckHour: string | null = null;
 
   // Agent loop state
@@ -165,14 +145,7 @@ class BrainLoop {
       console.error("[BrainLoop] checkProactiveBehaviors error:", err);
     }
 
-    // Code review cycle is disabled in minimal autonomy mode.
     if (!config.MINIMAL_AUTONOMY) {
-      try {
-        await this.maybeRunCodeReview(config.MY_TELEGRAM_ID);
-      } catch (err) {
-        console.error("[BrainLoop] maybeRunCodeReview error:", err);
-      }
-
       this.persistState();
     }
   }
@@ -383,113 +356,13 @@ class BrainLoop {
       });
   }
 
-  // ── Code Review Cycle ──────────────────────────────────────────────
-
-  private async maybeRunCodeReview(userId: number): Promise<void> {
-    const now = new Date();
-    const hour = now.getHours();
-    const today = now.toISOString().slice(0, 10);
-
-    if (hour !== 14) return;
-    if (this.lastCodeReviewDate === today) return;
-
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) return;
-
-    const filePath = CODE_REVIEW_FILES[this.codeReviewIndex % CODE_REVIEW_FILES.length]!;
-    this.codeReviewIndex++;
-    this.lastCodeReviewDate = today;
-
-    const fullPath = resolve(PROJECT_ROOT, filePath);
-
-    console.log(`[BrainLoop:CodeReview] Starting daily review: ${filePath}`);
-
-    try {
-      const file = Bun.file(fullPath);
-      if (!(await file.exists())) {
-        console.warn(`[BrainLoop:CodeReview] File not found: ${fullPath}`);
-        return;
-      }
-
-      const content = await file.text();
-      const truncated = content.length > 4000
-        ? content.slice(0, 4000) + "\n\n[... truncated ...]"
-        : content;
-
-      const response = await fetch(ANTHROPIC_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: HAIKU_MODEL,
-          max_tokens: 500,
-          system: `Sen bir kod review uzmanısın. Verilen TypeScript dosyasını analiz et.
-Her gözlemi şu formatta JSON array olarak döndür:
-[{"type": "bug"|"improvement"|"performance"|"architecture"|"cleanup", "priority": "low"|"medium"|"high", "observation": "kısa açıklama", "suggestion": "öneri"}]
-Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
-          messages: [{ role: "user", content: `Dosya: ${filePath}\n\n${truncated}` }],
-        }),
-      });
-
-      if (!response.ok) {
-        console.error(`[BrainLoop:CodeReview] Haiku API error: ${response.status}`);
-        return;
-      }
-
-      const data = (await response.json()) as { content: Array<{ type: string; text?: string }> };
-      const text = data.content.find(c => c.type === "text")?.text || "";
-
-      const jsonMatch = text.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) return;
-
-      const observations = JSON.parse(jsonMatch[0]) as Array<{
-        type: string; priority: string; observation: string; suggestion: string;
-      }>;
-
-      if (observations.length === 0) {
-        console.log(`[BrainLoop:CodeReview] No issues in ${filePath}`);
-        return;
-      }
-
-      const userFolder = userManager.getUserFolder(userId);
-      const fileMemory = new FileMemory(userFolder);
-      const highPriorityBugs: string[] = [];
-
-      for (const obs of observations) {
-        const entry = `[code-obs] [${obs.type}/${obs.priority}] ${filePath}: ${obs.observation} → ${obs.suggestion}`;
-        await fileMemory.logEvent(entry);
-
-        if (obs.priority === "high" && obs.type === "bug") {
-          highPriorityBugs.push(`${filePath}: ${obs.observation}`);
-        }
-      }
-
-      console.log(`[BrainLoop:CodeReview] ${observations.length} observation(s) saved for ${filePath}`);
-
-      if (highPriorityBugs.length > 0 && this.bot) {
-        const bugMsg = highPriorityBugs.map(b => `- ${b}`).join("\n");
-        await this.bot.api.sendMessage(
-          userId,
-          `Code review'da yüksek öncelikli bug buldum:\n${bugMsg}\n\nDetay: recall("code-obs") ile bakabilirsin.`,
-        );
-      }
-    } catch (err) {
-      console.error(`[BrainLoop:CodeReview] Error reviewing ${filePath}:`, err);
-    }
-  }
-
   // ── State Persistence ──────────────────────────────────────────────
 
   private restoreState(): void {
     try {
       const state = getSessionState(config.MY_TELEGRAM_ID);
-      this.lastCodeReviewDate = state.lastCodeReviewDate;
-      this.codeReviewIndex = state.codeReviewIndex;
       this.lastProactiveCheckHour = state.lastProactiveCheckHour ?? null;
-      console.log(`[BrainLoop] State restored: codeReviewIdx=${this.codeReviewIndex}`);
+      console.log(`[BrainLoop] State restored`);
     } catch (err) {
       console.warn("[BrainLoop] State restore failed:", err);
     }
@@ -498,8 +371,6 @@ Bulgu yoksa boş array: []. Maksimum 3 gözlem.`,
   private persistState(): void {
     try {
       updateSessionState(config.MY_TELEGRAM_ID, {
-        codeReviewIndex: this.codeReviewIndex,
-        lastCodeReviewDate: this.lastCodeReviewDate,
         lastProactiveCheckHour: this.lastProactiveCheckHour,
       });
     } catch (err) {

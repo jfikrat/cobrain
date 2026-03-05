@@ -36,8 +36,6 @@ export interface SessionState {
   cooldowns: Record<string, { lastSent: number; type: string }>;
   lastInteractionTime: number;
   lastNotificationTime: number;
-  codeReviewIndex: number;
-  lastCodeReviewDate: string | null;
   lastProactiveCheckHour: string | null;
 
   // WhatsApp context
@@ -60,8 +58,6 @@ export const DEFAULT_SESSION_STATE: SessionState = {
   cooldowns: {},
   lastInteractionTime: 0,
   lastNotificationTime: 0,
-  codeReviewIndex: 0,
-  lastCodeReviewDate: null,
   lastProactiveCheckHour: null,
   recentWhatsApp: [],
   lastSeenMsgTimestamps: {},
