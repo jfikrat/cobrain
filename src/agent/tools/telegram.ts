@@ -498,7 +498,7 @@ const agentCreateTool = tool(
         topicId: agent.topicId,
         mindDir: agent.mindDir,
       },
-      message: `Agent "${name}" oluşturuldu (topic: ${topic.message_thread_id})`,
+      message: `Agent "${name}" oluşturuldu (topic: ${topic.message_thread_id}). Mind dosyaları: identity.md, rules.md, behaviors.md, capabilities.md. BrainLoop otomatik heartbeat gönderecek.`,
     };
   }
 );
