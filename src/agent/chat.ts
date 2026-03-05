@@ -17,6 +17,7 @@ import { FileMemory } from "../memory/file-memory.ts";
 import { getSessionState, updateSessionState, detectTopic, detectPhase } from "../services/session-state.ts";
 import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
+import { DEFAULT_TIMEZONE, DEFAULT_LOCALE, NIGHT_HOUR_START, NIGHT_HOUR_END, MAX_WA_CONTEXT_ITEMS } from "../constants.ts";
 
 // Split modules
 import { getMemoryServer, getTelegramMcpServer, getMoodServer, getTimeServer, getCalendarServer, getGmailServer, getWhatsAppServer, getAgentLoopServer } from "./mcp-servers.ts";
@@ -92,7 +93,7 @@ async function getOrResumeCortexSession(
     // 3. TTL check (same logic as main session)
     const age = Date.now() - new Date(session.lastUsedAt).getTime();
     const hour = new Date().getHours();
-    const effectiveTTL = hour >= 23 || hour < 8 ? SESSION_TTL_MS * 3 : SESSION_TTL_MS;
+    const effectiveTTL = hour >= NIGHT_HOUR_START || hour < NIGHT_HOUR_END ? SESSION_TTL_MS * 3 : SESSION_TTL_MS;
     if (age > effectiveTTL) {
       console.log(`[Cortex] Keyed session ${sessionKey} expired (${Math.round(age / 60000)}min), starting fresh`);
       return undefined;
@@ -122,7 +123,7 @@ async function getOrResumeSession(userId: number): Promise<string | undefined> {
     // 3. TTL kontrolü (gece 23-08 arası 3x tolerans)
     const age = Date.now() - new Date(session.lastUsedAt).getTime();
     const hour = new Date().getHours();
-    const effectiveTTL = hour >= 23 || hour < 8 ? SESSION_TTL_MS * 3 : SESSION_TTL_MS;
+    const effectiveTTL = hour >= NIGHT_HOUR_START || hour < NIGHT_HOUR_END ? SESSION_TTL_MS * 3 : SESSION_TTL_MS;
     if (age > effectiveTTL) {
       console.log(`[Cortex] Session expired (${Math.round(age / 60000)}min), starting fresh`);
       return undefined;
@@ -250,7 +251,7 @@ export async function _executeChat(
         const now = Date.now();
         recentWhatsApp = state.recentWhatsApp
           .filter(n => now - n.timestamp < 24 * 60 * 60 * 1000)
-          .slice(-5) // keep only 5 most recent
+          .slice(-MAX_WA_CONTEXT_ITEMS) // keep only 5 most recent
           .map(n => ({
             senderName: n.senderName,
             preview: truncate(n.preview, 150),
@@ -637,14 +638,14 @@ function buildTimeContext(): DynamicContext['time'] {
   const hour = now.getHours();
   const dayPart = hour < 6 ? "gece" : hour < 12 ? "sabah" : hour < 18 ? "öğle" : "akşam";
   const isWeekend = [0, 6].includes(now.getDay());
-  const formatted = now.toLocaleDateString("tr-TR", {
+  const formatted = now.toLocaleDateString(DEFAULT_LOCALE, {
     day: "2-digit",
     month: "long",
     year: "numeric",
     weekday: "long",
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Europe/Istanbul",
+    timeZone: DEFAULT_TIMEZONE,
   });
   return { now: formatted, dayPart, isWeekend };
 }

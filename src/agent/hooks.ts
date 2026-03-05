@@ -7,6 +7,7 @@ import type { PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 import { getTelegramBot } from "./tools/telegram.ts";
 import { needsPermission, askToolPermission, type PermissionMode } from "./permissions.ts";
 import { config } from "../config.ts";
+import { DEFAULT_TIMEZONE, DEFAULT_LOCALE, TELEGRAM_MAX_MSG_LENGTH, TELEGRAM_MIN_EDIT_INTERVAL_MS } from "../constants.ts";
 import { getEventStore } from "../brain/event-store.ts";
 import { userManager } from "../services/user-manager.ts";
 
@@ -24,8 +25,8 @@ export class ToolStreamNotifier {
   private startTime = Date.now();
   private toolCount = 0;
 
-  private static readonly MIN_EDIT_INTERVAL = 1500; // Telegram rate limit safety
-  private static readonly MAX_MSG_LENGTH = 4096;
+  private static readonly MIN_EDIT_INTERVAL = TELEGRAM_MIN_EDIT_INTERVAL_MS;
+  private static readonly MAX_MSG_LENGTH = TELEGRAM_MAX_MSG_LENGTH;
   private static readonly HEADER = "🧠 Cortex çalışıyor...";
 
   constructor(userId: number, chatId?: number, threadId?: number) {
@@ -36,11 +37,11 @@ export class ToolStreamNotifier {
 
   async append(line: string): Promise<void> {
     this.toolCount++;
-    const ts = new Date().toLocaleTimeString("tr-TR", {
+    const ts = new Date().toLocaleTimeString(DEFAULT_LOCALE, {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
-      timeZone: "Europe/Istanbul",
+      timeZone: DEFAULT_TIMEZONE,
     });
     this.lines.push(`${ts} ${line}`);
     await this.flush();

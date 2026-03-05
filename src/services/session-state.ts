@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { rename } from "node:fs/promises";
 import { userManager } from "./user-manager.ts";
+import { WA_NOTIFICATION_TTL_MS, MAX_WA_NOTIFICATIONS } from "../constants.ts";
 
 // ============ TYPES ============
 
@@ -193,12 +194,12 @@ export function detectTopic(userMsg: string, responseText: string): string | nul
 /** Son WA mesajını session state'e ekle (max 10, 24 saat TTL) */
 export async function addWhatsAppNotification(userId: number, notif: WhatsAppNotification): Promise<void> {
   const state = getSessionState(userId);
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - WA_NOTIFICATION_TTL_MS;
 
   const fresh = state.recentWhatsApp
     .filter(n => n.timestamp > cutoff)
     .concat(notif)
-    .slice(-10);
+    .slice(-MAX_WA_NOTIFICATIONS);
 
   await updateSessionState(userId, { recentWhatsApp: fresh });
 }

@@ -58,8 +58,10 @@ export interface UserStats {
   lastActivity: string | null;
 }
 
+import { DEFAULT_TIMEZONE } from "../constants.ts";
+
 export const DEFAULT_USER_SETTINGS: UserSettings = {
-  timezone: "Europe/Istanbul",
+  timezone: DEFAULT_TIMEZONE,
   language: "tr",
   dailySummary: true,
   dailySummaryTime: "0 9 * * *",

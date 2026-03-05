@@ -21,6 +21,7 @@ import { mneme } from "../mneme/mneme.ts";
 import { inbox } from "./inbox.ts";
 import { readLoopConfig, type LoopConfig, DEFAULT_LOOP_CONFIG } from "../agent/tools/agent-loop.ts";
 import { hasPendingWAMessages } from "../agent/tools/whatsapp.ts";
+import { TR_DAY_NAMES, ACTIVE_HOUR_START, ACTIVE_HOUR_END, REMINDER_INBOX_TTL_MS, EXPECTATION_INBOX_TTL_MS, PROACTIVE_INBOX_TTL_MS } from "../constants.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -167,7 +168,7 @@ class BrainLoop {
             subject: `[hatırlatıcı] ${reminder.title}`,
             body: `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}`,
             priority: "urgent",
-            ttlMs: 30 * 60 * 1000,
+            ttlMs: REMINDER_INBOX_TTL_MS,
           });
           console.log(`[BrainLoop] Hatırlatıcı → Inbox: ${reminder.title}`);
         } catch (err) {
@@ -194,7 +195,7 @@ class BrainLoop {
         subject: `[beklenti_timeout] ${exp.type} — ${exp.target}`,
         body: `Beklenti zaman aşımına uğradı:\nTür: ${exp.type}\nHedef: ${exp.target}\nBağlam: ${exp.context || "yok"}\nOnResolved: ${exp.onResolved || "yok"}`,
         priority: "normal",
-        ttlMs: 60 * 60 * 1000,
+        ttlMs: EXPECTATION_INBOX_TTL_MS,
       });
       console.log(`[BrainLoop] Expectation timeout → Inbox: [${exp.type}] ${exp.target}`);
     }
@@ -211,7 +212,7 @@ class BrainLoop {
     const hour = now.getHours();
 
     // Sadece aktif saatlerde (07:00-23:00)
-    if (hour < 7 || hour >= 23) return;
+    if (hour < ACTIVE_HOUR_START || hour >= ACTIVE_HOUR_END) return;
 
     // Saatte bir kez
     const hourKey = `${now.toISOString().slice(0, 10)}-${String(hour).padStart(2, "0")}`;
@@ -219,8 +220,7 @@ class BrainLoop {
 
     this.lastProactiveCheckHour = hourKey;
 
-    const dayNames = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
-    const dayName = dayNames[now.getDay()];
+    const dayName = TR_DAY_NAMES[now.getDay()];
     const timeStr = `${String(hour).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
     const dateStr = now.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 
@@ -229,7 +229,7 @@ class BrainLoop {
       subject: `Proaktif kontrol — ${timeStr}`,
       body: `Saat: ${timeStr} (${dayName}, ${dateStr})\n\nbehaviors.md'ini oku. Şu an yapman gereken proaktif bir şey var mı?\n\nEvet → yap ve gerekirse Telegram'a bildir.\nHayır → sessiz kal, bu mesajı işaretlenmiş say.`,
       priority: "normal",
-      ttlMs: 55 * 60 * 1000, // 55 dakikada expire — bir sonraki tick'te yenisi gelir
+      ttlMs: PROACTIVE_INBOX_TTL_MS, // 55 dakikada expire — bir sonraki tick'te yenisi gelir
     });
 
     console.log(`[BrainLoop] Proactive check pushed: ${hourKey}`);
@@ -265,7 +265,7 @@ class BrainLoop {
     const hour = new Date().getHours();
 
     // Sadece aktif saatlerde (07:00-23:00)
-    if (hour < 7 || hour >= 23) return;
+    if (hour < ACTIVE_HOUR_START || hour >= ACTIVE_HOUR_END) return;
 
     const { listActiveAgents } = await import("../agents/registry.ts");
     const agents = listActiveAgents();
@@ -301,8 +301,7 @@ class BrainLoop {
 
         // Heartbeat gönder
         const nowDate = new Date();
-        const dayNames = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
-        const dayName = dayNames[nowDate.getDay()];
+        const dayName = TR_DAY_NAMES[nowDate.getDay()];
         const timeStr = `${String(nowDate.getHours()).padStart(2, "0")}:${String(nowDate.getMinutes()).padStart(2, "0")}`;
         const dateStr = nowDate.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 
