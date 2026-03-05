@@ -17,7 +17,6 @@ import { FileMemory } from "../memory/file-memory.ts";
 import { getSessionState, updateSessionState } from "./session-state.ts";
 import { expectations } from "./expectations.ts";
 import { heartbeat } from "./heartbeat.ts";
-import { getTaskQueue } from "./task-queue.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
 import { chat, isUserBusy } from "../agent/chat.ts";
 import { mneme } from "../mneme/mneme.ts";

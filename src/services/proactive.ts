@@ -69,7 +69,7 @@ async function handleDailySummary(task: ScheduledTask): Promise<void> {
 }
 
 async function handleReminder(_task: ScheduledTask): Promise<void> {
-  // Reminders are now handled by BrainLoop → Stem
+  // No-op: Reminders are handled by BrainLoop
 }
 
 async function handleMemoryPrune(task: ScheduledTask): Promise<void> {
@@ -175,11 +175,11 @@ async function handleReminderTask(task: QueuedTask): Promise<TaskResult> {
 }
 
 async function handleMemoryPruneTask(_task: QueuedTask): Promise<TaskResult> {
-  // SmartMemory removed — FileMemory has no TTL-based pruning
-  return { success: true, message: "Memory prune skipped (FileMemory)" };
+  // No-op: FileMemory has no TTL-based pruning
+  return { success: true };
 }
 
 async function handleMemoryConsolidationTask(_task: QueuedTask): Promise<TaskResult> {
-  // SmartMemory consolidation removed — Mneme handles FileMemory consolidation
-  return { success: true, message: "Memory consolidation skipped (FileMemory)" };
+  // No-op: Mneme handles FileMemory consolidation
+  return { success: true };
 }
