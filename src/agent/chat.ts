@@ -17,7 +17,7 @@ import { FileMemory } from "../memory/file-memory.ts";
 import { getSessionState, updateSessionState, detectTopic, detectPhase } from "../services/session-state.ts";
 import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
-import { DEFAULT_TIMEZONE, DEFAULT_LOCALE, NIGHT_HOUR_START, NIGHT_HOUR_END, MAX_WA_CONTEXT_ITEMS } from "../constants.ts";
+import { DEFAULT_TIMEZONE, DEFAULT_LOCALE, NIGHT_HOUR_START, NIGHT_HOUR_END, MAX_WA_CONTEXT_ITEMS, WA_NOTIFICATION_TTL_MS } from "../constants.ts";
 
 // Split modules
 import { getMemoryServer, getTelegramMcpServer, getMoodServer, getTimeServer, getCalendarServer, getGmailServer, getWhatsAppServer, getAgentLoopServer } from "./mcp-servers.ts";
@@ -75,6 +75,15 @@ export function isUserBusy(userId: number): boolean {
 // Session TTL: 2 hours - after this, start a fresh session
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
+function isSessionExpired(lastUsedAt: string): boolean {
+  const age = Date.now() - new Date(lastUsedAt).getTime();
+  const hour = new Date().getHours();
+  const effectiveTTL = hour >= NIGHT_HOUR_START || hour < NIGHT_HOUR_END
+    ? SESSION_TTL_MS * 3
+    : SESSION_TTL_MS;
+  return age > effectiveTTL;
+}
+
 async function getOrResumeCortexSession(
   userId: number,
   sessionKey: string,
@@ -90,20 +99,20 @@ async function getOrResumeCortexSession(
     const session = memory.getSessionByKey(sessionKey);
     if (!session?.lastUsedAt) return undefined;
 
-    // 3. TTL check (same logic as main session)
-    const age = Date.now() - new Date(session.lastUsedAt).getTime();
-    const hour = new Date().getHours();
-    const effectiveTTL = hour >= NIGHT_HOUR_START || hour < NIGHT_HOUR_END ? SESSION_TTL_MS * 3 : SESSION_TTL_MS;
-    if (age > effectiveTTL) {
+    // 3. TTL check
+    if (isSessionExpired(session.lastUsedAt)) {
+      const age = Date.now() - new Date(session.lastUsedAt).getTime();
       console.log(`[Cortex] Keyed session ${sessionKey} expired (${Math.round(age / 60000)}min), starting fresh`);
       return undefined;
     }
 
     // 4. Populate cache
+    const age = Date.now() - new Date(session.lastUsedAt).getTime();
     console.log(`[Cortex] Resuming keyed session ${sessionKey} from DB (${Math.round(age / 60000)}min old)`);
     cortexSessions.set(sessionKey, session.id);
     return session.id;
-  } catch {
+  } catch (e) {
+    console.warn("[Cortex] Keyed session DB lookup failed:", e);
     return undefined;
   }
 }
@@ -120,19 +129,19 @@ async function getOrResumeSession(userId: number): Promise<string | undefined> {
     const session = memory.getSession();
     if (!session?.lastUsedAt) return undefined;
 
-    // 3. TTL kontrolü (gece 23-08 arası 3x tolerans)
-    const age = Date.now() - new Date(session.lastUsedAt).getTime();
-    const hour = new Date().getHours();
-    const effectiveTTL = hour >= NIGHT_HOUR_START || hour < NIGHT_HOUR_END ? SESSION_TTL_MS * 3 : SESSION_TTL_MS;
-    if (age > effectiveTTL) {
+    // 3. TTL kontrolü
+    if (isSessionExpired(session.lastUsedAt)) {
+      const age = Date.now() - new Date(session.lastUsedAt).getTime();
       console.log(`[Cortex] Session expired (${Math.round(age / 60000)}min), starting fresh`);
       return undefined;
     }
 
+    const age = Date.now() - new Date(session.lastUsedAt).getTime();
     console.log(`[Cortex] Resuming session from DB (${Math.round(age / 60000)}min old)`);
     userSessions.set(userId, session.id);
     return session.id;
-  } catch {
+  } catch (e) {
+    console.warn("[Cortex] Session DB lookup failed:", e);
     return undefined;
   }
 }
@@ -207,7 +216,7 @@ export async function _executeChat(
 
   // Load recent memories from file-based system
   let recentMemories: string[] = [];
-  const queryText = typeof message === 'string' ? message : (message as any).text || '';
+  const queryText = typeof message === 'string' ? message : message.text || '';
 
   try {
     const fileMemory = new FileMemory(userFolder);
@@ -229,7 +238,9 @@ export async function _executeChat(
     } else {
       recentMemories = deduplicateMemories(relevant.slice(0, 5).map(l => l.trim()));
     }
-  } catch {}
+  } catch (e) {
+    console.warn("[Cortex] File memory read failed:", e);
+  }
 
   // Session state for continuity
   let sessionState: DynamicContext['sessionState'] = undefined;
@@ -250,7 +261,7 @@ export async function _executeChat(
       if (state.recentWhatsApp.length > 0) {
         const now = Date.now();
         recentWhatsApp = state.recentWhatsApp
-          .filter(n => now - n.timestamp < 24 * 60 * 60 * 1000)
+          .filter(n => now - n.timestamp < WA_NOTIFICATION_TTL_MS)
           .slice(-MAX_WA_CONTEXT_ITEMS) // keep only 5 most recent
           .map(n => ({
             senderName: n.senderName,
@@ -262,7 +273,9 @@ export async function _executeChat(
           }));
         if (recentWhatsApp.length === 0) recentWhatsApp = undefined;
       }
-    } catch {}
+    } catch (e) {
+      console.warn("[Cortex] Session state load failed:", e);
+    }
   }
 
   // Hub agent awareness — only for main Cobrain, not sub-cortex

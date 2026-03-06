@@ -1,5 +1,5 @@
 // Global fatal error handlers — must be first, before any imports/initialization
-process.on("unhandledRejection", (reason, promise) => {
+process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] Unhandled rejection:", reason);
   // Don't exit — let systemd restart handle it if needed
   // Most unhandled rejections are recoverable

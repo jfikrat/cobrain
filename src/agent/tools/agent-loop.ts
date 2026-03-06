@@ -52,7 +52,9 @@ export async function readLoopConfig(agentId: string): Promise<LoopConfig> {
       const data = await file.json();
       return { ...DEFAULT_LOOP_CONFIG, ...data };
     }
-  } catch {}
+  } catch (e) {
+    console.warn("[AgentLoop] Loop config read failed:", e);
+  }
   return { ...DEFAULT_LOOP_CONFIG };
 }
 

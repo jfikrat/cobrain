@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { join } from "node:path";
+import type { Api } from "grammy";
 import { config } from "../config.ts";
 
 /**
@@ -252,7 +253,7 @@ export async function downloadTelegramFileAsBuffer(
  * Telegram'dan dosya indirir ve belirtilen yola kaydeder
  */
 export async function downloadTelegramFile(
-  api: any,
+  api: Api,
   fileId: string,
   savePath: string
 ): Promise<void> {

@@ -87,13 +87,13 @@ export class RemindersService {
     };
   }
 
-  private queryRows(sql: string, params: unknown[] = []): Reminder[] {
+  private queryRows(sql: string, params: (string | number | null)[] = []): Reminder[] {
     const rows = this.db.query<{
       id: number; title: string; message: string | null;
       trigger_at: string; repeat_pattern: string | null; status: string;
       context: string | null; max_executions: number | null;
       executions_done: number; created_at: string;
-    }, unknown[]>(sql).all(...params);
+    }, (string | number | null)[]>(sql).all(...params);
     return rows.map((r) => this.mapRow(r));
   }
 

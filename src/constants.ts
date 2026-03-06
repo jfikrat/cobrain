@@ -15,7 +15,8 @@ export const NIGHT_HOUR_START = 23;   // Gece modu başlangıcı
 export const NIGHT_HOUR_END = 8;      // Gece modu sonu
 
 // ── TTLs (ms) ──
-export const WA_NOTIFICATION_TTL_MS = 24 * 60 * 60 * 1000;       // 24 saat
+export const DAY_MS = 24 * 60 * 60 * 1000;                       // 24 saat (genel)
+export const WA_NOTIFICATION_TTL_MS = DAY_MS;                     // 24 saat (WA context)
 export const REMINDER_INBOX_TTL_MS = 30 * 60 * 1000;             // 30 dk
 export const EXPECTATION_INBOX_TTL_MS = 60 * 60 * 1000;          // 60 dk
 export const PROACTIVE_INBOX_TTL_MS = 55 * 60 * 1000;            // 55 dk

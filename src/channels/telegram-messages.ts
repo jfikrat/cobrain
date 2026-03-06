@@ -3,7 +3,7 @@ import { config } from "../config.ts";
 import { think, userManager, type MultimodalMessage } from "../brain/index.ts";
 import { recordInteraction, extractMoodFromMessage, recordUserActivity } from "../services/interaction-tracker.ts";
 import { transcribeAudio, downloadTelegramFileAsBuffer } from "../services/transcribe.ts";
-import { isAuthorized, parseSuggestions, buildSuggestionKeyboard, type TelegramContext } from "./telegram-helpers.ts";
+import { isAuthorized, parseSuggestions, buildSuggestionKeyboard, withTypingIndicator, type TelegramContext } from "./telegram-helpers.ts";
 import { getGroupRoute, handleGroupMessage, getTopicRoute, handleTopicMessage } from "./telegram-router.ts";
 
 // Live location log throttle
@@ -73,34 +73,20 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
       ) {
         const topicRoute = getTopicRoute(threadId);
         if (topicRoute) {
-          await c.replyWithChatAction("typing");
-          const topicVoiceInterval = setInterval(() => {
-            c.replyWithChatAction("typing").catch(() => {});
-          }, 4000);
           try {
-            const topicResponse = await handleTopicMessage(userId, c.chat.id, threadId, topicRoute, transcript);
-            clearInterval(topicVoiceInterval);
+            const topicResponse = await withTypingIndicator(c, () =>
+              handleTopicMessage(userId, c.chat.id, threadId, topicRoute, transcript));
             const voiceMsg = `🎤 <i>${transcript}</i>\n\n${topicResponse}`;
             await c.reply(voiceMsg, { parse_mode: "HTML", message_thread_id: threadId })
               .catch(() => c.reply(`🎤 ${transcript}\n\n${topicResponse}`, { message_thread_id: threadId }));
           } catch (err) {
-            clearInterval(topicVoiceInterval);
             console.error(`[TG Hub] Voice topic hata (${topicRoute.name}):`, err);
           }
           return;
         }
       }
 
-      await c.replyWithChatAction("typing");
-      const voiceTypingInterval = setInterval(() => {
-        c.replyWithChatAction("typing").catch(() => {});
-      }, 4000);
-      let response;
-      try {
-        response = await think(userId, transcript);
-      } finally {
-        clearInterval(voiceTypingInterval);
-      }
+      const response = await withTypingIndicator(c, () => think(userId, transcript));
 
       const { text: cleanVoice, suggestions: voiceSuggestions } = parseSuggestions(response.content);
       const voiceKeyboard = buildSuggestionKeyboard(voiceSuggestions);
@@ -315,14 +301,9 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
       if (threadId) {
         const topicRoute = getTopicRoute(threadId);
         if (topicRoute) {
-          await c.replyWithChatAction("typing");
-          const topicTypingInterval = setInterval(() => {
-            c.replyWithChatAction("typing").catch(() => {});
-          }, 4000);
-
           try {
-            const response = await handleTopicMessage(userId, c.chat.id, threadId, topicRoute, text);
-            clearInterval(topicTypingInterval);
+            const response = await withTypingIndicator(c, () =>
+              handleTopicMessage(userId, c.chat.id, threadId, topicRoute, text));
             const { text: clean, suggestions } = parseSuggestions(response);
             const keyboard = buildSuggestionKeyboard(suggestions);
             await c.reply(clean, {
@@ -336,7 +317,6 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
               })
             );
           } catch (err) {
-            clearInterval(topicTypingInterval);
             console.error(`[TG Hub] Topic hata (${topicRoute.name}):`, err);
           }
           return;
@@ -352,34 +332,22 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
       const route = getGroupRoute(c.chat.id);
       if (!route) return; // bilinmeyen grup → sessiz kal
 
-      await c.replyWithChatAction("typing");
-      const groupTypingInterval = setInterval(() => {
-        c.replyWithChatAction("typing").catch(() => {});
-      }, 4000);
-
       try {
-        const response = await handleGroupMessage(userId, c.chat.id, route, text);
-        clearInterval(groupTypingInterval);
+        const response = await withTypingIndicator(c, () =>
+          handleGroupMessage(userId, c.chat.id, route, text));
         const { text: clean, suggestions } = parseSuggestions(response);
         const keyboard = buildSuggestionKeyboard(suggestions);
         await c.reply(clean, { parse_mode: "Markdown", ...(keyboard && { reply_markup: keyboard }) })
           .catch(() => c.reply(clean, { ...(keyboard && { reply_markup: keyboard }) }));
       } catch (err) {
-        clearInterval(groupTypingInterval);
         console.error(`[TG Router] Grup hata (${route.name}):`, err);
       }
       return;
     }
 
     // ============ NORMAL AI SOHBET ============
-    await c.replyWithChatAction("typing");
-    const typingInterval = setInterval(() => {
-      c.replyWithChatAction("typing").catch(() => {});
-    }, 4000);
-
     try {
-      const response = await think(userId, text);
-      clearInterval(typingInterval);
+      const response = await withTypingIndicator(c, () => think(userId, text));
 
       const { text: cleanContent, suggestions } = parseSuggestions(response.content);
       const replyMarkup = buildSuggestionKeyboard(suggestions);
@@ -406,7 +374,6 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
         console.warn("[Telegram] Mood extraction failed:", err);
       });
     } catch (error) {
-      clearInterval(typingInterval);
       console.error("Chat hatası:", error);
       const errorMessage = error instanceof Error ? error.message : "Bilinmeyen hata";
       await c.reply(`❌ Hata: ${errorMessage}`);

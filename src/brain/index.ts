@@ -13,7 +13,7 @@ import { generateTraceId } from "../types/brain-events.ts";
 import { getEventStore } from "./event-store.ts";
 
 // Session state persistence
-import { updateSessionState, detectPhase, detectTopic } from "../services/session-state.ts";
+import { updateSessionState, detectPhase, detectTopic, type SessionState } from "../services/session-state.ts";
 
 export interface ThinkResponse {
   content: string;
@@ -107,7 +107,7 @@ export async function think(userId: number, message: string | MultimodalMessage,
       try {
         const detectedPhase = detectPhase(response.content);
         const detectedTopic = detectTopic(textMessage, response.content);
-        const updates: Record<string, unknown> = {
+        const updates: Partial<SessionState> = {
           lastUserMessage: textMessage.slice(0, 200),
         };
         if (detectedTopic) updates.lastTopic = detectedTopic;
@@ -115,7 +115,7 @@ export async function think(userId: number, message: string | MultimodalMessage,
           updates.conversationPhase = detectedPhase.phase;
           updates.confidence = detectedPhase.confidence;
         }
-        updateSessionState(userId, updates as any);
+        updateSessionState(userId, updates);
       } catch (err) {
         console.warn(`[Brain] Session state update failed:`, err);
       }

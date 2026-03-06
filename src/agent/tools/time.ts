@@ -12,19 +12,6 @@ import { toolError, toolSuccess } from "../../utils/tool-response.ts";
 const DEFAULT_TIMEZONE = "Europe/Istanbul";
 const DEFAULT_LOCALE = "tr-TR";
 
-// Valid timezones for validation (common ones)
-const COMMON_TIMEZONES = [
-  "Europe/Istanbul",
-  "Europe/London",
-  "Europe/Berlin",
-  "Europe/Paris",
-  "America/New_York",
-  "America/Los_Angeles",
-  "Asia/Tokyo",
-  "Asia/Shanghai",
-  "UTC",
-];
-
 /**
  * Get formatted date parts for a given date and timezone
  */

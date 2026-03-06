@@ -85,16 +85,22 @@ export async function buildRouteSystemPrompt(route: GroupRoute | TopicRoute, use
       try {
         const content = await Bun.file(`${mindDir}/${file}`).text();
         if (content.trim()) sections.push(content.trim());
-      } catch {}
+      } catch (e) {
+        console.warn("[TG Router] Mind file read failed:", e);
+      }
     }
-  } catch {}
+  } catch (e) {
+    console.warn("[TG Router] Mind dir scan failed:", e);
+  }
 
   // Shared mind files
   for (const file of route.sharedMindFiles) {
     try {
       const content = await Bun.file(`${sharedDir}/${file}`).text();
       if (content.trim()) sections.push(content.trim());
-    } catch {}
+    } catch (e) {
+      console.warn("[TG Router] Shared mind file read failed:", e);
+    }
   }
 
   if (sections.length === 0) {

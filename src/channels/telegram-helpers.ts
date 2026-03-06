@@ -1,4 +1,4 @@
-import { InlineKeyboard } from "grammy";
+import { InlineKeyboard, type Context } from "grammy";
 import { config } from "../config.ts";
 
 // ============ TYPES ============
@@ -42,4 +42,19 @@ export function buildSuggestionKeyboard(suggestions: string[]): InlineKeyboard |
 
 export function isAuthorized(userId: number): boolean {
   return userId === config.MY_TELEGRAM_ID;
+}
+
+export async function withTypingIndicator<T>(
+  ctx: Context,
+  operation: () => Promise<T>,
+): Promise<T> {
+  await ctx.replyWithChatAction("typing");
+  const interval = setInterval(() => {
+    ctx.replyWithChatAction("typing").catch(() => {});
+  }, 4000);
+  try {
+    return await operation();
+  } finally {
+    clearInterval(interval);
+  }
 }

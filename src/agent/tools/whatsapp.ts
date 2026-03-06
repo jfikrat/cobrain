@@ -92,7 +92,7 @@ const waCheckMessagesTool = tool(
       // Status broadcast → mark read
       const statusIds = notifications.filter(n => n.chat_jid === "status@broadcast").map(n => n.id);
       if (statusIds.length > 0) {
-        d.run(`UPDATE notifications SET status='read' WHERE id IN (${statusIds.map(() => "?").join(",")})`, statusIds as any[]);
+        d.run(`UPDATE notifications SET status='read' WHERE id IN (${statusIds.map(() => "?").join(",")})`, statusIds as number[]);
       }
 
       // Stale (>1 saat) → mark read
@@ -104,7 +104,7 @@ const waCheckMessagesTool = tool(
         })
         .map(n => n.id);
       if (staleIds.length > 0) {
-        d.run(`UPDATE notifications SET status='read' WHERE id IN (${staleIds.map(() => "?").join(",")})`, staleIds as any[]);
+        d.run(`UPDATE notifications SET status='read' WHERE id IN (${staleIds.map(() => "?").join(",")})`, staleIds as number[]);
       }
 
       // Fresh messages
@@ -117,7 +117,7 @@ const waCheckMessagesTool = tool(
 
       // Mark all fresh as read
       const freshIds = fresh.map(n => n.id);
-      d.run(`UPDATE notifications SET status='read' WHERE id IN (${freshIds.map(() => "?").join(",")})`, freshIds as any[]);
+      d.run(`UPDATE notifications SET status='read' WHERE id IN (${freshIds.map(() => "?").join(",")})`, freshIds as number[]);
 
       // Group by chat
       const chatMap = new Map<string, typeof fresh>();

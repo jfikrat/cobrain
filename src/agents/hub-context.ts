@@ -7,6 +7,7 @@
 import type { DynamicContext } from "../agent/prompts.ts";
 import { listActiveAgents } from "./registry.ts";
 import { getAgentHistory } from "./interaction-log.ts";
+import { DAY_MS } from "../constants.ts";
 
 type HubAgentsContext = NonNullable<DynamicContext["hubAgents"]>;
 
@@ -50,7 +51,6 @@ export async function buildHubAgentContext(
   if (activeAgents.length === 0) return undefined;
 
   const now = Date.now();
-  const DAY_MS = 24 * 60 * 60 * 1000;
 
   const agents: HubAgentsContext["agents"] = activeAgents.map((a) => ({
     id: a.id,
@@ -75,7 +75,9 @@ export async function buildHubAgentContext(
         const summary = `Soru: ${last.userMessage.slice(0, 60)} → Cevap: ${last.agentResponse.slice(0, 80)}`;
         recentActivity.push({ agentId: agent.id, summary, minutesAgo });
       }
-    } catch {}
+    } catch (e) {
+      console.warn("[HubContext] Agent history fetch failed:", e);
+    }
   }
 
   const data: HubAgentsContext = {

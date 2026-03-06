@@ -54,7 +54,9 @@ export async function scaffoldAgentMindFiles(
       // Append custom name context
       content += `\nAgent adın: ${customName}\n`;
       await Bun.write(identityPath, content);
-    } catch {}
+    } catch (e) {
+      console.warn("[Templates] Identity customize failed:", e);
+    }
   }
 
   console.log(`[Templates] Scaffolded ${agentType} mind files → ${relMindDir}`);

@@ -9,7 +9,7 @@
  *   - 2+ hours of user inactivity
  */
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { query, type SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { Bot } from "grammy";
 import { FileMemory } from "../memory/file-memory.ts";
 import { createMnemeTools } from "./tools.ts";
@@ -56,7 +56,8 @@ export class Mneme {
         settingSources: [],
       }})) {
         if (msg.type === "result") {
-          totalCost = (msg as any).total_cost_usd ?? 0;
+          const result = msg as SDKResultMessage;
+          totalCost = result.total_cost_usd ?? 0;
         }
       }
 

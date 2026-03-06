@@ -78,35 +78,6 @@ function serverConversationToClient(conv: ServerConversation): Conversation {
 }
 
 /**
- * Merge server conversations with local conversations
- * Server wins on conflicts (by updatedAt timestamp)
- */
-function mergeConversations(
-  local: Conversation[],
-  server: ServerConversation[]
-): Conversation[] {
-  const merged = new Map<string, Conversation>();
-
-  // Add local conversations
-  for (const conv of local) {
-    merged.set(conv.id, conv);
-  }
-
-  // Merge server conversations (server wins if newer)
-  for (const serverConv of server) {
-    const existing = merged.get(serverConv.id);
-    if (!existing || serverConv.updatedAt > existing.updatedAt) {
-      merged.set(serverConv.id, serverConversationToClient(serverConv));
-    }
-  }
-
-  // Sort by updatedAt desc and limit
-  return Array.from(merged.values())
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, MAX_CONVERSATIONS);
-}
-
-/**
  * Hook for managing multiple conversations with server sync
  */
 export function useConversations(options?: UseConversationsOptions): UseConversationsReturn {

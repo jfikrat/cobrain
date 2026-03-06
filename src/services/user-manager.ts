@@ -5,7 +5,7 @@
 
 import { Database } from "bun:sqlite";
 import { mkdir } from "node:fs/promises";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { config } from "../config.ts";
