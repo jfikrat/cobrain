@@ -1,6 +1,6 @@
 {
   "intervalMs": 300000,
-  "precondition": "hasPendingWAMessages",
+  "precondition": null,
   "activeIntervalMs": null,
   "activeUntil": null,
   "reason": null

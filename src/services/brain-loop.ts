@@ -20,7 +20,6 @@ import { chat, isUserBusy } from "../agent/chat.ts";
 import { mneme } from "../mneme/mneme.ts";
 import { inbox } from "./inbox.ts";
 import { readLoopConfig, type LoopConfig, DEFAULT_LOOP_CONFIG } from "../agent/tools/agent-loop.ts";
-import { hasPendingWAMessages } from "../agent/tools/whatsapp.ts";
 import { TR_DAY_NAMES, ACTIVE_HOUR_START, ACTIVE_HOUR_END, REMINDER_INBOX_TTL_MS, EXPECTATION_INBOX_TTL_MS, PROACTIVE_INBOX_TTL_MS } from "../constants.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -243,9 +242,7 @@ class BrainLoop {
 
   private static readonly LOOP_CACHE_TTL_MS = 30_000; // 30s cache
 
-  private static readonly PRECONDITIONS: Record<string, () => boolean> = {
-    hasPendingWAMessages: () => hasPendingWAMessages(),
-  };
+  private static readonly PRECONDITIONS: Record<string, () => boolean> = {};
 
   private async getLoopConfig(agentId: string): Promise<LoopConfig> {
     const cached = this.agentLoopCache.get(agentId);
