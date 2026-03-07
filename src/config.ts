@@ -92,6 +92,9 @@ const envSchema = z.object({
   // WhatsApp Worker WS port (pure WS MCP)
   WHATSAPP_WS_PORT: z.coerce.number().optional(),
 
+  // Folder layout: MCP servers root
+  MCP_SERVERS_HOME: z.string().default(join(homedir(), "mcp-servers")),
+
   // v1.5: Multi-Agent Hub (Telegram Forum Mode)
   COBRAIN_HUB_ID: z.coerce.number().optional(),
 });

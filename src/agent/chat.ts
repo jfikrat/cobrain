@@ -17,6 +17,7 @@ import { FileMemory } from "../memory/file-memory.ts";
 import { getSessionState, updateSessionState, detectTopic, detectPhase } from "../services/session-state.ts";
 import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
+import { join } from "node:path";
 import { DEFAULT_TIMEZONE, DEFAULT_LOCALE, NIGHT_HOUR_START, NIGHT_HOUR_END, MAX_WA_CONTEXT_ITEMS, WA_NOTIFICATION_TTL_MS } from "../constants.ts";
 
 // Split modules
@@ -421,7 +422,7 @@ export async function _executeChat(
           gateway: {
             type: "stdio" as const,
             command: "bun",
-            args: ["run", "/home/fjds/projects/gateway/src/index.ts"],
+            args: ["run", join(config.MCP_SERVERS_HOME, "gateway", "src", "index.ts")],
           },
         },
 

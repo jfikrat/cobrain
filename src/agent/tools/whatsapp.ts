@@ -10,16 +10,15 @@ import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { toolSuccess, toolError } from "../../utils/tool-response.ts";
 import { config } from "../../config.ts";
 import { readFileSync, existsSync, realpathSync } from "node:fs";
-import { resolve, isAbsolute } from "node:path";
+import { resolve, isAbsolute, join } from "node:path";
 
 // ── WS Port Resolution ──────────────────────────────────────────────────
-
-const WS_PORT_FILE = "/home/fjds/projects/whatsapp/.ws-port";
 
 function getWsPort(): number {
   if (config.WHATSAPP_WS_PORT) return config.WHATSAPP_WS_PORT;
   try {
-    const port = Number(readFileSync(WS_PORT_FILE, "utf8").trim());
+    const portFile = join(config.MCP_SERVERS_HOME, "whatsapp", ".ws-port");
+    const port = Number(readFileSync(portFile, "utf8").trim());
     if (port >= 10000 && port <= 65535) return port;
   } catch {}
   throw new Error("WHATSAPP_WS_PORT not set and .ws-port file not found");
