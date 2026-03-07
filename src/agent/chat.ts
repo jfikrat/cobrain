@@ -21,7 +21,7 @@ import { join } from "node:path";
 import { DEFAULT_TIMEZONE, DEFAULT_LOCALE, NIGHT_HOUR_START, NIGHT_HOUR_END, MAX_WA_CONTEXT_ITEMS, WA_NOTIFICATION_TTL_MS } from "../constants.ts";
 
 // Split modules
-import { getMemoryServer, getTelegramMcpServer, getMoodServer, getTimeServer, getCalendarServer, getGmailServer, getWhatsAppServer, getAgentLoopServer } from "./mcp-servers.ts";
+import { getMemoryServer, getTelegramMcpServer, getMoodServer, getTimeServer, getCalendarServer, getGmailServer, getAgentLoopServer } from "./mcp-servers.ts";
 import { extractTextContent, buildMessageContent, type MultimodalMessage } from "./message-builder.ts";
 import { createPreToolUseHooks, ToolStreamNotifier } from "./hooks.ts";
 
@@ -416,7 +416,6 @@ export async function _executeChat(
           mood: getMoodServer(userId),
           calendar: getCalendarServer(),
           gmail: getGmailServer(userId),
-          whatsapp: getWhatsAppServer(),
           agentLoop: getAgentLoopServer(),
           // Gateway - helm, squad via single MCP gateway
           gateway: {
