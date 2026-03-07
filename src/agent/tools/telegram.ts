@@ -16,7 +16,7 @@ import {
   updateAgentActivity,
   type AgentType,
 } from "../../agents/registry.ts";
-import { scaffoldAgentMindFiles } from "../../agents/templates/index.ts";
+import { scaffoldAgentMindFiles } from "../../agents/seed/index.ts";
 import { refreshTopicRoutes } from "../../channels/telegram-router.ts";
 import { userManager } from "../../services/user-manager.ts";
 
@@ -578,7 +578,9 @@ const agentDelegateTool = tool(
     // Build system prompt from agent's mind files
     const systemPrompt = await buildRouteSystemPrompt(
       {
+        agentId: agent.id,
         name: agent.name,
+        topicId: agent.topicId,
         mindDir: agent.mindDir,
         sharedMindFiles: agent.sharedMindFiles,
         sessionKeyPrefix: agent.sessionKeyPrefix,

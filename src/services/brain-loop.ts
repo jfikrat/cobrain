@@ -308,10 +308,10 @@ class BrainLoop {
         const topicRoute = getTopicRoute(agent.topicId);
         if (!topicRoute) continue;
 
-        // Topic'e heartbeat mesajı yaz (görsel takip için)
-        this.bot.api.sendMessage(config.COBRAIN_HUB_ID, heartbeatPrompt, {
-          message_thread_id: agent.topicId,
-        }).catch(() => {});
+        // Log kanalına heartbeat bilgisi yaz (görsel takip için)
+        if (config.LOG_CHANNEL_ID) {
+          this.bot.api.sendMessage(config.LOG_CHANNEL_ID, `⏱ ${agent.id} heartbeat @ ${timeStr}`).catch(() => {});
+        }
 
         // Agent'ın session'ında çalıştır
         handleTopicMessage(
@@ -323,7 +323,7 @@ class BrainLoop {
         ).then(async (response) => {
           // Cevabı topic'e yaz
           if (response && response.trim() && this.bot) {
-            await this.bot.api.sendMessage(config.COBRAIN_HUB_ID, response, {
+            await this.bot.api.sendMessage(config.COBRAIN_HUB_ID!, response, {
               message_thread_id: agent.topicId,
             }).catch(() => {});
           }
