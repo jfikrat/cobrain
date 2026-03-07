@@ -1,11 +1,13 @@
 import { userManager } from "../services/user-manager.ts";
 import { chat } from "../agent/chat.ts";
+import { config } from "../config.ts";
 import { listActiveAgents, updateAgentActivity, type AgentEntry } from "../agents/registry.ts";
 import { logAgentInteraction } from "../agents/interaction-log.ts";
 
 export interface TopicRoute {
   agentId: string;
   name: string;
+  topicId: number;
   mindDir: string;
   sharedMindFiles: string[];
   sessionKeyPrefix: string;
@@ -36,6 +38,7 @@ function agentToTopicRoute(agent: AgentEntry): TopicRoute {
   return {
     agentId: agent.id,
     name: agent.name,
+    topicId: agent.topicId,
     mindDir: agent.mindDir,
     sharedMindFiles: agent.sharedMindFiles,
     sessionKeyPrefix: agent.sessionKeyPrefix,
@@ -75,11 +78,22 @@ export async function buildRouteSystemPrompt(route: TopicRoute, userFolder: stri
     }
   }
 
+  // Agent routing metadata
+  const meta = [
+    `<agent-context>`,
+    `  <name>${route.name}</name>`,
+    `  <agentId>${route.agentId}</agentId>`,
+    `  <hubChatId>${config.COBRAIN_HUB_ID}</hubChatId>`,
+    `  <threadId>${route.topicId}</threadId>`,
+    `  <sessionKeyPrefix>${route.sessionKeyPrefix}</sessionKeyPrefix>`,
+    `</agent-context>`,
+  ].join("\n");
+
   if (sections.length === 0) {
-    return `Sen Cobrain'in ${route.name} agent'ısın. Türkçe, kısa, doğal cevaplar yaz.`;
+    return `Sen Cobrain'in ${route.name} agent'ısın. Türkçe, kısa, doğal cevaplar yaz.\n\n${meta}`;
   }
 
-  return sections.join("\n\n---\n\n");
+  return sections.join("\n\n---\n\n") + `\n\n---\n\n${meta}`;
 }
 
 /**
