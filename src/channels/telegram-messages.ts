@@ -4,7 +4,7 @@ import { think, userManager, type MultimodalMessage } from "../brain/index.ts";
 import { recordInteraction, extractMoodFromMessage, recordUserActivity } from "../services/interaction-tracker.ts";
 import { transcribeAudio, downloadTelegramFileAsBuffer } from "../services/transcribe.ts";
 import { isAuthorized, parseSuggestions, buildSuggestionKeyboard, withTypingIndicator, type TelegramContext } from "./telegram-helpers.ts";
-import { getGroupRoute, handleGroupMessage, getTopicRoute, handleTopicMessage } from "./telegram-router.ts";
+import { getTopicRoute, handleTopicMessage } from "./telegram-router.ts";
 
 // Live location log throttle
 const liveLocationLastLog = new Map<number, number>();
@@ -323,26 +323,6 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
         }
       }
       // threadId yoksa veya route yoksa → "Genel" topic → normal Cobrain (fall through)
-    }
-
-    // ============ GRUP ROUTING ============
-    // Hub supergroup'u buradan hariç tut — yukarıda topic route yoksa normal Cobrain'e düşsün
-    const isHub = config.COBRAIN_HUB_ID && c.chat.id === config.COBRAIN_HUB_ID;
-    if ((c.chat.type === "group" || c.chat.type === "supergroup") && !isHub) {
-      const route = getGroupRoute(c.chat.id);
-      if (!route) return; // bilinmeyen grup → sessiz kal
-
-      try {
-        const response = await withTypingIndicator(c, () =>
-          handleGroupMessage(userId, c.chat.id, route, text));
-        const { text: clean, suggestions } = parseSuggestions(response);
-        const keyboard = buildSuggestionKeyboard(suggestions);
-        await c.reply(clean, { parse_mode: "Markdown", ...(keyboard && { reply_markup: keyboard }) })
-          .catch(() => c.reply(clean, { ...(keyboard && { reply_markup: keyboard }) }));
-      } catch (err) {
-        console.error(`[TG Router] Grup hata (${route.name}):`, err);
-      }
-      return;
     }
 
     // ============ NORMAL AI SOHBET ============
