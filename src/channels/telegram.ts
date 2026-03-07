@@ -48,16 +48,18 @@ export async function startBot(): Promise<void> {
   initPermissions(bot);
   console.log(`[Bot] Permission mode: ${config.PERMISSION_MODE}`);
 
-  // Telegram'a komutları kaydet (slash menüsü için)
+  // Register slash command menu (localized)
+  const { t } = await import("../i18n/index.ts");
   await bot.api.setMyCommands([
-    { command: "start", description: "Botu başlat" },
-    { command: "help", description: "Yardım ve komut listesi" },
-    { command: "status", description: "Bot ve session durumu" },
-    { command: "clear", description: "Konuşma geçmişini temizle" },
-    { command: "restart", description: "Botu yeniden başlat" },
-    { command: "web", description: "Web arayüzü linki al" },
-    { command: "mode", description: "Permission modunu değiştir" },
-    { command: "phase", description: "Session phase durumu / override" },
+    { command: "start", description: t("menu.start") },
+    { command: "help", description: t("menu.help") },
+    { command: "status", description: t("menu.status") },
+    { command: "clear", description: t("menu.clear") },
+    { command: "restart", description: t("menu.restart") },
+    { command: "web", description: t("menu.web") },
+    { command: "mode", description: t("menu.mode") },
+    { command: "phase", description: t("menu.phase") },
+    { command: "lang", description: t("menu.lang") },
   ]);
 
   // Heartbeat: bot started

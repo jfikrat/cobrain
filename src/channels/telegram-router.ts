@@ -3,6 +3,7 @@ import { chat } from "../agent/chat.ts";
 import { config } from "../config.ts";
 import { listActiveAgents, updateAgentActivity, type AgentEntry } from "../agents/registry.ts";
 import { logAgentInteraction } from "../agents/interaction-log.ts";
+import { t } from "../i18n/index.ts";
 
 export interface TopicRoute {
   agentId: string;
@@ -93,7 +94,7 @@ export async function buildRouteSystemPrompt(route: TopicRoute, userFolder: stri
   ].filter(Boolean).join("\n");
 
   if (sections.length === 0) {
-    return `You are Cobrain's ${route.name} agent. Give concise, natural responses.\n\n${meta}`;
+    return `${t("router.fallback", { name: route.name })}\n\n${meta}`;
   }
 
   return sections.join("\n\n---\n\n") + `\n\n---\n\n${meta}`;

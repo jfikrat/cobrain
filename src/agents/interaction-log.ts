@@ -5,6 +5,7 @@
 
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import { t } from "../i18n/index.ts";
 
 export interface AgentInteraction {
   timestamp: string;
@@ -69,7 +70,7 @@ export async function getAgentHistorySummary(
   const history = await getAgentHistory(userFolder, agentId, limit);
 
   if (history.length === 0) {
-    return `No interactions recorded for agent "${agentId}".`;
+    return t("log.no_interactions", { agentId });
   }
 
   const lines = history.map((h) => {
@@ -84,5 +85,5 @@ export async function getAgentHistorySummary(
     return `[${time}] Q: ${h.userMessage.slice(0, 80)}...\nA: ${h.agentResponse.slice(0, 120)}...${tools}${cost}`;
   });
 
-  return `Last ${history.length} interactions (${agentId}):\n\n${lines.join("\n\n")}`;
+  return `${t("log.last_interactions", { count: history.length, agentId })}:\n\n${lines.join("\n\n")}`;
 }

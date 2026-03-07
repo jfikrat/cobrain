@@ -25,6 +25,8 @@ import { userManager } from "./services/user-manager.ts";
 import { initInbox } from "./services/inbox.ts";
 import { loadRegistry } from "./agents/registry.ts";
 import { initTopicRoutes } from "./channels/telegram-router.ts";
+import { setLocale } from "./i18n/index.ts";
+import type { Locale } from "./i18n/index.ts";
 
 console.log(`
    ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗███╗   ██╗
@@ -71,6 +73,14 @@ const aiAgentHeartbeatInterval = setInterval(() => {
 if (config.ENABLE_AUTONOMOUS && !config.MINIMAL_AUTONOMY) {
   initScheduler({ enabled: true });
   initTaskQueue({ enabled: true });
+}
+
+// Initialize locale from user settings
+{
+  const settings = await userManager.getUserSettings(config.MY_TELEGRAM_ID);
+  const locale = (settings.language || "en") as Locale;
+  setLocale(locale);
+  console.log(`[Startup] Locale: ${locale}`);
 }
 
 // Load agent registry + topic routes (before bot starts, so topic routes are ready)
