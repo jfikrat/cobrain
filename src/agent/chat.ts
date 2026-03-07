@@ -22,6 +22,7 @@ import { DEFAULT_TIMEZONE, DEFAULT_LOCALE, NIGHT_HOUR_START, NIGHT_HOUR_END, MAX
 
 // Split modules
 import { getMemoryServer, getTelegramMcpServer, getMoodServer, getTimeServer, getCalendarServer, getGmailServer, getAgentLoopServer } from "./mcp-servers.ts";
+import { createMemoryServerFromPath } from "./tools/memory.ts";
 import { extractTextContent, buildMessageContent, type MultimodalMessage } from "./message-builder.ts";
 import { createPreToolUseHooks, ToolStreamNotifier } from "./hooks.ts";
 
@@ -61,6 +62,8 @@ export interface ChatOptions {
    * Verilmezse userId'ye (DM) yazılır. silent=true ise görmezden gelinir.
    */
   notifierTarget?: { chatId: number; threadId: number };
+  /** Agent'ın çalışma dizini — verilirse hafıza bu dizinden okunur/yazılır */
+  workDir?: string;
 }
 
 // Concurrency guard: reflects whether _executeChat is actively running
@@ -220,7 +223,8 @@ export async function _executeChat(
   const queryText = typeof message === 'string' ? message : message.text || '';
 
   try {
-    const fileMemory = new FileMemory(userFolder);
+    const memoryRoot = options?.workDir || userFolder;
+    const fileMemory = new FileMemory(memoryRoot);
     const q = queryText.toLowerCase();
 
     const facts = await fileMemory.readFacts();
@@ -410,7 +414,7 @@ export async function _executeChat(
 
         // MCP Servers (createSdkMcpServer returns full config)
         mcpServers: {
-          memory: getMemoryServer(userId),
+          memory: options?.workDir ? createMemoryServerFromPath(options.workDir) : getMemoryServer(userId),
           telegram: getTelegramMcpServer(),
           time: getTimeServer(),
           mood: getMoodServer(userId),

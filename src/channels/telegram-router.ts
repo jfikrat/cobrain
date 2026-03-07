@@ -119,6 +119,7 @@ export async function handleTopicMessage(
     channel: `telegram:hub:${route.agentId}`,
     silent: false,
     notifierTarget: { chatId, threadId: messageThreadId },
+    workDir: route.workDir,
   });
 
   updateAgentActivity(route.agentId);
