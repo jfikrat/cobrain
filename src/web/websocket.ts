@@ -12,7 +12,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { userManager } from "../services/user-manager.ts";
 import { buildMdSystemPrompt, readMindFiles } from "../agent/prompts.ts";
-import { getMemoryServer, getGDriveServer, getTelegramMcpServer } from "../agent/mcp-servers.ts";
+import { getMemoryServer, getTelegramMcpServer } from "../agent/mcp-servers.ts";
 import { needsPermission, type PermissionMode } from "../agent/permissions.ts";
 import { config } from "../config.ts";
 
@@ -409,7 +409,6 @@ async function streamChat(
       settingSources: ["project"],
       mcpServers: {
         memory: getMemoryServer(userId),
-        gdrive: getGDriveServer(),
         telegram: getTelegramMcpServer(),
         // Helm - Browser control via Chrome extension
         helm: {

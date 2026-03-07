@@ -5,4 +5,3 @@
 
 export { chat, clearSession, getSessionInfo, isUserBusy, type ChatResponse, type MultimodalMessage } from "./chat.ts";
 export { createMemoryServer } from "./tools/memory.ts";
-export { createCalendarServer } from "./tools/calendar.ts";
