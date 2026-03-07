@@ -17,6 +17,7 @@ import { expectations } from "./expectations.ts";
 import { heartbeat } from "./heartbeat.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
 import { chat, isUserBusy } from "../agent/chat.ts";
+import { handleTopicMessage, getTopicRoute } from "../channels/telegram-router.ts";
 import { mneme } from "../mneme/mneme.ts";
 import { inbox } from "./inbox.ts";
 import { readLoopConfig, type LoopConfig, DEFAULT_LOOP_CONFIG } from "../agent/tools/agent-loop.ts";
@@ -296,16 +297,39 @@ class BrainLoop {
           if (check && !check()) continue;
         }
 
-        // Heartbeat gönder
+        // Heartbeat — doğrudan chat() ile agent'ın session'ında çalıştır
         const nowDate = new Date();
         const dayName = TR_DAY_NAMES[nowDate.getDay()];
         const timeStr = `${String(nowDate.getHours()).padStart(2, "0")}:${String(nowDate.getMinutes()).padStart(2, "0")}`;
         const dateStr = nowDate.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
 
-        await this.bot.api.sendMessage(config.COBRAIN_HUB_ID,
-          `[HEARTBEAT]\nSaat: ${timeStr} (${dayName}, ${dateStr})\n\nbehaviors.md'ini oku. Şu an yapman gereken proaktif bir şey var mı?\nEvet → yap. Hayır → sessiz kal.`,
-          { message_thread_id: agent.topicId },
-        );
+        const heartbeatPrompt = `[HEARTBEAT]\nSaat: ${timeStr} (${dayName}, ${dateStr})\n\nbehaviors.md'ini oku. Şu an yapman gereken proaktif bir şey var mı?\nEvet → yap. Hayır → sessiz kal.`;
+
+        const topicRoute = getTopicRoute(agent.topicId);
+        if (!topicRoute) continue;
+
+        // Topic'e heartbeat mesajı yaz (görsel takip için)
+        this.bot.api.sendMessage(config.COBRAIN_HUB_ID, heartbeatPrompt, {
+          message_thread_id: agent.topicId,
+        }).catch(() => {});
+
+        // Agent'ın session'ında çalıştır
+        handleTopicMessage(
+          config.MY_TELEGRAM_ID,
+          config.COBRAIN_HUB_ID!,
+          agent.topicId,
+          topicRoute,
+          heartbeatPrompt,
+        ).then(async (response) => {
+          // Cevabı topic'e yaz
+          if (response && response.trim() && this.bot) {
+            await this.bot.api.sendMessage(config.COBRAIN_HUB_ID, response, {
+              message_thread_id: agent.topicId,
+            }).catch(() => {});
+          }
+        }).catch((err) => {
+          console.warn(`[BrainLoop] Agent heartbeat response failed for ${agent.id}:`, err);
+        });
 
         this.agentLastTriggered.set(agent.id, now);
         console.log(`[BrainLoop] Agent loop: ${agent.id} (interval: ${effectiveInterval}ms${loopConfig.activeUntil ? ", active mode" : ""})`);
