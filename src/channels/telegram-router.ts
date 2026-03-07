@@ -120,6 +120,7 @@ export async function handleTopicMessage(
     silent: false,
     notifierTarget: { chatId, threadId: messageThreadId },
     workDir: route.workDir,
+    agentName: route.name,
   });
 
   updateAgentActivity(route.agentId);

@@ -64,6 +64,8 @@ export interface ChatOptions {
   notifierTarget?: { chatId: number; threadId: number };
   /** Agent'ın çalışma dizini — verilirse hafıza bu dizinden okunur/yazılır */
   workDir?: string;
+  /** Agent adı — ToolStreamNotifier header'ında gösterilir */
+  agentName?: string;
 }
 
 // Concurrency guard: reflects whether _executeChat is actively running
@@ -319,7 +321,7 @@ export async function _executeChat(
   const notifier = options?.silent
     ? null
     : options?.notifierTarget
-      ? new ToolStreamNotifier(userId, options.notifierTarget.chatId, options.notifierTarget.threadId)
+      ? new ToolStreamNotifier(userId, options.notifierTarget.chatId, options.notifierTarget.threadId, options.agentName)
       : new ToolStreamNotifier(userId);
   let lastAssistantContent = "";
   let sessionId = "";

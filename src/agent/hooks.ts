@@ -27,12 +27,13 @@ export class ToolStreamNotifier {
 
   private static readonly MIN_EDIT_INTERVAL = TELEGRAM_MIN_EDIT_INTERVAL_MS;
   private static readonly MAX_MSG_LENGTH = TELEGRAM_MAX_MSG_LENGTH;
-  private static readonly HEADER = "🧠 Cortex çalışıyor...";
+  private header: string;
 
-  constructor(userId: number, chatId?: number, threadId?: number) {
+  constructor(userId: number, chatId?: number, threadId?: number, agentName?: string) {
     this.userId = userId;
     this.chatId = chatId ?? userId;
     this.threadId = threadId;
+    this.header = agentName ? `🧠 ${agentName} çalışıyor...` : "🧠 Cortex çalışıyor...";
   }
 
   async append(line: string): Promise<void> {
@@ -70,12 +71,12 @@ export class ToolStreamNotifier {
   }
 
   private buildMessage(): string {
-    let text = ToolStreamNotifier.HEADER + "\n\n" + this.lines.join("\n");
+    let text = this.header + "\n\n" + this.lines.join("\n");
 
     // Trim oldest lines if exceeding Telegram limit
     while (text.length > ToolStreamNotifier.MAX_MSG_LENGTH && this.lines.length > 2) {
       this.lines.shift();
-      text = ToolStreamNotifier.HEADER + "\n\n...\n" + this.lines.join("\n");
+      text = this.header + "\n\n...\n" + this.lines.join("\n");
     }
 
     return text;
