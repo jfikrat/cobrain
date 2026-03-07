@@ -456,13 +456,19 @@ const agentCreateTool = tool(
     type: z.enum(["genel", "whatsapp", "kod", "arastirma", "custom"]).describe("Agent tipi"),
     description: z.string().optional().describe("Agent açıklaması"),
     iconColor: z.number().optional().describe("Topic icon rengi"),
+    workDir: z.string().optional().describe("Agent'ın çalışma dizini (örn: '/home/fjds/apps/finance-app')"),
   },
-  async ({ name, type, description, iconColor }) => {
+  async ({ name, type, description, iconColor, workDir }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
     if (!config.COBRAIN_HUB_ID) throw new Error("COBRAIN_HUB_ID not configured");
 
     const hubChatId = config.COBRAIN_HUB_ID;
     const agentId = name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-");
+
+    // Default workDir: ~/.cobrain/workspace/{agentId}
+    const userFolder = userManager.getUserFolder(config.MY_TELEGRAM_ID);
+    const resolvedWorkDir = workDir || `${userFolder}/workspace/${agentId}`;
+    await import("node:fs/promises").then(fs => fs.mkdir(resolvedWorkDir, { recursive: true }));
 
     // 1. Telegram forum topic oluştur
     const topic = await telegramBot.api.createForumTopic(hubChatId, name, {
@@ -470,7 +476,6 @@ const agentCreateTool = tool(
     });
 
     // 2. Mind dosyalarını scaffold et
-    const userFolder = userManager.getUserFolder(config.MY_TELEGRAM_ID);
     const mindDir = await scaffoldAgentMindFiles(userFolder, agentId, type as AgentType, name);
 
     // 3. Registry'ye kaydet
@@ -484,6 +489,7 @@ const agentCreateTool = tool(
       sessionKeyPrefix: `tg_agent_${agentId}`,
       status: "active",
       description,
+      workDir: resolvedWorkDir,
     });
 
     // 4. Route'ları güncelle

@@ -11,6 +11,7 @@ export interface TopicRoute {
   mindDir: string;
   sharedMindFiles: string[];
   sessionKeyPrefix: string;
+  workDir?: string;
 }
 
 const TOPIC_ROUTES = new Map<number, TopicRoute>();
@@ -42,6 +43,7 @@ function agentToTopicRoute(agent: AgentEntry): TopicRoute {
     mindDir: agent.mindDir,
     sharedMindFiles: agent.sharedMindFiles,
     sessionKeyPrefix: agent.sessionKeyPrefix,
+    workDir: agent.workDir,
   };
 }
 
@@ -86,8 +88,9 @@ export async function buildRouteSystemPrompt(route: TopicRoute, userFolder: stri
     `  <hubChatId>${config.COBRAIN_HUB_ID}</hubChatId>`,
     `  <threadId>${route.topicId}</threadId>`,
     `  <sessionKeyPrefix>${route.sessionKeyPrefix}</sessionKeyPrefix>`,
+    route.workDir ? `  <workDir>${route.workDir}</workDir>` : null,
     `</agent-context>`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 
   if (sections.length === 0) {
     return `Sen Cobrain'in ${route.name} agent'ısın. Türkçe, kısa, doğal cevaplar yaz.\n\n${meta}`;

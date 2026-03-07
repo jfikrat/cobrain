@@ -21,6 +21,7 @@ export interface AgentEntry {
   createdAt: string;
   lastActiveAt?: string;
   description?: string;
+  workDir?: string;
 }
 
 export interface AgentRegistry {
