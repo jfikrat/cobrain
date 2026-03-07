@@ -651,7 +651,7 @@ function deduplicateMemories(memories: string[]): string[] {
 function buildTimeContext(): DynamicContext['time'] {
   const now = new Date();
   const hour = now.getHours();
-  const dayPart = hour < 6 ? "gece" : hour < 12 ? "sabah" : hour < 18 ? "öğle" : "akşam";
+  const dayPart = hour < 6 ? "night" : hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
   const isWeekend = [0, 6].includes(now.getDay());
   const formatted = now.toLocaleDateString(DEFAULT_LOCALE, {
     day: "2-digit",

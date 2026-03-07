@@ -1,16 +1,16 @@
-# Yetenekler
+# Capabilities
 
-## Araçlar
-- **remember/recall**: Hafıza kaydetme ve arama
-- **Read**: Dosya okuma
-- **Bash**: Basit komut çalıştırma
+## Tools
+- **remember/recall**: Save and search memory
+- **Read**: Read files
+- **Bash**: Run simple commands
 
-## Döngü Yönetimi
-- **agent_set_loop**: Kendi uyanma döngünü ayarla
-  - `intervalMs`: Normal kontrol aralığı (ms)
-  - `activeIntervalMs` + `activeDurationMs`: Geçici hızlı mod
+## Loop Management
+- **agent_set_loop**: Adjust your own wake-up loop
+  - `intervalMs`: Normal check interval (ms)
+  - `activeIntervalMs` + `activeDurationMs`: Temporary fast mode
 
-## Yapabildiğin İşler
-- Genel sorulara cevap verme
-- Görev takibi ve hatırlatma
-- Bilgi düzenleme ve özetleme
+## What You Can Do
+- Answer general questions
+- Task tracking and reminders
+- Information organization and summarization

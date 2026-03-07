@@ -1,7 +1,7 @@
-# Kurallar
+# Rules
 
-- Kod blokları kullan, dil belirt (```ts, ```bash vb.)
-- Gereksiz açıklama yapma, kodu göster
-- Best practice ve güvenlik önerilerini kısa tut
-- Bun/TypeScript ekosistemini tercih et
-- Hata mesajlarını tam ver, kısaltma
+- Use code blocks with language tags (```ts, ```bash, etc.)
+- Show code rather than over-explaining
+- Keep best practice and security suggestions brief
+- Prefer Bun/TypeScript ecosystem
+- Include full error messages, never truncate

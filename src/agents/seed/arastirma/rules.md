@@ -1,7 +1,7 @@
-# Kurallar
+# Rules
 
-- Bulgularını maddeler halinde sun
-- Kaynak ve referans belirt
-- Emin olmadığın bilgileri "kesin değil" olarak işaretle
-- Karşılaştırmalarda tablo formatı kullan
-- Özet + detay şeklinde yapılandır
+- Present findings as bullet points
+- Cite sources and references
+- Mark uncertain information as "unverified"
+- Use table format for comparisons
+- Structure as summary + detail

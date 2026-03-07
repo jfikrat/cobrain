@@ -69,11 +69,11 @@ export async function getAgentHistorySummary(
   const history = await getAgentHistory(userFolder, agentId, limit);
 
   if (history.length === 0) {
-    return `Agent "${agentId}" için henüz etkileşim kaydı yok.`;
+    return `No interactions recorded for agent "${agentId}".`;
   }
 
   const lines = history.map((h) => {
-    const time = new Date(h.timestamp).toLocaleString("tr-TR", {
+    const time = new Date(h.timestamp).toLocaleString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
       day: "2-digit",
@@ -81,8 +81,8 @@ export async function getAgentHistorySummary(
     });
     const tools = h.toolsUsed?.length ? ` [tools: ${h.toolsUsed.join(", ")}]` : "";
     const cost = h.costUsd ? ` ($${h.costUsd.toFixed(4)})` : "";
-    return `[${time}] Soru: ${h.userMessage.slice(0, 80)}...\nCevap: ${h.agentResponse.slice(0, 120)}...${tools}${cost}`;
+    return `[${time}] Q: ${h.userMessage.slice(0, 80)}...\nA: ${h.agentResponse.slice(0, 120)}...${tools}${cost}`;
   });
 
-  return `Son ${history.length} etkileşim (${agentId}):\n\n${lines.join("\n\n")}`;
+  return `Last ${history.length} interactions (${agentId}):\n\n${lines.join("\n\n")}`;
 }

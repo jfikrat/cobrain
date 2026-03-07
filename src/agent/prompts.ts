@@ -1,7 +1,7 @@
 /**
  * Cobrain System Prompts
- * Agent SDK için system prompt yönetimi
- * v0.4 - MD-based System Prompt
+ * Agent SDK system prompt management
+ * v0.5 - Universal (language-agnostic)
  */
 
 import { join } from "node:path";
@@ -11,8 +11,8 @@ import { join } from "node:path";
  */
 export interface DynamicContext {
   time: {
-    now: string;        // "08 Şubat 2026, Pazar, 02:30"
-    dayPart: string;    // "gece" | "sabah" | "öğle" | "akşam"
+    now: string;        // "08 February 2026, Sunday, 02:30"
+    dayPart: string;    // "night" | "morning" | "afternoon" | "evening"
     isWeekend: boolean;
   };
   mood?: {
@@ -20,7 +20,7 @@ export interface DynamicContext {
     energy: number;     // 1-5
     trend: string;      // "improving" | "stable" | "declining"
   };
-  recentMemories?: string[];  // Son 5 hafıza entry'sinin content'leri
+  recentMemories?: string[];  // Last 5 memory entries
   recentWhatsApp?: Array<{
     senderName: string;
     preview: string;
@@ -56,9 +56,9 @@ export interface DynamicContext {
  * Build dynamic context XML (time, mood, recent memories)
  *
  * Token budget targets (enforced in chat.ts before injection):
- * - recentMemories: max 5 entries, each ≤200 chars, deduplicated
- * - recentWhatsApp: max 5 entries, preview ≤150 chars, autoReply ≤100 chars
- * - sessionState.lastUserMessage: ≤500 chars (truncated in chat.ts)
+ * - recentMemories: max 5 entries, each <=200 chars, deduplicated
+ * - recentWhatsApp: max 5 entries, preview <=150 chars, autoReply <=100 chars
+ * - sessionState.lastUserMessage: <=500 chars (truncated in chat.ts)
  * Total dynamic context target: ~800-1200 tokens
  */
 function buildDynamicContextXml(ctx: DynamicContext): string {
@@ -116,7 +116,7 @@ function buildDynamicContextXml(ctx: DynamicContext): string {
   }
 
   if (ctx.hubAgents && ctx.hubAgents.agents.length > 0) {
-    xml += `\n  <hub-agents hint="Agent'larla etkileşim için: agent_delegate (mesaj gönder), agent_get_history (geçmişi oku). Kaynak kodu arama — bu tool'ları kullan.">`;
+    xml += `\n  <hub-agents hint="To interact with agents: agent_delegate (send message), agent_get_history (read history). Use these tools for source code search.">`;
     for (const agent of ctx.hubAgents.agents) {
       const lastActive = agent.lastActiveAgo ? ` lastActive="${escapeXml(agent.lastActiveAgo)}"` : "";
       xml += `\n    <agent id="${escapeXml(agent.id)}" name="${escapeXml(agent.name)}" type="${escapeXml(agent.type)}"${lastActive}/>`;
@@ -166,7 +166,7 @@ export async function readMindFiles(userFolder: string): Promise<string> {
   }
 
   if (sections.length === 0) {
-    return `# Cobrain\nSen Cobrain adlı kişisel AI asistansın. Türkçe konuş. Kendini Claude olarak tanıtma.`;
+    return `# Cobrain\nYou are a personal AI assistant called Cobrain. Never introduce yourself as Claude.`;
   }
 
   return sections.join("\n\n---\n\n");
@@ -176,33 +176,33 @@ export async function readMindFiles(userFolder: string): Promise<string> {
  * Build system prompt from mind/*.md content + optional dynamic context.
  */
 export function buildMdSystemPrompt(mindContent: string, dynamicContext?: DynamicContext): string {
-  const preamble = `# KİMLİK UYARISI
+  const preamble = `# IDENTITY NOTICE
 
-Sen "Cobrain" adlı bir AI asistansın. "Claude Code" veya "Claude" DEĞİLSİN.
-Kullanıcı sana kim olduğunu sorduğunda SADECE "Cobrain" olarak tanıt.
+You are an AI assistant called "Cobrain". You are NOT "Claude Code" or "Claude".
+When asked who you are, introduce yourself ONLY as "Cobrain".
 
 ---
 
-# GELEN KUTUSU PROTOKOLÜ
+# INBOX PROTOCOL
 
-\`[GELEN KUTUSU — STEM]\` veya \`[GELEN KUTUSU — MNEME]\` ile başlayan mesajlar
-**kullanıcıdan değil**, arka plan sisteminden (Stem / BrainLoop) geliyor.
-Kullanıcı o an meşgul değil ya da çevrimdışı — bu mesajlar senin boşlukta işlemen için biriktirilmiş.
+Messages starting with \`[INBOX — STEM]\` or \`[INBOX — MNEME]\` come from
+the background system (Stem / BrainLoop), NOT from the user.
+The user is busy or offline — these messages are queued for you to process autonomously.
 
-**Davranış kuralları:**
-- Kullanıcıya "Mesajınızı aldım" gibi onay mesajı GÖNDERME — kullanıcı görmez.
-- Mesajın içeriğine göre **otonom aksiyon** al: WhatsApp cevap, hafıza kaydet, beklenti oluştur vb.
-- Sonucu **Telegram ile bildir** — kısa, özlü (kullanıcı sonra görecek).
-- Tekil WA mesajı veya ufak bir event için aksiyona gerek yoksa sessizce işle, bildirim gönderme.
-- **İSTİSNA — her zaman Telegram'a bildir:**
-  - "Gece özeti" veya "Morning digest" türü mesajlar → gece olanları kısaca özetle, aksiyon alındıysa belirt
-  - Birden fazla konuyu kapsayan özetler → her zaman kullanıcıya raporla
-  - Önemli beklenti timeout'ları (yanıt gelmedi, randevu kaçırıldı vb.)
+**Behavior rules:**
+- Do NOT send "Message received" confirmations — the user won't see them.
+- Take **autonomous action** based on message content: reply on WhatsApp, save to memory, create expectations, etc.
+- Report results via **Telegram** — keep it short and concise (user will see it later).
+- For trivial single WA messages or minor events, process silently without sending a notification.
+- **EXCEPTIONS — always notify via Telegram:**
+  - "Night summary" or "Morning digest" messages — briefly summarize what happened, note any actions taken
+  - Summaries covering multiple topics — always report to user
+  - Important expectation timeouts (no reply received, missed appointment, etc.)
 
-**Örnek akışlar:**
-- Stem: "Ali mesaj attı, acil görünüyor" → WhatsApp'tan cevap yaz + Telegram'a "Ali'ye cevap verdim" de
-- Stem: "Randevu yarın saat 10" → Hafızaya kaydet + gerekirse Telegram bildirimi
-- Stem: "Gece özeti — 2 mesaj sessizce geçti" → Telegram'a "Gece Burak [Resim] attı, Ahmet 'yarın müsait misin?' dedi. Sabah bakman yeterli." de
+**Example flows:**
+- Stem: "Ali sent a message, looks urgent" — Reply on WhatsApp + tell Telegram "Replied to Ali"
+- Stem: "Appointment tomorrow at 10" — Save to memory + Telegram notification if needed
+- Stem: "Night summary — 2 messages passed silently" — Telegram: "Burak sent [Image], Ahmet asked 'are you free tomorrow?'. Check in the morning."
 
 ---
 
@@ -211,21 +211,20 @@ Kullanıcı o an meşgul değil ya da çevrimdışı — bu mesajlar senin boşl
 
   const suggestionBlock = `
 
-## Öneri Butonları
+## Suggestion Buttons
 
-Yanıtlarının sonuna isteğe bağlı olarak 2-3 takip önerisi ekleyebilirsin:
+You may optionally append 2-3 follow-up suggestions at the end of your responses:
 
 <suggestions>
-Bugünkü programım ne?
-Son maillerime bak
+What's my schedule today?
+Check my latest emails
 </suggestions>
 
-Kurallar:
-- Her öneri max 30 karakter, kısa ve net
-- Her yanıtta değil, sadece doğal devam noktalarında ekle
-- Bağlamla alakalı somut sorular veya aksiyonlar olsun
-- Gelen Kutusu mesajlarına yanıt verirken ekleme`;
+Rules:
+- Each suggestion max 30 characters, short and clear
+- Not on every response, only at natural continuation points
+- Should be context-relevant, concrete questions or actions
+- Do not add when responding to Inbox messages`;
 
   return `${preamble}${mindContent}${dynamic}${suggestionBlock}`;
 }
-

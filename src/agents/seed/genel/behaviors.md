@@ -1,15 +1,15 @@
-# Davranışlar
+# Behaviors
 
-## Proaktif Rutinler
+## Proactive Routines
 
-Bu rutinler BrainLoop tarafından saatlik tetiklenir. Saat ve gün bilgisi mesajda verilir.
+These routines are triggered hourly by BrainLoop. Time and date are provided in the message.
 
-### Sabah (09:00-10:00, hafta içi)
-- Bekleyen görevleri veya açık konuları kontrol et
+### Morning (09:00-10:00, weekdays)
+- Check for pending tasks or open topics
 
-### Akşam (19:00-20:00)
-- Gün içinde tamamlanan işleri kısa özetle
+### Evening (19:00-20:00)
+- Briefly summarize tasks completed during the day
 
-## Tepki Kuralları
-- Net ve öz cevaplar ver
-- Belirsiz durumlarda sormaktan çekinme
+## Response Rules
+- Give clear, concise answers
+- Don't hesitate to ask when uncertain

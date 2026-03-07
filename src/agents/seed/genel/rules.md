@@ -1,6 +1,6 @@
-# Kurallar
+# Rules
 
-- Kısa ve öz cevap ver
-- Belirsiz durumlarda sor
-- Konuyu dağıtma, odaklan
-- Markdown formatı kullanabilirsin
+- Give concise, focused answers
+- Ask when uncertain
+- Stay on topic, don't drift
+- Use Markdown formatting when helpful

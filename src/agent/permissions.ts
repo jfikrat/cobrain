@@ -7,7 +7,7 @@ import type { Bot } from "grammy";
 
 export type PermissionMode = "strict" | "smart" | "yolo";
 
-// Tehlikeli komutlar
+// Dangerous commands
 const DANGEROUS_BASH_PATTERNS = [
   /\brm\s+(-[rf]+\s+)?/i,           // rm, rm -rf
   /\brmdir\b/i,                      // rmdir
@@ -27,10 +27,10 @@ const DANGEROUS_BASH_PATTERNS = [
   /\brclone\s+(delete|purge|move)/i, // rclone destructive
 ];
 
-// Tehlikeli tool'lar
+// Dangerous tools
 const DANGEROUS_TOOLS = new Set(["Write", "Edit", "NotebookEdit"]);
 
-// Güvenli tool'lar (her zaman otomatik onay)
+// Safe tools (always auto-approve)
 const SAFE_TOOLS = new Set([
   "Read",
   "Glob",
@@ -73,7 +73,7 @@ export function initPermissions(bot: Bot): void {
     if (handled) {
       await ctx.answerCallbackQuery("✓");
     } else {
-      await ctx.answerCallbackQuery("Zaman aşımı veya geçersiz istek");
+      await ctx.answerCallbackQuery("Timeout or invalid request");
     }
   });
 
@@ -162,7 +162,7 @@ function formatToolInput(toolName: string, input: unknown): string {
 
   if (toolName === "Write" || toolName === "Edit") {
     const filePath = (input as { file_path?: string })?.file_path || "";
-    return `Dosya: \`${filePath}\``;
+    return `File: \`${filePath}\``;
   }
 
   // Generic
@@ -198,19 +198,19 @@ export async function askToolPermission(
       // Send Telegram message with buttons
       const message = await telegramBot!.api.sendMessage(
         userId,
-        `🔐 *Tool Onayı Gerekli*\n\n` +
+        `🔐 *Tool Approval Required*\n\n` +
           `*${toolName}*\n${description}\n\n` +
-          `_2 dakika içinde yanıt ver_`,
+          `_Respond within 2 minutes_`,
         {
           parse_mode: "Markdown",
           reply_markup: {
             inline_keyboard: [
               [
-                { text: "✅ Onayla", callback_data: `perm:${requestId}:allow` },
-                { text: "❌ Reddet", callback_data: `perm:${requestId}:deny` },
+                { text: "✅ Approve", callback_data: `perm:${requestId}:allow` },
+                { text: "❌ Deny", callback_data: `perm:${requestId}:deny` },
               ],
               [
-                { text: "🚫 Hepsini Reddet", callback_data: `perm:${requestId}:deny_all` },
+                { text: "🚫 Deny All", callback_data: `perm:${requestId}:deny_all` },
               ],
             ],
           },
@@ -229,7 +229,7 @@ export async function askToolPermission(
             .editMessageText(
               userId,
               message.message_id,
-              `🔐 *Tool Onayı*\n\n*${toolName}*\n${description}\n\n⏱️ _Zaman aşımı - Reddedildi_`,
+              `🔐 *Tool Approval*\n\n*${toolName}*\n${description}\n\n⏱️ _Timeout - Denied_`,
               { parse_mode: "Markdown" }
             )
             .catch(() => {});
@@ -248,7 +248,7 @@ export async function askToolPermission(
             .editMessageText(
               userId,
               message.message_id,
-              `🔐 *Tool Onayı*\n\n*${toolName}*\n${description}\n\n${allowed ? "✅ _Onaylandı_" : "❌ _Reddedildi_"}`,
+              `🔐 *Tool Approval*\n\n*${toolName}*\n${description}\n\n${allowed ? "✅ _Approved_" : "❌ _Denied_"}`,
               { parse_mode: "Markdown" }
             )
             .catch(() => {});

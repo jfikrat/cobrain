@@ -21,7 +21,7 @@ import { handleTopicMessage, getTopicRoute } from "../channels/telegram-router.t
 import { mneme } from "../mneme/mneme.ts";
 import { inbox } from "./inbox.ts";
 import { readLoopConfig, type LoopConfig, DEFAULT_LOOP_CONFIG } from "../agent/tools/agent-loop.ts";
-import { TR_DAY_NAMES, ACTIVE_HOUR_START, ACTIVE_HOUR_END, REMINDER_INBOX_TTL_MS, EXPECTATION_INBOX_TTL_MS, PROACTIVE_INBOX_TTL_MS } from "../constants.ts";
+import { DAY_NAMES, ACTIVE_HOUR_START, ACTIVE_HOUR_END, REMINDER_INBOX_TTL_MS, EXPECTATION_INBOX_TTL_MS, PROACTIVE_INBOX_TTL_MS } from "../constants.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -165,17 +165,17 @@ class BrainLoop {
         try {
           await inbox.push({
             from: "brain-loop",
-            subject: `[hatırlatıcı] ${reminder.title}`,
-            body: `[OTONOM OLAY — Hatırlatıcı]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}`,
+            subject: `[reminder] ${reminder.title}`,
+            body: `[AUTONOMOUS EVENT — Reminder]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}`,
             priority: "urgent",
             ttlMs: REMINDER_INBOX_TTL_MS,
           });
-          console.log(`[BrainLoop] Hatırlatıcı → Inbox: ${reminder.title}`);
+          console.log(`[BrainLoop] Reminder → Inbox: ${reminder.title}`);
         } catch (err) {
           console.error("[BrainLoop] reminder error:", err);
-          if (this.bot) await sendRawLog(this.bot, `❌ <b>Hatırlatıcı hata</b> — ${escapeHtml(reminder.title)}\n<code>${String(err).slice(0, 200)}</code>`);
+          if (this.bot) await sendRawLog(this.bot, `❌ <b>Reminder error</b> — ${escapeHtml(reminder.title)}\n<code>${String(err).slice(0, 200)}</code>`);
         }
-        // Başarı veya hata — mark et (hata durumunda sonsuz döngüyü önle)
+        // Mark as sent regardless of success/error (prevents infinite loop)
         remindersService.markReminderSent(reminder.id);
       }
     } catch (err) {
@@ -192,8 +192,8 @@ class BrainLoop {
     for (const exp of expired) {
       await inbox.push({
         from: "brain-loop",
-        subject: `[beklenti_timeout] ${exp.type} — ${exp.target}`,
-        body: `Beklenti zaman aşımına uğradı:\nTür: ${exp.type}\nHedef: ${exp.target}\nBağlam: ${exp.context || "yok"}\nOnResolved: ${exp.onResolved || "yok"}`,
+        subject: `[expectation_timeout] ${exp.type} — ${exp.target}`,
+        body: `Expectation timed out:\nType: ${exp.type}\nTarget: ${exp.target}\nContext: ${exp.context || "none"}\nOnResolved: ${exp.onResolved || "none"}`,
         priority: "normal",
         ttlMs: EXPECTATION_INBOX_TTL_MS,
       });
@@ -203,33 +203,33 @@ class BrainLoop {
 
   // ── Proactive Behaviors Check ─────────────────────────────────────────
   //
-  // Saatte bir, aktif saatlerde (07-23) Cortex'e "behaviors.md'ini kontrol et"
-  // mesajı gönderir. Hangi davranışın ne zaman çalışacağı tamamen behaviors.md'de
-  // tanımlı — bu kod sadece tetikleyicidir, hiçbir davranış hardcode değil.
+  // Once per hour during active hours (07-23), sends Cortex a "check your
+  // behaviors.md" message. Which behavior runs when is fully defined in
+  // behaviors.md — this code is only the trigger, no behavior is hardcoded.
 
   private async checkProactiveBehaviors(): Promise<void> {
     const now = new Date();
     const hour = now.getHours();
 
-    // Sadece aktif saatlerde (07:00-23:00)
+    // Only during active hours (07:00-23:00)
     if (hour < ACTIVE_HOUR_START || hour >= ACTIVE_HOUR_END) return;
 
-    // Saatte bir kez
+    // Once per hour
     const hourKey = `${now.toISOString().slice(0, 10)}-${String(hour).padStart(2, "0")}`;
     if (this.lastProactiveCheckHour === hourKey) return;
 
     this.lastProactiveCheckHour = hourKey;
 
-    const dayName = TR_DAY_NAMES[now.getDay()];
+    const dayName = DAY_NAMES[now.getDay()];
     const timeStr = `${String(hour).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    const dateStr = now.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
+    const dateStr = now.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
 
     await inbox.push({
       from: "scheduler",
-      subject: `Proaktif kontrol — ${timeStr}`,
-      body: `Saat: ${timeStr} (${dayName}, ${dateStr})\n\nbehaviors.md'ini oku. Şu an yapman gereken proaktif bir şey var mı?\n\nEvet → yap ve gerekirse Telegram'a bildir.\nHayır → sessiz kal, bu mesajı işaretlenmiş say.`,
+      subject: `Proactive check — ${timeStr}`,
+      body: `Time: ${timeStr} (${dayName}, ${dateStr})\n\nRead your behaviors.md. Is there anything proactive you should do right now?\n\nYes → do it and notify via Telegram if needed.\nNo → stay silent, mark this message as handled.`,
       priority: "normal",
-      ttlMs: PROACTIVE_INBOX_TTL_MS, // 55 dakikada expire — bir sonraki tick'te yenisi gelir
+      ttlMs: PROACTIVE_INBOX_TTL_MS, // Expires in 55min — next tick brings a new one
     });
 
     console.log(`[BrainLoop] Proactive check pushed: ${hourKey}`);
@@ -262,7 +262,7 @@ class BrainLoop {
     const now = Date.now();
     const hour = new Date().getHours();
 
-    // Sadece aktif saatlerde (07:00-23:00)
+    // Only during active hours (07:00-23:00)
     if (hour < ACTIVE_HOUR_START || hour >= ACTIVE_HOUR_END) return;
 
     const { listActiveAgents } = await import("../agents/registry.ts");
@@ -273,47 +273,47 @@ class BrainLoop {
       try {
         const loopConfig = await this.getLoopConfig(agent.id);
 
-        // Expired override temizle
+        // Clear expired override
         if (loopConfig.activeUntil && loopConfig.activeUntil < now) {
           loopConfig.activeIntervalMs = null;
           loopConfig.activeUntil = null;
           loopConfig.reason = null;
-          // Cache güncelle (dosya yazma pahalı, sadece cache'i güncelle)
+          // Update cache only (file write is expensive)
           this.agentLoopCache.set(agent.id, { config: loopConfig, loadedAt: Date.now() });
         }
 
-        // Effective interval hesapla
+        // Calculate effective interval
         const effectiveInterval = (loopConfig.activeUntil && loopConfig.activeUntil > now && loopConfig.activeIntervalMs)
           ? loopConfig.activeIntervalMs
           : loopConfig.intervalMs;
 
-        // Son tetiklemeden bu yana yeterli süre geçti mi?
+        // Has enough time passed since last trigger?
         const lastTriggered = this.agentLastTriggered.get(agent.id) ?? 0;
         if (now - lastTriggered < effectiveInterval) continue;
 
-        // Precondition varsa kontrol et
+        // Check precondition if defined
         if (loopConfig.precondition) {
           const check = BrainLoop.PRECONDITIONS[loopConfig.precondition];
           if (check && !check()) continue;
         }
 
-        // Heartbeat — doğrudan chat() ile agent'ın session'ında çalıştır
+        // Heartbeat — run directly via chat() in the agent's session
         const nowDate = new Date();
-        const dayName = TR_DAY_NAMES[nowDate.getDay()];
+        const dayName = DAY_NAMES[nowDate.getDay()];
         const timeStr = `${String(nowDate.getHours()).padStart(2, "0")}:${String(nowDate.getMinutes()).padStart(2, "0")}`;
-        const dateStr = nowDate.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
+        const dateStr = nowDate.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
 
-        const heartbeatPrompt = `[HEARTBEAT]\nSaat: ${timeStr} (${dayName}, ${dateStr})\n\nbehaviors.md'ini oku. Şu an yapman gereken proaktif bir şey var mı?\nEvet → yap. Hayır → sessiz kal.`;
+        const heartbeatPrompt = `[HEARTBEAT]\nTime: ${timeStr} (${dayName}, ${dateStr})\n\nRead your behaviors.md. Is there anything proactive you should do right now?\nYes → do it. No → stay silent.`;
 
         const topicRoute = getTopicRoute(agent.topicId);
         if (!topicRoute) continue;
 
-        // Log kanalına heartbeat bilgisi yaz (görsel takip için)
+        // Log heartbeat to channel (for visual tracking)
         if (config.LOG_CHANNEL_ID) {
           this.bot.api.sendMessage(config.LOG_CHANNEL_ID, `⏱ ${agent.id} heartbeat @ ${timeStr}`).catch(() => {});
         }
 
-        // Agent'ın session'ında çalıştır
+        // Run in agent's session
         handleTopicMessage(
           config.MY_TELEGRAM_ID,
           config.COBRAIN_HUB_ID!,
@@ -321,7 +321,7 @@ class BrainLoop {
           topicRoute,
           heartbeatPrompt,
         ).then(async (response) => {
-          // Cevabı topic'e yaz
+          // Write response to topic
           if (response && response.trim() && this.bot) {
             await this.bot.api.sendMessage(config.COBRAIN_HUB_ID!, response, {
               message_thread_id: agent.topicId,
@@ -345,19 +345,19 @@ class BrainLoop {
     const pendingItem = inbox.pending()[0];
     if (!pendingItem) return;
 
-    // Kullanıcı konuşuyorsa bekle
+    // Wait if user is in conversation
     if (isUserBusy(config.MY_TELEGRAM_ID)) return;
 
     const prompt = [
-      `[GELEN KUTUSU — ${pendingItem.from.toUpperCase()}]`,
-      `Konu: ${pendingItem.subject}`,
+      `[INBOX — ${pendingItem.from.toUpperCase()}]`,
+      `Subject: ${pendingItem.subject}`,
       ``,
       pendingItem.body,
     ].join("\n");
 
-    console.log(`[BrainLoop] Inbox item işleniyor: "${pendingItem.subject}"`);
+    console.log(`[BrainLoop] Processing inbox item: "${pendingItem.subject}"`);
 
-    // Kullanıcıya "çalışıyor" göster — her 4s yenile
+    // Show "typing" indicator — refresh every 4s
     const userId = config.MY_TELEGRAM_ID;
     if (this.bot) this.bot.api.sendChatAction(userId, "typing").catch(() => {});
     const typingInterval = this.bot
@@ -372,7 +372,7 @@ class BrainLoop {
       })
       .catch(err => {
         if (typingInterval) clearInterval(typingInterval);
-        console.error("[BrainLoop] Inbox işleme hatası:", err);
+        console.error("[BrainLoop] Inbox processing error:", err);
       });
   }
 

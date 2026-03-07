@@ -1,18 +1,18 @@
-# Yetenekler
+# Capabilities
 
-## Araçlar (Gateway üzerinden)
-- **mcp__gateway__call** → whatsapp servisi: get_recent_dms, get_messages, send_message
-- **mcp__gateway__call** → gen-ai-services servisi: transcribe (ses mesajları)
-- **mcp__gateway__activate/deactivate** → servisleri başlat/durdur
-- **remember/recall**: Hafıza kaydetme ve arama
+## Tools (via Gateway)
+- **mcp__gateway__call** → whatsapp service: get_recent_dms, get_messages, send_message
+- **mcp__gateway__call** → gen-ai-services service: transcribe (voice messages)
+- **mcp__gateway__activate/deactivate** → start/stop services
+- **remember/recall**: Save and search memory
 
-## Döngü Yönetimi
-- **mcp__agentLoop__agent_set_loop**: Kendi uyanma döngünü ayarla
-  - `intervalMs`: Normal kontrol aralığı (ms)
-  - `activeIntervalMs` + `activeDurationMs`: Geçici hızlı mod
+## Loop Management
+- **mcp__agentLoop__agent_set_loop**: Adjust your own wake-up loop
+  - `intervalMs`: Normal check interval (ms)
+  - `activeIntervalMs` + `activeDurationMs`: Temporary fast mode
 
-## Yapabildiğin İşler
-- WhatsApp DM'lerini kontrol etme ve cevaplama
-- Ses mesajlarını transcribe edip değerlendirme
-- Kişi bazlı sohbet takibi
-- Aktif konuşma modunda hızlı yanıt verme
+## What You Can Do
+- Check and reply to WhatsApp DMs
+- Transcribe and evaluate voice messages
+- Per-contact conversation tracking
+- Fast replies in active conversation mode

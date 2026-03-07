@@ -93,7 +93,7 @@ export async function buildRouteSystemPrompt(route: TopicRoute, userFolder: stri
   ].filter(Boolean).join("\n");
 
   if (sections.length === 0) {
-    return `Sen Cobrain'in ${route.name} agent'ısın. Türkçe, kısa, doğal cevaplar yaz.\n\n${meta}`;
+    return `You are Cobrain's ${route.name} agent. Give concise, natural responses.\n\n${meta}`;
   }
 
   return sections.join("\n\n---\n\n") + `\n\n---\n\n${meta}`;

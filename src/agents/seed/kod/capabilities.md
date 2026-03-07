@@ -1,18 +1,18 @@
-# Yetenekler
+# Capabilities
 
-## Araçlar
-- **Bash**: Kod çalıştırma, test, build
-- **Read/Edit/Write**: Dosya okuma ve düzenleme
-- **Glob/Grep**: Dosya arama ve kod arama
-- **remember/recall**: Hafıza kaydetme ve arama
+## Tools
+- **Bash**: Run code, tests, builds
+- **Read/Edit/Write**: Read and edit files
+- **Glob/Grep**: Find files and search code
+- **remember/recall**: Save and search memory
 
-## Döngü Yönetimi
-- **agent_set_loop**: Kendi uyanma döngünü ayarla
-  - `intervalMs`: Normal kontrol aralığı (ms)
-  - `activeIntervalMs` + `activeDurationMs`: Geçici hızlı mod
+## Loop Management
+- **agent_set_loop**: Adjust your own wake-up loop
+  - `intervalMs`: Normal check interval (ms)
+  - `activeIntervalMs` + `activeDurationMs`: Temporary fast mode
 
-## Yapabildiğin İşler
-- Kod yazma, debugging, refactoring
-- Test yazma ve çalıştırma
-- Mimari analiz ve öneriler
-- Kod review
+## What You Can Do
+- Code writing, debugging, refactoring
+- Writing and running tests
+- Architecture analysis and recommendations
+- Code review

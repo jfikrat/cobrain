@@ -19,7 +19,7 @@ export class ToolStreamNotifier {
   private lines: string[] = [];
   private userId: number;
   private chatId: number;        // DM → same as userId; Hub topic → group chat ID
-  private threadId?: number;     // Forum topic thread ID (Hub agent mesajları için)
+  private threadId?: number;     // Forum topic thread ID
   private lastEditTime = 0;
   private pendingEdit: Timer | null = null;
   private startTime = Date.now();
@@ -33,7 +33,7 @@ export class ToolStreamNotifier {
     this.userId = userId;
     this.chatId = chatId ?? userId;
     this.threadId = threadId;
-    this.header = agentName ? `🧠 ${agentName} çalışıyor...` : "🧠 Cortex çalışıyor...";
+    this.header = agentName ? `🧠 ${agentName} working...` : "🧠 Cortex working...";
   }
 
   async append(line: string): Promise<void> {
@@ -53,13 +53,13 @@ export class ToolStreamNotifier {
     const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(0);
 
     if (opts.error) {
-      this.lines.push(`\n❌ Hata: ${opts.error.slice(0, 200)}`);
+      this.lines.push(`\n❌ Error: ${opts.error.slice(0, 200)}`);
     } else {
       const costStr = opts.cost ? `, $${opts.cost.toFixed(3)}` : "";
       const stopWarning = opts.stopReason && opts.stopReason !== "end_turn"
-        ? `\n⚠️ ${opts.stopReason === "max_tokens" ? "Yanıt token limiti nedeniyle kesildi" : `Durma sebebi: ${opts.stopReason}`}`
+        ? `\n⚠️ ${opts.stopReason === "max_tokens" ? "Response truncated due to token limit" : `Stop reason: ${opts.stopReason}`}`
         : "";
-      this.lines.push(`\n✅ Tamamlandı (${this.toolCount} tool, ${elapsed}s${costStr})${stopWarning}`);
+      this.lines.push(`\n✅ Done (${this.toolCount} tool, ${elapsed}s${costStr})${stopWarning}`);
     }
 
     // Force flush (ignore rate limit)
@@ -128,50 +128,50 @@ export class ToolStreamNotifier {
 // Tool status message lookup (exact match)
 type StatusHandler = (i: Record<string, unknown>) => string;
 const TOOL_STATUS: Map<string, StatusHandler> = new Map([
-  ["WebSearch", (i) => `🔍 Web'de araştırma yapıyorum: "${i.query || ""}"`],
-  ["WebFetch", () => `🌐 Web sayfasını okuyorum...`],
-  ["Read", (i) => `📄 Dosya okuyorum: ${(i.file_path as string || "").split("/").pop()}`],
-  ["Write", (i) => `✍️ Dosya yazıyorum: ${(i.file_path as string || "").split("/").pop()}`],
-  ["Edit", (i) => `📝 Dosya düzenliyorum: ${(i.file_path as string || "").split("/").pop()}`],
+  ["WebSearch", (i) => `🔍 Searching: "${i.query || ""}"`],
+  ["WebFetch", () => `🌐 Reading web page...`],
+  ["Read", (i) => `📄 Reading: ${(i.file_path as string || "").split("/").pop()}`],
+  ["Write", (i) => `✍️ Writing: ${(i.file_path as string || "").split("/").pop()}`],
+  ["Edit", (i) => `📝 Editing: ${(i.file_path as string || "").split("/").pop()}`],
   ["Bash", (i) => {
     const desc = i.description as string | undefined;
     const cmd = (i.command as string || "").slice(0, 120);
     return desc ? `⚡ ${desc}` : `⚡ ${cmd}`;
   }],
-  ["Glob", (i) => `🔎 Dosya arıyorum: ${i.pattern}`],
-  ["Grep", (i) => `🔍 İçerik arıyorum: "${(i.pattern as string || "").slice(0, 50)}"`],
-  ["mcp__memory__remember", () => `🧠 Hafızaya kaydediyorum...`],
-  ["mcp__memory__recall", (i) => `🧠 Hafızamı tarıyorum: "${i.query}"`],
-  ["Task", (i) => `🚀 Yardımcı agent başlatıyorum: ${i.description}`],
-  ["TodoWrite", () => `📋 Görev listesini güncelliyorum...`],
+  ["Glob", (i) => `🔎 Finding files: ${i.pattern}`],
+  ["Grep", (i) => `🔍 Searching content: "${(i.pattern as string || "").slice(0, 50)}"`],
+  ["mcp__memory__remember", () => `🧠 Saving to memory...`],
+  ["mcp__memory__recall", (i) => `🧠 Searching memory: "${i.query}"`],
+  ["Task", (i) => `🚀 Launching sub-agent: ${i.description}`],
+  ["TodoWrite", () => `📋 Updating task list...`],
 ]);
 
 // Tool status message lookup (pattern/includes match)
 const TOOL_STATUS_PATTERN: [string, StatusHandler][] = [
-  ["gdrive_list", () => `📁 Google Drive'ı tarıyorum...`],
-  ["gdrive_search", () => `📁 Google Drive'ı tarıyorum...`],
-  ["gdrive_dirs", () => `📁 Google Drive'ı tarıyorum...`],
-  ["gdrive_link", () => `📁 Google Drive dosya bilgisi alıyorum...`],
-  ["gdrive_info", () => `📁 Google Drive dosya bilgisi alıyorum...`],
-  ["calendar_today", () => `📅 Bugünkü programa bakıyorum...`],
-  ["calendar_agenda", () => `📅 Takvime bakıyorum...`],
-  ["calendar_search", () => `🔍 Takvimde etkinlik arıyorum...`],
-  ["calendar_add", () => `📅 Takvime etkinlik ekliyorum...`],
-  ["squad_codex", () => `🤖 Codex ile analiz yapıyorum...`],
-  ["squad_gemini", () => `🤖 Gemini ile kod üretiyorum...`],
-  ["squad_claude", () => `🤖 Claude Code ile görüşüyorum...`],
-  ["helm_browser_navigate", () => `🌐 Sayfaya gidiyorum...`],
-  ["helm_browser_screenshot", () => `📸 Ekran görüntüsü alıyorum...`],
-  ["helm_browser_click", () => `👆 Elemente tıklıyorum...`],
-  ["helm_browser_type", () => `⌨️ Metin yazıyorum...`],
-  ["whatsapp_send_message", () => `💬 WhatsApp mesajı gönderiyorum...`],
-  ["whatsapp_get_messages", () => `💬 WhatsApp mesajlarını okuyorum...`],
-  ["whatsapp_get_chats", () => `💬 WhatsApp sohbetlerini listeliyorum...`],
-  ["whatsapp_get_contacts", () => `📇 WhatsApp kişilerini arıyorum...`],
-  ["gmail_inbox", () => `📬 Gmail gelen kutusuna bakıyorum...`],
-  ["gmail_search", (i) => `🔍 Gmail'de arıyorum: "${(i.query as string || "").slice(0, 30)}"`],
-  ["gmail_read", () => `📧 Maili okuyorum...`],
-  ["gmail_send", (i) => `📤 Mail gönderiyorum: "${i.subject}"`],
+  ["gdrive_list", () => `📁 Scanning Google Drive...`],
+  ["gdrive_search", () => `📁 Scanning Google Drive...`],
+  ["gdrive_dirs", () => `📁 Scanning Google Drive...`],
+  ["gdrive_link", () => `📁 Getting Drive file info...`],
+  ["gdrive_info", () => `📁 Getting Drive file info...`],
+  ["calendar_today", () => `📅 Checking today's schedule...`],
+  ["calendar_agenda", () => `📅 Checking calendar...`],
+  ["calendar_search", () => `🔍 Searching calendar events...`],
+  ["calendar_add", () => `📅 Adding calendar event...`],
+  ["squad_codex", () => `🤖 Analyzing with Codex...`],
+  ["squad_gemini", () => `🤖 Generating with Gemini...`],
+  ["squad_claude", () => `🤖 Consulting Claude Code...`],
+  ["helm_browser_navigate", () => `🌐 Navigating to page...`],
+  ["helm_browser_screenshot", () => `📸 Taking screenshot...`],
+  ["helm_browser_click", () => `👆 Clicking element...`],
+  ["helm_browser_type", () => `⌨️ Typing text...`],
+  ["whatsapp_send_message", () => `💬 Sending WhatsApp message...`],
+  ["whatsapp_get_messages", () => `💬 Reading WhatsApp messages...`],
+  ["whatsapp_get_chats", () => `💬 Listing WhatsApp chats...`],
+  ["whatsapp_get_contacts", () => `📇 Searching WhatsApp contacts...`],
+  ["gmail_inbox", () => `📬 Checking Gmail inbox...`],
+  ["gmail_search", (i) => `🔍 Searching Gmail: "${(i.query as string || "").slice(0, 30)}"`],
+  ["gmail_read", () => `📧 Reading email...`],
+  ["gmail_send", (i) => `📤 Sending email: "${i.subject}"`],
   ["gateway__call", (i) => `🔌 ${i.service || "?"}/${i.tool || "?"}`],
 ];
 
@@ -190,7 +190,7 @@ export function getToolStatusMessage(name: string, input: Record<string, unknown
     name === "EnterPlanMode" ||
     name === "ExitPlanMode"
   ) return "";
-  return `🔧 ${name} kullanıyorum...`;
+  return `🔧 Using ${name}...`;
 }
 
 /**
@@ -265,7 +265,7 @@ export function createPreToolUseHooks(params: {
                 hookSpecificOutput: {
                   hookEventName: "PreToolUse" as const,
                   permissionDecision: "deny" as const,
-                  permissionDecisionReason: result.message || "Kullanıcı tarafından reddedildi",
+                  permissionDecisionReason: result.message || "Denied by user",
                 },
               };
             }

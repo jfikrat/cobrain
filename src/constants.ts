@@ -5,8 +5,8 @@
 
 // ── Locale & Timezone ──
 export const DEFAULT_TIMEZONE = "Europe/Istanbul";
-export const DEFAULT_LOCALE = "tr-TR";
-export const TR_DAY_NAMES = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+export const DEFAULT_LOCALE = "en-US";
+export const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 // ── Active Hours ──
 export const ACTIVE_HOUR_START = 7;   // 07:00

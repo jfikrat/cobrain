@@ -97,10 +97,10 @@ async function handleDailySummaryTask(task: QueuedTask): Promise<TaskResult> {
     const reminders = remindersService.getPendingReminders();
     const pendingCount = remindersService.getPendingCount();
 
-    let message = `<b>Günaydın! Günlük Özet</b>\n\n`;
+    let message = `<b>Good morning! Daily Summary</b>\n\n`;
 
     if (reminders.length > 0) {
-      message += `<b>Bugünkü Hatırlatıcılar</b>\n`;
+      message += `<b>Today's Reminders</b>\n`;
       const today = new Date();
       const todayReminders = reminders.filter((r) => {
         const triggerDate = new Date(r.triggerAt);
@@ -108,20 +108,20 @@ async function handleDailySummaryTask(task: QueuedTask): Promise<TaskResult> {
       });
 
       for (const reminder of todayReminders.slice(0, 3)) {
-        const time = new Date(reminder.triggerAt).toLocaleTimeString("tr-TR", {
+        const time = new Date(reminder.triggerAt).toLocaleTimeString("en-US", {
           hour: "2-digit",
           minute: "2-digit",
         });
         message += `• ${time} - ${reminder.title}\n`;
       }
       if (todayReminders.length === 0) {
-        message += `  <i>Bugün için hatırlatıcı yok</i>\n`;
+        message += `  <i>No reminders for today</i>\n`;
       }
       message += "\n";
     }
 
-    message += `<b>Bekleyen hatırlatıcı:</b> ${pendingCount}\n`;
-    message += `\n<i>İyi günler!</i>`;
+    message += `<b>Pending reminders:</b> ${pendingCount}\n`;
+    message += `\n<i>Have a great day!</i>`;
 
     await bot.api.sendMessage(task.userId, message, { parse_mode: "HTML" });
 
@@ -152,7 +152,7 @@ async function handleReminderTask(task: QueuedTask): Promise<TaskResult> {
     console.log(`[Reminder] Triggering agent for reminder #${reminderId}: ${actionText}`);
     const response = await think(
       task.userId,
-      `[SYSTEM] Hatırlatıcı tetiklendi: "${actionText}"\n\nBu hatırlatıcıyı şimdi yerine getir. Gerekli aksiyonu al (mesaj gönder, bilgi ver, vb.) ve kullanıcıya bildir.`
+      `[SYSTEM] Reminder triggered: "${actionText}"\n\nExecute this reminder now. Take the necessary action (send message, provide info, etc.) and notify the user.`
     );
 
     // Send agent's response to user via Telegram
