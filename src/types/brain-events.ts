@@ -53,7 +53,6 @@ export interface BrainEvent {
 
 export interface FeatureFlags {
   FF_BRAIN_EVENTS: boolean; // Event logging active
-  FF_ROUTER_LITE: boolean; // Model cascade active
 }
 
 // ─── Route Decision ──────────────────────────────────────

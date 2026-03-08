@@ -9,7 +9,6 @@ import { getTaskQueue } from "./task-queue.ts";
 import { getRemindersService } from "./reminders.ts";
 import { userManager } from "./user-manager.ts";
 import { think } from "../brain/index.ts";
-import { escapeHtml } from "../utils/escape-html.ts";
 import type { ScheduledTask, QueuedTask, TaskResult } from "../types/autonomous.ts";
 import { config as appConfig } from "../config.ts";
 import { recordInteraction, recordUserActivity } from "./interaction-tracker.ts";
@@ -39,8 +38,6 @@ export function initProactiveInfra(botInstance: Bot): void {
   // Register queue task handlers
   taskQueue.registerHandler("reminder", handleReminderTask);
   taskQueue.registerHandler("daily_summary", handleDailySummaryTask);
-  taskQueue.registerHandler("memory_prune", handleMemoryPruneTask);
-  taskQueue.registerHandler("memory_consolidation", handleMemoryConsolidationTask);
 
   // Start services
   scheduler.start();
@@ -175,12 +172,3 @@ async function handleReminderTask(task: QueuedTask): Promise<TaskResult> {
   }
 }
 
-async function handleMemoryPruneTask(_task: QueuedTask): Promise<TaskResult> {
-  // No-op: FileMemory has no TTL-based pruning
-  return { success: true };
-}
-
-async function handleMemoryConsolidationTask(_task: QueuedTask): Promise<TaskResult> {
-  // No-op: Mneme handles FileMemory consolidation
-  return { success: true };
-}

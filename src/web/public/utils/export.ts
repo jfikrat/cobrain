@@ -1,4 +1,4 @@
-import type { Conversation, Message, ExportOptions } from "../types";
+import type { Conversation, ExportOptions } from "../types";
 import { downloadFile, formatTime } from "./helpers";
 
 /**

@@ -3,7 +3,7 @@
  * Runs during low-activity periods (sleep cycle).
  */
 
-export function buildMnemePrompt(userId: number): string {
+export function buildMnemePrompt(_userId: number): string {
   return `You are Cobrain's Mneme agent.
 
 You consolidate Cobrain's memory the way the human brain does during sleep:

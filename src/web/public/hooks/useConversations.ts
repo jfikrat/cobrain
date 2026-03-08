@@ -238,7 +238,7 @@ export function useConversations(options?: UseConversationsOptions): UseConversa
 
       // If deleted active conversation, switch to another
       if (activeConversationId === id) {
-        setActiveConversationId((prev) => {
+        setActiveConversationId((_prev) => {
           const remaining = conversations.filter((c) => c.id !== id);
           return remaining.length > 0 ? remaining[0]!.id : null;
         });

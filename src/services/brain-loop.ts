@@ -12,7 +12,6 @@ import { Bot } from "grammy";
 import { config } from "../config.ts";
 import { userManager } from "./user-manager.ts";
 import { getRemindersService } from "./reminders.ts";
-import { getSessionState, updateSessionState } from "./session-state.ts";
 import { expectations } from "./expectations.ts";
 import { heartbeat } from "./heartbeat.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
@@ -20,7 +19,7 @@ import { chat, isUserBusy } from "../agent/chat.ts";
 import { handleTopicMessage, getTopicRoute } from "../channels/telegram-router.ts";
 import { mneme } from "../mneme/mneme.ts";
 import { inbox } from "./inbox.ts";
-import { readLoopConfig, type LoopConfig, DEFAULT_LOOP_CONFIG } from "../agent/tools/agent-loop.ts";
+import { readLoopConfig, type LoopConfig } from "../agent/tools/agent-loop.ts";
 import { DAY_NAMES, ACTIVE_HOUR_START, ACTIVE_HOUR_END, REMINDER_INBOX_TTL_MS, EXPECTATION_INBOX_TTL_MS, PROACTIVE_INBOX_TTL_MS } from "../constants.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -68,9 +67,6 @@ class BrainLoop {
 
   start(botInstance: Bot): void {
     this.bot = botInstance;
-    if (!config.MINIMAL_AUTONOMY) {
-      this.restoreState();
-    }
 
     this.fastIntervalId = setInterval(() => {
       this.fastTick().catch(err => console.error("[BrainLoop] fastTick error:", err));
@@ -91,9 +87,6 @@ class BrainLoop {
     if (this.slowIntervalId) {
       clearInterval(this.slowIntervalId);
       this.slowIntervalId = null;
-    }
-    if (!config.MINIMAL_AUTONOMY) {
-      this.persistState();
     }
     console.log("[BrainLoop] Stopped");
   }
@@ -146,9 +139,6 @@ class BrainLoop {
       console.error("[BrainLoop] checkProactiveBehaviors error:", err);
     }
 
-    if (!config.MINIMAL_AUTONOMY) {
-      this.persistState();
-    }
   }
 
   // ── Due Reminders → Inbox ────────────────────────────────────────────
@@ -376,27 +366,6 @@ class BrainLoop {
       });
   }
 
-  // ── State Persistence ──────────────────────────────────────────────
-
-  private restoreState(): void {
-    try {
-      const state = getSessionState(config.MY_TELEGRAM_ID);
-      this.lastProactiveCheckHour = state.lastProactiveCheckHour ?? null;
-      console.log(`[BrainLoop] State restored`);
-    } catch (err) {
-      console.warn("[BrainLoop] State restore failed:", err);
-    }
-  }
-
-  private persistState(): void {
-    try {
-      updateSessionState(config.MY_TELEGRAM_ID, {
-        lastProactiveCheckHour: this.lastProactiveCheckHour,
-      });
-    } catch (err) {
-      console.warn("[BrainLoop] State persist failed:", err);
-    }
-  }
 }
 
 // ── Singleton ────────────────────────────────────────────────────────────

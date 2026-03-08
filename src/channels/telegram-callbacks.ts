@@ -3,7 +3,7 @@ import { think } from "../brain/index.ts";
 import { recordInteraction } from "../services/interaction-tracker.ts";
 import { isAuthorized, parseSuggestions, buildSuggestionKeyboard, type TelegramContext } from "./telegram-helpers.ts";
 
-export function registerCallbacks(bot: Bot, ctx: TelegramContext) {
+export function registerCallbacks(bot: Bot, _ctx: TelegramContext) {
   // ============ MOOD CALLBACK ============
 
   bot.callbackQuery(/^mood_(great|neutral|low)$/, async (c) => {

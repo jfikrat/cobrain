@@ -6,7 +6,6 @@
 
 import {
   query,
-  type SDKMessage,
   type SDKResultMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { userManager } from "../services/user-manager.ts";
@@ -366,25 +365,7 @@ export async function _executeChat(
       }),
     };
 
-    const subAgents = config.MINIMAL_AUTONOMY
-      ? undefined
-      : {
-          // Sub-agents of Cortex (main agent) — brain-themed names
-          frontal: {
-            description: "Research the web and gather information. Use for current information, news, and technical documentation.",
-            prompt: "You are Cortex's research sub-agent (Frontal). Research the given topic on the web, gather information from reliable sources, and provide a summary.",
-            tools: ["WebSearch", "WebFetch"],
-          },
-          wernicke: {
-            description: "Summarize and analyze long texts. Use for articles, documents, and conversation summaries.",
-            prompt: "You are Cortex's language and meaning sub-agent (Wernicke). Summarize the given text clearly and concisely. Highlight the important points.",
-          },
-          mneme: {
-            description: "Search and analyze the user's memory. Use for past conversations and saved information.",
-            prompt: "You are Cortex's memory sub-agent (Mneme). Search the user's memory in detail, find relevant information, and summarize it.",
-            tools: ["mcp__memory__recall", "mcp__memory__memory_stats"],
-          },
-        };
+    const subAgents = undefined;
 
     const queryResult = query({
       prompt,

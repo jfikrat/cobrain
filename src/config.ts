@@ -11,23 +11,8 @@ const envSchema = z.object({
   // v0.2: Per-user folders
   COBRAIN_BASE_PATH: z.string().default(join(homedir(), ".cobrain")),
 
-  // v0.2: Memory settings
-  MAX_MEMORY_AGE_DAYS: z.coerce.number().default(90),
-
   // v0.2: Autonomous features
   ENABLE_AUTONOMOUS: z
-    .string()
-    .default("true")
-    .transform((val) => val === "true" || val === "1"),
-
-  // Minimal autonomy mode: prefer direct LLM reasoning over orchestration layers
-  MINIMAL_AUTONOMY: z
-    .string()
-    .default("true")
-    .transform((val) => val === "true" || val === "1"),
-
-  // v0.3: Agent SDK mode (vs CLI mode)
-  USE_AGENT_SDK: z
     .string()
     .default("true")
     .transform((val) => val === "true" || val === "1"),
@@ -56,7 +41,6 @@ const envSchema = z.object({
 
   // v0.9: Brain Events — Phase 1
   FF_BRAIN_EVENTS: z.coerce.boolean().default(true),
-  FF_ROUTER_LITE: z.coerce.boolean().default(true), // active — only downgrades "fast" (simple) queries
   FF_SESSION_STATE: z.coerce.boolean().default(true),
   FF_MEMORY_CONSOLIDATION: z.coerce.boolean().default(true),
 
@@ -82,12 +66,6 @@ const envSchema = z.object({
 
   // Log channel: autonomous event logs sent here
   LOG_CHANNEL_ID: z.coerce.number().optional(),
-
-  // WA Agent — standalone process
-  WA_AGENT_ENABLED: z.string().default("false").transform(v => v === "true" || v === "1"),
-  WA_AGENT_PORT: z.coerce.number().default(3001),
-  // WhatsApp Worker WS port (pure WS MCP)
-  WHATSAPP_WS_PORT: z.coerce.number().optional(),
 
   // Folder layout: MCP servers root
   MCP_SERVERS_HOME: z.string().default(join(homedir(), "mcp-servers")),

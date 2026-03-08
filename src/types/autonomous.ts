@@ -5,7 +5,6 @@
 
 export type TaskType =
   | "daily_summary"
-  | "goal_check"
   | "reminder"
   | "memory_prune"
   | "memory_consolidation"

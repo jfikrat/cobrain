@@ -4,7 +4,7 @@
  */
 
 import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
-import { toolSuccess, toolError, toolJson } from "../../utils/tool-response.ts";
+import { toolSuccess } from "../../utils/tool-response.ts";
 import { z } from "zod";
 import type { Bot } from "grammy";
 import { InputFile } from "grammy";

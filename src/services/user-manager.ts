@@ -6,22 +6,19 @@
 import { Database } from "bun:sqlite";
 import { mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { config } from "../config.ts";
 import { UserMemory } from "../memory/sqlite.ts";
-import type { User, UserSettings, UserStats, DEFAULT_USER_SETTINGS } from "../types/user.ts";
+import type { User, UserSettings, UserStats } from "../types/user.ts";
 
 export class UserManager {
   private globalDb: Database;
   private userDbs: Map<number, Database> = new Map();
   private userMemories: Map<number, UserMemory> = new Map();
   private basePath: string;
-  private projectRoot: string;
 
   constructor() {
     this.basePath = config.COBRAIN_BASE_PATH;
-    this.projectRoot = process.env.COBRAIN_WORK_DIR || process.cwd();
     this.globalDb = this.initGlobalDb();
   }
 

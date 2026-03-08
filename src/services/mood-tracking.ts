@@ -49,11 +49,11 @@ const MOOD_VALUES: Record<MoodType, number> = {
 
 export class MoodTrackingService {
   private db: Database;
-  private userId: number;
+  private _userId: number;
 
   constructor(userDb: Database, userId: number) {
     this.db = userDb;
-    this.userId = userId;
+    this._userId = userId;
     this.initTable();
   }
 

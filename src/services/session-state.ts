@@ -95,7 +95,6 @@ export function getSessionState(userId: number): SessionState {
   // 2. Disk
   try {
     const filePath = getStatePath(userId);
-    const file = Bun.file(filePath);
     // Bun.file doesn't throw on missing — check size synchronously
     const text = readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(text) as Partial<SessionState>;

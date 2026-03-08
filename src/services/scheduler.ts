@@ -228,7 +228,7 @@ export class Scheduler {
       return next.toISOString();
     }
 
-    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+    const [minute, hour, _dayOfMonth, _month, dayOfWeek] = parts;
     const now = new Date();
     const next = new Date(now);
 
@@ -324,50 +324,6 @@ export class Scheduler {
    */
   deleteTask(taskId: number): void {
     this.globalDb.run("DELETE FROM scheduled_tasks WHERE id = ?", [taskId]);
-  }
-
-  /**
-   * Setup default tasks for a new user
-   */
-  setupDefaultTasks(userId: number): void {
-    // Check if user already has tasks
-    const existing = this.globalDb
-      .query<{ count: number }, [number]>("SELECT COUNT(*) as count FROM scheduled_tasks WHERE user_id = ?")
-      .get(userId);
-
-    if (existing && existing.count > 0) {
-      return; // Already has tasks
-    }
-
-    // Daily summary at 9:00 AM
-    this.scheduleTask(userId, "daily_summary", "0 9 * * *", { enabled: true });
-
-    // Weekly goal check on Sundays at 10:00 AM
-    this.scheduleTask(userId, "goal_check", "0 10 * * 0", { enabled: true });
-
-    // Memory prune weekly on Mondays at 3:00 AM
-    this.scheduleTask(userId, "memory_prune", "0 3 * * 1", { enabled: true });
-
-    // Memory consolidation weekly on Sundays at 4:00 AM
-    this.scheduleTask(userId, "memory_consolidation", "0 4 * * 0", { enabled: true });
-
-    console.log(`[Scheduler] Default tasks created for user ${userId}`);
-  }
-
-  /**
-   * Ensure a specific task type exists for a user (backfill for new task types)
-   */
-  ensureTask(userId: number, taskType: TaskType, schedule: string, taskConfig?: Record<string, unknown>): void {
-    const existing = this.globalDb
-      .query<{ count: number }, [number, string]>(
-        "SELECT COUNT(*) as count FROM scheduled_tasks WHERE user_id = ? AND task_type = ?"
-      )
-      .get(userId, taskType);
-
-    if (existing && existing.count > 0) return;
-
-    this.scheduleTask(userId, taskType, schedule, taskConfig);
-    console.log(`[Scheduler] Backfilled task ${taskType} for user ${userId}`);
   }
 
   close(): void {

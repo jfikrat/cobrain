@@ -6,10 +6,7 @@
 import { startBot, stopBot, bot } from "./channels/telegram.ts";
 import { closeAll } from "./brain/index.ts";
 import { config } from "./config.ts";
-import { initProactiveInfra, stopProactiveInfra } from "./services/proactive.ts";
 import { brainLoop } from "./services/brain-loop.ts";
-import { initScheduler } from "./services/scheduler.ts";
-import { initTaskQueue } from "./services/task-queue.ts";
 import { expectations } from "./services/expectations.ts";
 import {
   heartbeat,
@@ -38,7 +35,7 @@ console.log(`
 
   Personal AI Assistant v0.5.0
   Base: ${config.COBRAIN_BASE_PATH}
-  Mode: ${config.USE_AGENT_SDK ? "Agent SDK" : "CLI (tmux)"}
+  Mode: Agent SDK
   Autonomous: ${config.ENABLE_AUTONOMOUS ? "Enabled" : "Disabled"}
   Web UI: ${config.ENABLE_WEB_UI ? `Enabled (port ${config.WEB_PORT})` : "Disabled"}
 `);
@@ -55,8 +52,6 @@ registerHeartbeatComponent("app", { required: true });
 registerHeartbeatComponent("ai_agent", { required: true });
 registerHeartbeatComponent("telegram_bot", { required: true });
 registerHeartbeatComponent("web_server", { required: config.ENABLE_WEB_UI });
-registerHeartbeatComponent("scheduler", { required: config.ENABLE_AUTONOMOUS && !config.MINIMAL_AUTONOMY });
-registerHeartbeatComponent("task_queue", { required: config.ENABLE_AUTONOMOUS && !config.MINIMAL_AUTONOMY });
 registerHeartbeatComponent("brain_loop", { required: config.ENABLE_AUTONOMOUS });
 
 heartbeat("app", { event: "startup" });
@@ -69,11 +64,6 @@ const appHeartbeatInterval = setInterval(() => {
 const aiAgentHeartbeatInterval = setInterval(() => {
   heartbeat("ai_agent", { event: "tick" });
 }, Math.max(10_000, Math.floor(config.HEARTBEAT_STALE_AFTER_MS / 3)));
-
-if (config.ENABLE_AUTONOMOUS && !config.MINIMAL_AUTONOMY) {
-  initScheduler({ enabled: true });
-  initTaskQueue({ enabled: true });
-}
 
 // Initialize locale from user settings
 {
@@ -115,13 +105,6 @@ if (config.ENABLE_AUTONOMOUS) {
       expectations.cleanExpired();
     }, config.CORTEX_EXPECTATION_CLEANUP_INTERVAL_MS);
 
-    if (!config.MINIMAL_AUTONOMY) {
-      initProactiveInfra(bot);
-      console.log("[Autonomous] Proactive infrastructure enabled");
-    } else {
-      console.log("[Autonomous] Minimal autonomy mode: proactive infra disabled");
-    }
-
     // Start BrainLoop (events routed directly to Cortex)
     brainLoop.start(bot);
     console.log("[Startup] BrainLoop started");
@@ -136,10 +119,6 @@ const shutdown = async () => {
 
   await brainLoop.stop();
   stopProjectionScheduler();
-
-  if (config.ENABLE_AUTONOMOUS && !config.MINIMAL_AUTONOMY) {
-    stopProactiveInfra();
-  }
 
   if (config.ENABLE_WEB_UI) {
     stopWebServer();

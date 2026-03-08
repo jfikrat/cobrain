@@ -17,7 +17,7 @@ import { t } from "../i18n/index.ts";
 export class ToolStreamNotifier {
   private messageId: number | null = null;
   private lines: string[] = [];
-  private userId: number;
+  private _userId: number;
   private chatId: number;
   private threadId?: number;
   private lastEditTime = 0;
@@ -30,7 +30,7 @@ export class ToolStreamNotifier {
   private header: string;
 
   constructor(userId: number, chatId?: number, threadId?: number, agentName?: string) {
-    this.userId = userId;
+    this._userId = userId;
     this.chatId = chatId ?? userId;
     this.threadId = threadId;
     this.header = agentName

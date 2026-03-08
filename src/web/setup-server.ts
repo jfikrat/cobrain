@@ -36,7 +36,6 @@ function generateEnvFile(formData: Record<string, string>): string {
     { key: "AGENT_MODEL", default: "claude-opus-4-6" },
     { key: "MAX_HISTORY", default: "10" },
     { key: "ENABLE_AUTONOMOUS", default: "true" },
-    { key: "USE_AGENT_SDK", default: "true" },
     { key: "PERMISSION_MODE", default: "smart" },
     { key: "ENABLE_WEB_UI", default: "true" },
     { key: "ENABLE_HEARTBEAT_MONITORING", default: "true" },

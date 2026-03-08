@@ -1,5 +1,4 @@
-import { useEffect, useCallback, useRef } from "react";
-import type { KeyboardShortcut } from "../types";
+import { useEffect, useRef } from "react";
 
 type ShortcutHandler = () => void;
 

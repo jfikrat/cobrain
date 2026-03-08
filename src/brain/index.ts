@@ -12,9 +12,6 @@ import { chat as agentChat, clearSession as agentClearSession, type MultimodalMe
 import { generateTraceId } from "../types/brain-events.ts";
 import { getEventStore } from "./event-store.ts";
 
-// Session state persistence
-import { updateSessionState, detectPhase, detectTopic, type SessionState } from "../services/session-state.ts";
-
 export interface ThinkResponse {
   content: string;
   inputTokens: number;
@@ -100,25 +97,6 @@ export async function think(userId: number, message: string | MultimodalMessage,
         costUsd: response.costUsd,
         latencyMs: Date.now() - startMs,
       });
-    }
-
-    // Session state update (after response)
-    if (config.FF_SESSION_STATE && !config.MINIMAL_AUTONOMY) {
-      try {
-        const detectedPhase = detectPhase(response.content);
-        const detectedTopic = detectTopic(textMessage, response.content);
-        const updates: Partial<SessionState> = {
-          lastUserMessage: textMessage.slice(0, 200),
-        };
-        if (detectedTopic) updates.lastTopic = detectedTopic;
-        if (detectedPhase) {
-          updates.conversationPhase = detectedPhase.phase;
-          updates.confidence = detectedPhase.confidence;
-        }
-        updateSessionState(userId, updates);
-      } catch (err) {
-        console.warn(`[Brain] Session state update failed:`, err);
-      }
     }
 
     return response;
