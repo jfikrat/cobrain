@@ -60,8 +60,8 @@ export const en: Record<string, string> = {
 
   // ── Bot commands ──
   "cmd.unauthorized": "This bot is for private use.",
-  "cmd.start": `🧠 <b>Cobrain</b> — Personal AI Assistant\n\n<b>Commands:</b>\n/status — Bot status\n/help — Help\n/lang — Change language\n\n<b>AI Chat:</b>\nJust send a message, I'll reply.`,
-  "cmd.help": `🧠 <b>Cobrain Help</b>\n\n<b>AI Chat:</b>\nJust send a message, Cobrain replies.\nUse natural language for memory, goals, reminders:\n• "Remember this: ..."\n• "New goal: ..."\n• "Remind me in 10 minutes: ..."\n\n<b>Settings:</b>\n/mode — Change permission mode\n/lang — Change language\n\n<b>Other:</b>\n/status — Bot status\n/clear — Reset session`,
+  "cmd.start": `🧠 <b>Cobrain</b> — Personal AI Assistant\n\n<b>Quick Setup:</b>\n1. /lang — Set your language\n2. Tell me about yourself (name, role, interests)\n3. Start chatting!\n\nType /help for all commands.`,
+  "cmd.help": `🧠 <b>Cobrain Help</b>\n\n<b>AI Chat:</b>\nJust send a message. Cobrain has memory, can browse the web, manage files, and use tools autonomously.\n\n<b>Agents:</b>\nCobrain runs specialized agents (code, research, WhatsApp...). Each agent has its own topic in the Hub group.\n\n<b>Commands:</b>\n/status — Bot stats\n/clear — Reset session\n/mode — Permission mode (strict/smart/yolo)\n/lang — Change language\n/web — Open web UI\n/restart — Restart bot\n\n<b>Tips:</b>\n• "Remember this: ..." — saves to memory\n• "Remind me at 15:00: ..." — sets a reminder\n• Send voice/image/file — Cobrain processes them`,
   "cmd.status_title": "🧠 <b>Cobrain Status</b>",
   "cmd.active": "Active ✅",
   "cmd.your_stats": "Your Stats",
