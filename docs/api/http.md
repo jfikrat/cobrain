@@ -1,250 +1,199 @@
 # HTTP API
 
-Cobrain exposes a minimal HTTP API primarily for the Web UI. The server runs on `WEB_PORT` (default: 3000) when `ENABLE_WEB_UI=true`.
+Cobrain exposes a small Bun HTTP API for external agents, automations, and health checks. The server listens on `API_PORT` and does not serve a frontend.
 
 ## Base URL
 
-```
+```text
 http://localhost:3000
 ```
 
-In production, configure `WEB_URL` to your public URL.
+Set `API_PORT` to move the server to a different port.
+
+## Authentication
+
+- `GET /health` is public.
+- Every `/api/*` route requires `Authorization: Bearer <COBRAIN_API_KEY>`.
+- If `COBRAIN_API_KEY` is empty, authenticated API routes will return `401 Unauthorized`.
+
+Example:
+
+```bash
+curl \
+  -H "Authorization: Bearer $COBRAIN_API_KEY" \
+  http://localhost:3000/api/memory/recall
+```
 
 ## Endpoints
 
-### GET /
-
-Serves the Web UI.
-
-**Response**: HTML page (React application)
-
-**Usage**:
-```bash
-curl http://localhost:3000
-```
-
-Returns the main index.html which loads the React frontend.
-
 ### GET /health
 
-Health check endpoint.
+Simple liveness probe.
 
-**Response**:
-```json
-{
-  "status": "ok",
-  "timestamp": "2024-01-25T10:00:00.000Z"
-}
+Response:
+
+```text
+OK
 ```
 
-**Usage**:
+Example:
+
 ```bash
 curl http://localhost:3000/health
 ```
 
-### GET /api/status
+### POST /api/chat
 
-Returns server status and version information.
+Send a message into Cobrain and get the model response as JSON.
 
-**Response**:
+Request body:
+
 ```json
 {
-  "status": "running",
-  "version": "0.4.0",
-  "timestamp": "2024-01-25T10:00:00.000Z",
-  "uptime": 3600
+  "message": "Summarize today's priorities",
+  "model": "claude-sonnet-4-6",
+  "sessionKey": "daily-checkin",
+  "silent": false,
+  "systemPromptOverride": "Be terse."
 }
 ```
 
-**Fields**:
-- `status`: Server state ("running")
-- `version`: Cobrain version
-- `timestamp`: Current server time (ISO 8601)
-- `uptime`: Server uptime in seconds
+Fields:
 
-**Usage**:
+- `message` is required.
+- `model` is optional.
+- `sessionKey` is optional and is forwarded into chat session handling.
+- `silent` skips Telegram mirroring when `true`.
+- `systemPromptOverride` is optional and replaces the normal system prompt.
+
+Example:
+
 ```bash
-curl http://localhost:3000/api/status
+curl -X POST http://localhost:3000/api/chat \
+  -H "Authorization: Bearer $COBRAIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Summarize priorities","sessionKey":"daily-checkin"}'
 ```
 
-### WebSocket /ws
+Validation error:
 
-Upgrades to WebSocket connection for real-time chat.
-
-**Query Parameters**:
-- `token` (required): Authentication token from `/web` command
-
-**Example**:
-```javascript
-const ws = new WebSocket('ws://localhost:3000/ws?token=YOUR_TOKEN');
+```json
+{ "error": "message required" }
 ```
 
-See [WebSocket API](./websocket.md) for message protocol.
+### POST /api/report
 
-## Authentication
+Push a report from an external agent into Cobrain's inbox.
 
-### Token-Based Auth
-
-The Web UI uses token-based authentication:
-
-1. User requests token via Telegram `/web` command
-2. Token is generated with 24-hour expiry
-3. Token passed as URL query parameter
-4. Validated on WebSocket connection
-
-### Token Format
-
-Tokens are opaque strings generated server-side:
-```
-eyJhbGciOiJIUzI1NiIs...
-```
-
-### Token Validation
-
-The server validates:
-- Token exists in database
-- Token hasn't expired
-- Token maps to valid user
-
-## Static Files
-
-Static assets are served from `/public`:
-
-```
-GET /app.js           → Bundled React app
-GET /styles/output.css → Compiled Tailwind CSS
-GET /favicon.ico      → Site icon
-```
-
-These are served automatically by Bun.serve's static file handling.
-
-## Error Responses
-
-### 401 Unauthorized
+Request body:
 
 ```json
 {
-  "error": "Unauthorized",
-  "message": "Invalid or expired token"
+  "agentId": "research",
+  "subject": "Daily digest ready",
+  "message": "Three follow-ups need attention.",
+  "priority": "normal"
 }
 ```
 
-### 404 Not Found
+Fields:
+
+- `agentId`, `subject`, and `message` are required.
+- `priority` may be `urgent` or `normal`.
+- Reports with `agentId === "wa"` are accepted but logged only; they are not queued into the inbox.
+
+Success response:
+
+```json
+{ "ok": true, "queued": true }
+```
+
+Validation error:
+
+```json
+{ "error": "agentId, subject, message required" }
+```
+
+### GET /api/memory/recall
+
+Read a snapshot of Cobrain memory for the configured Telegram user.
+
+Query parameters:
+
+- `query` optional, defaults to `all`
+- `days` optional, defaults to `30`
+
+Example:
+
+```bash
+curl "http://localhost:3000/api/memory/recall?query=projects&days=14" \
+  -H "Authorization: Bearer $COBRAIN_API_KEY"
+```
+
+Response shape:
 
 ```json
 {
-  "error": "Not Found",
-  "message": "Endpoint does not exist"
+  "facts": "...",
+  "events": "...",
+  "query": "projects"
 }
 ```
 
-### 500 Internal Server Error
+### POST /api/memory/remember
+
+Write semantic or episodic memory on behalf of an external agent.
+
+Request body:
 
 ```json
 {
-  "error": "Internal Server Error",
-  "message": "An unexpected error occurred"
+  "content": "Cagla prefers updates before noon.",
+  "type": "semantic",
+  "section": "People"
 }
 ```
 
-## CORS
+Fields:
 
-By default, CORS is not configured (same-origin only).
+- `content` is required.
+- `type` may be `semantic` or `episodic`.
+- `section` is optional and only used for semantic memories.
 
-For cross-origin access, configure your reverse proxy or add CORS headers:
+Success response:
 
-```typescript
-// In production, handled by nginx/reverse proxy
-Access-Control-Allow-Origin: https://your-domain.com
-Access-Control-Allow-Methods: GET, POST, OPTIONS
-Access-Control-Allow-Headers: Content-Type
+```json
+{ "ok": true }
 ```
 
-## Rate Limiting
+Validation error:
 
-No built-in rate limiting. For production:
-
-1. Use a reverse proxy (nginx)
-2. Configure rate limits at proxy level
-3. Consider per-token limits
-
-Example nginx config:
-```nginx
-limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
-
-location /api/ {
-    limit_req zone=api burst=20;
-    proxy_pass http://localhost:3000;
-}
+```json
+{ "error": "content required" }
 ```
 
-## Server Implementation
+## Common Error Responses
 
-The HTTP server uses Bun.serve:
+Unauthorized:
 
-```typescript
-Bun.serve({
-  port: config.WEB_PORT,
-  fetch(request) {
-    const url = new URL(request.url);
-
-    if (url.pathname === '/health') {
-      return Response.json({ status: 'ok', timestamp: new Date() });
-    }
-
-    if (url.pathname === '/api/status') {
-      return Response.json({
-        status: 'running',
-        version: '0.4.0',
-        timestamp: new Date(),
-        uptime: process.uptime()
-      });
-    }
-
-    // WebSocket upgrade
-    if (url.pathname === '/ws') {
-      const token = url.searchParams.get('token');
-      // ... validation and upgrade
-    }
-
-    // Static files and index.html
-    return serveStatic(request);
-  },
-  websocket: {
-    // ... WebSocket handlers
-  }
-});
+```json
+{ "error": "Unauthorized" }
 ```
 
-## Production Deployment
+Unexpected server error:
 
-### Reverse Proxy (nginx)
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name cobrain.example.com;
-
-    ssl_certificate /etc/ssl/certs/cobrain.crt;
-    ssl_certificate_key /etc/ssl/private/cobrain.key;
-
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
+```json
+{ "error": "Unknown error" }
 ```
 
-### Environment Variables
+Unknown route:
 
-```env
-ENABLE_WEB_UI=true
-WEB_PORT=3000
-WEB_URL=https://cobrain.example.com
+```text
+Not Found
 ```
 
-The `WEB_URL` is used to generate links in Telegram messages.
+## Notes
+
+- The API runs from `src/api-server.ts`.
+- `POST /api/chat` and `POST /api/report` are designed for trusted local or reverse-proxied callers.
+- For public exposure, add TLS, rate limiting, and IP filtering at the reverse proxy layer.

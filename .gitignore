@@ -6,9 +6,6 @@ out
 dist
 *.tgz
 
-# Tailwind CSS build output
-src/web/public/styles/output.css
-
 # code coverage
 coverage
 *.lcov

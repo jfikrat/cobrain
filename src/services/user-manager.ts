@@ -326,7 +326,7 @@ export class UserManager {
   }
 
   /**
-   * Get or create UserMemory for a specific user (sync version for WebSocket handlers)
+   * Get or create UserMemory for a specific user.
    */
   getUserMemory(userId: number): UserMemory {
     let memory = this.userMemories.get(userId);

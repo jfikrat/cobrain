@@ -4,8 +4,8 @@ import type { Api } from "grammy";
 import { config } from "../config.ts";
 
 /**
- * Transcription System Prompt — stt-electron'dan uyarlanmış detaylı versiyon.
- * Halüsinasyon önleme, pronunciation fix, code-switching desteği.
+ * Transcription system prompt adapted from stt-electron.
+ * Focuses on hallucination prevention, pronunciation fixes, and code-switching.
  */
 const TRANSCRIPTION_SYSTEM_PROMPT = `
 OUTPUT LANGUAGE: Auto-detect from the audio. Keep the same language(s) the speaker uses. If the speaker mixes languages, preserve the code-switching as-is.
@@ -74,8 +74,8 @@ const model = genAI.getGenerativeModel({
 const TRANSCRIPTION_USER_PROMPT = `Transcribe this audio.`;
 
 /**
- * Ses buffer'ının başına 3 saniyelik sessizlik ekler (FFmpeg concat)
- * Kısa ses kayıtlarında Gemini halüsinasyonunu önlemek için
+ * Prepends 3 seconds of silence to the audio buffer with FFmpeg concat.
+ * This reduces Gemini hallucinations on very short recordings.
  */
 async function prependSilence(audioBuffer: Buffer): Promise<Buffer> {
   const silencePath = join(process.cwd(), "data", "silence-3s.ogg");
@@ -86,7 +86,7 @@ async function prependSilence(audioBuffer: Buffer): Promise<Buffer> {
   console.log(`[Transcribe] prependSilence called, audioSize=${audioBuffer.length}, silencePath=${silencePath}`);
 
   try {
-    // Silence dosyasi var mi kontrol et
+    // Check whether the silence file exists
     const silenceFile = Bun.file(silencePath);
     if (!(await silenceFile.exists())) {
       console.warn(`[Transcribe] Silence file not found: ${silencePath}`);
@@ -127,7 +127,7 @@ async function prependSilence(audioBuffer: Buffer): Promise<Buffer> {
 }
 
 /**
- * Ses dosyasını Gemini ile metne çevirir
+ * Transcribes an audio buffer with Gemini.
  */
 export async function transcribeAudio(
   audioBuffer: Buffer,
@@ -160,16 +160,16 @@ export async function transcribeAudio(
 
   const transcript = result.response.text().trim();
 
-  // Post-processing: Gereksiz prefix'leri temizle
+  // Post-processing: strip common unwanted prefixes
   return cleanTranscriptOutput(transcript);
 }
 
 /**
- * Transcript çıktısını temizler ve halüsinasyon tespiti yapar
- * Gemini kısa seslerde system prompt'u tekrarlayabiliyor veya uydurma içerik üretebiliyor
+ * Cleans transcript output and detects obvious hallucinations.
+ * Gemini can sometimes echo prompt text or fabricate content on short audio.
  */
 function cleanTranscriptOutput(text: string): string {
-  // 1. Halüsinasyon tespiti — system/user prompt tekrarı veya meta-commentary
+  // 1. Hallucination detection: prompt leakage or meta-commentary
   const hallucinationMarkers = [
     // System prompt leak markers (English)
     "dictation transcription machine",
@@ -180,7 +180,7 @@ function cleanTranscriptOutput(text: string): string {
     "pronunciation slips",
     "here is the transcription",
     "transcribe this audio",
-    // System prompt leak markers (Turkish — eski prompt)
+    // System prompt leak markers (Turkish from an older prompt)
     "speech-to-text",
     "ses kaydını metne çevir",
     "ses kaydı boş veya anlaşılmıyor]",
@@ -201,8 +201,8 @@ function cleanTranscriptOutput(text: string): string {
     return "[ses kaydı boş veya anlaşılmıyor]";
   }
 
-  // 2. Çok uzun çıktı tespiti — kısa ses kaydından uzun metin gelmesi şüpheli
-  // (bu fonksiyon audioSize bilmez, ama 500+ karakter transcript genelde halüsinasyon)
+  // 2. Very long output detection for suspicious short-audio transcripts
+  // This function does not know audio length, but 500+ chars is often a hallucination signal
   if (text.length > 500 && (
     text.includes("function ") ||
     text.includes("import ") ||
@@ -211,10 +211,10 @@ function cleanTranscriptOutput(text: string): string {
     text.includes("export ")
   )) {
     console.warn(`[Transcribe] Suspicious code-like transcript (${text.length} chars), possible hallucination`);
-    // Bunu engelleme, sadece logla — gerçek kod konuşması olabilir
+    // Do not block this outright; the speaker may actually be dictating code
   }
 
-  // 3. Yaygın gereksiz prefix'leri kaldır
+  // 3. Remove common unwanted prefixes
   const unwantedPrefixes = [
     /^(İşte transkript:?\s*)/i,
     /^(Transkript:?\s*)/i,
@@ -226,7 +226,7 @@ function cleanTranscriptOutput(text: string): string {
     /^(Transcript:?\s*)/i,
     /^(Audio transcript:?\s*)/i,
     /^(The audio says:?\s*)/i,
-    /^["']|["']$/g, // Başta ve sonda tırnak işaretleri
+    /^["']|["']$/g, // Leading and trailing quotation marks
   ];
 
   let cleaned = text;
@@ -238,7 +238,7 @@ function cleanTranscriptOutput(text: string): string {
 }
 
 /**
- * Telegram'dan ses dosyası indirir (Buffer olarak)
+ * Downloads a Telegram file into a Buffer.
  */
 export async function downloadTelegramFileAsBuffer(
   filePath: string,
@@ -250,7 +250,7 @@ export async function downloadTelegramFileAsBuffer(
 }
 
 /**
- * Telegram'dan dosya indirir ve belirtilen yola kaydeder
+ * Downloads a Telegram file and saves it to the given path.
  */
 export async function downloadTelegramFile(
   api: Api,
@@ -259,11 +259,11 @@ export async function downloadTelegramFile(
 ): Promise<void> {
   const fs = await import("fs/promises");
 
-  // File path'i al
+  // Resolve the Telegram file path
   const file = await api.getFile(fileId);
   const filePath = file.file_path;
 
-  // Dosyayı indir - api.token yerine config'den token al
+  // Download using the configured bot token
   const url = `https://api.telegram.org/file/bot${config.TELEGRAM_BOT_TOKEN}/${filePath}`;
   const response = await fetch(url);
 
@@ -273,6 +273,6 @@ export async function downloadTelegramFile(
 
   const buffer = Buffer.from(await response.arrayBuffer());
 
-  // Dosyaya kaydet
+  // Persist the file
   await fs.writeFile(savePath, buffer);
 }

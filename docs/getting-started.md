@@ -1,19 +1,17 @@
 # Getting Started
 
-This guide will help you set up and run Cobrain on your local machine.
+This guide gets Cobrain running locally with Telegram and the optional minimal HTTP API.
 
 ## Prerequisites
 
-Before installing Cobrain, ensure you have:
-
-- **Bun** v1.3.5 or higher ([install guide](https://bun.sh))
-- **Telegram Bot Token** from [@BotFather](https://t.me/BotFather)
-- **Anthropic API Key** for Claude access
-- **Gemini API Key** (optional, for voice transcription)
+- [Bun](https://bun.sh) v1.3.5 or newer
+- Telegram bot token from [@BotFather](https://t.me/BotFather)
+- Anthropic API key
+- Gemini API key only if you want voice transcription
 
 ## Installation
 
-### 1. Clone the Repository
+### 1. Clone The Repository
 
 ```bash
 git clone https://github.com/yourusername/cobrain.git
@@ -26,79 +24,52 @@ cd cobrain
 bun install
 ```
 
-### 3. Create Environment File
-
-Copy the example environment file and fill in your credentials:
+### 3. Create `.env`
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your configuration:
+Minimal example:
 
 ```env
-# Required
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_BOT_TOKEN=your_bot_token
 MY_TELEGRAM_ID=123456789
 ANTHROPIC_API_KEY=sk-ant-xxxxx
-
-# Optional - Voice transcription
-GEMINI_API_KEY=your_gemini_key
-
-# Optional - Web UI
-ENABLE_WEB_UI=true
-WEB_PORT=3000
-WEB_URL=http://localhost:3000
+API_PORT=3000
 ```
 
-See [Configuration](./configuration.md) for all available options.
+See [Configuration](./configuration.md) for the full list.
 
-### 4. Set Up Telegram Bot
+### 4. Configure Telegram Commands
 
-1. Open Telegram and message [@BotFather](https://t.me/BotFather)
-2. Send `/newbot` and follow the prompts
-3. Copy the bot token to your `.env` file
-4. Send `/setcommands` to BotFather and paste:
+Create your bot with BotFather, then send `/setcommands` and paste:
 
-```
+```text
 start - Start the bot
 help - Show available commands
-status - Check bot status
-web - Get Web UI link
-persona - Persona settings
+status - Show bot status
+clear - Reset the current session
+restart - Restart the bot
 mode - Change permission mode
-goals - Manage goals
-memory - Memory operations
-stats - View statistics
+lang - Change language
 ```
 
 ### 5. Get Your Telegram User ID
 
-1. Message [@userinfobot](https://t.me/userinfobot) on Telegram
-2. It will reply with your user ID
-3. Add this ID to `MY_TELEGRAM_ID` in your `.env` file
+1. Message [@userinfobot](https://t.me/userinfobot)
+2. Copy the numeric ID it returns
+3. Set that value as `MY_TELEGRAM_ID`
 
 ## Running Cobrain
 
-### Development Mode
-
-Start with hot reload:
+Development:
 
 ```bash
 bun run dev
 ```
 
-For the Web UI with Tailwind CSS watching:
-
-```bash
-# Terminal 1: CSS watch
-bun run dev:css
-
-# Terminal 2: Server with HMR
-bun run dev
-```
-
-### Production Mode
+Production:
 
 ```bash
 bun run start
@@ -106,82 +77,47 @@ bun run start
 
 ## Verify Installation
 
-1. **Start the bot**:
-   ```bash
-   bun run dev
-   ```
+1. Start Cobrain with `bun run dev`.
+2. Confirm the console shows the Telegram bot and API server starting.
+3. Open Telegram and send `/start` to your bot.
+4. Check the health endpoint:
 
-2. **Check the console** for startup message:
-   ```
-   ╔═══════════════════════════════════════╗
-   ║           C O B R A I N               ║
-   ║        Personal AI Assistant          ║
-   ╚═══════════════════════════════════════╝
-
-   Version: 0.4.0
-   [✓] Telegram bot started
-   [✓] Web UI running on http://localhost:3000
-   ```
-
-3. **Test the Telegram bot**:
-   - Open Telegram and find your bot
-   - Send `/start`
-   - You should receive a welcome message
-
-4. **Test the Web UI** (if enabled):
-   - Send `/web` to your Telegram bot
-   - Click the link to open the Web UI
-   - Send a test message
-
-## First Conversation
-
-Once everything is running, try these interactions:
-
-```
-You: Hello! What can you do?
-
-Cobrain: Merhaba! Ben Cobrain, kişisel AI asistanınım.
-         Şunları yapabilirim:
-         - Sorularını yanıtlama
-         - Bilgileri hatırlama ve hatırlatma
-         - Hedeflerini takip etme
-         - WhatsApp mesajlarını analiz etme
-         ...
+```bash
+curl http://localhost:3000/health
 ```
 
-Set up your first reminder:
+Optional API check when `COBRAIN_API_KEY` is set:
 
-```
-You: Remind me to check emails tomorrow at 9am
-
-Cobrain: Tamam, yarın saat 09:00'da "check emails"
-         hatırlatması oluşturdum.
+```bash
+curl -X POST http://localhost:3000/api/chat \
+  -H "Authorization: Bearer $COBRAIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"hello"}'
 ```
 
 ## Troubleshooting
 
 ### Bot Not Responding
 
-1. Check if your user ID matches `MY_TELEGRAM_ID`
-2. Verify the bot token is correct
-3. Ensure the bot is running (`bun run dev`)
+1. Verify `MY_TELEGRAM_ID` matches your Telegram account.
+2. Verify `TELEGRAM_BOT_TOKEN` is correct.
+3. Check the terminal for startup or API errors.
 
-### Web UI Not Loading
+### API Not Reachable
 
-1. Check if `ENABLE_WEB_UI=true` in `.env`
-2. Verify the port is not in use
-3. Check console for errors
+1. Confirm `API_PORT` matches the port you are calling.
+2. Check whether another process is already using that port.
+3. Make sure `COBRAIN_API_KEY` is set if you are calling `/api/*`.
 
 ### Database Errors
 
-1. Check if data directory exists: `~/.cobrain/`
-2. Ensure write permissions
-3. Try deleting `*.db` files to reset (data will be lost)
+1. Check that `COBRAIN_BASE_PATH` is writable.
+2. Inspect `~/.cobrain/` for existing database files.
+3. If this is a disposable local setup, remove the local database files and restart.
 
 ## Next Steps
 
-- [Configuration](./configuration.md) - Customize your setup
-- [Telegram Channel](./channels/telegram.md) - Learn Telegram commands
-- [Web UI](./channels/web-ui.md) - Explore Web UI features
-- [Persona System](./features/persona.md) - Customize AI personality
-- [Memory System](./features/memory.md) - Understand memory layers
+- [Configuration](./configuration.md) for runtime options
+- [Telegram Channel](./channels/telegram.md) for command behavior
+- [HTTP API](./api/http.md) for integration endpoints
+- [Architecture](./architecture.md) for the current module layout

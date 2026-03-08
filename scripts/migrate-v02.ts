@@ -49,17 +49,17 @@ async function main() {
 
   // Check if old DB exists
   if (!existsSync(OLD_DB_PATH)) {
-    console.log("⚠️  Eski veritabanı bulunamadı. Migration gerekli değil.");
-    console.log(`   Beklenen: ${OLD_DB_PATH}`);
+    console.log("⚠️  Old database not found. Migration is not required.");
+    console.log(`   Expected: ${OLD_DB_PATH}`);
     process.exit(0);
   }
 
   // Check if already migrated
   const globalDbPath = join(NEW_BASE_PATH, "cobrain.db");
   if (existsSync(globalDbPath)) {
-    console.log("⚠️  Migration zaten yapılmış görünüyor.");
-    console.log(`   Global DB mevcut: ${globalDbPath}`);
-    console.log("   --rollback ile geri alabilirsiniz.");
+    console.log("⚠️  Migration appears to have already been completed.");
+    console.log(`   Global DB exists: ${globalDbPath}`);
+    console.log("   You can roll it back with --rollback.");
     process.exit(1);
   }
 
@@ -67,30 +67,30 @@ async function main() {
 
   console.log(`
 ═══════════════════════════════════════════════════════════════
-📊 Migration Özeti
+📊 Migration Summary
 ═══════════════════════════════════════════════════════════════
-  Kullanıcılar:    ${stats.usersFound}
-  Mesajlar:        ${stats.messagesMigrated}
-  Oturumlar:       ${stats.sessionsMigrated}
-  Tercihler:       ${stats.preferencesMigrated}
-  Hatalar:         ${stats.errors.length}
+  Users:           ${stats.usersFound}
+  Messages:        ${stats.messagesMigrated}
+  Sessions:        ${stats.sessionsMigrated}
+  Preferences:     ${stats.preferencesMigrated}
+  Errors:          ${stats.errors.length}
 `);
 
   if (stats.errors.length > 0) {
-    console.log("❌ Hatalar:");
+    console.log("❌ Errors:");
     stats.errors.forEach((e) => console.log(`   - ${e}`));
   }
 
   if (isDryRun) {
     console.log(`
-🔵 DRY RUN - Hiçbir değişiklik yapılmadı.
-   Gerçek migration için: bun run scripts/migrate-v02.ts --execute
+🔵 DRY RUN - No changes were made.
+   To run the migration: bun run scripts/migrate-v02.ts --execute
 `);
   } else {
     console.log(`
-✅ Migration tamamlandı!
-   Yedek: ${OLD_DB_PATH}${BACKUP_SUFFIX}
-   Yeni yapı: ${NEW_BASE_PATH}/
+✅ Migration completed!
+   Backup: ${OLD_DB_PATH}${BACKUP_SUFFIX}
+   New structure: ${NEW_BASE_PATH}/
 `);
   }
 }
@@ -114,12 +114,12 @@ async function migrate(): Promise<MigrationStats> {
       .all();
 
     stats.usersFound = users.length;
-    console.log(`\n📋 ${users.length} kullanıcı bulundu\n`);
+    console.log(`\n📋 ${users.length} user(s) found\n`);
 
     if (!isDryRun) {
       // Create backup
       const backupPath = `${OLD_DB_PATH}${BACKUP_SUFFIX}`;
-      console.log(`💾 Yedek alınıyor: ${backupPath}`);
+      console.log(`💾 Creating backup: ${backupPath}`);
       copyFileSync(OLD_DB_PATH, backupPath);
 
       // Create new directory structure
@@ -131,7 +131,7 @@ async function migrate(): Promise<MigrationStats> {
 
       // Migrate each user
       for (const { user_id } of users) {
-        console.log(`\n👤 User ${user_id} migrate ediliyor...`);
+        console.log(`\n👤 Migrating user ${user_id}...`);
 
         const userFolder = join(NEW_BASE_PATH, "users", user_id.toString());
         mkdirSync(join(userFolder, "uploads"), { recursive: true });
@@ -161,7 +161,7 @@ async function migrate(): Promise<MigrationStats> {
           );
           stats.messagesMigrated++;
         }
-        console.log(`   ✓ ${messages.length} mesaj`);
+        console.log(`   ✓ ${messages.length} messages`);
 
         // Migrate session
         const session = oldDb
@@ -176,7 +176,7 @@ async function migrate(): Promise<MigrationStats> {
             [session.session_id, session.created_at, session.last_used_at]
           );
           stats.sessionsMigrated++;
-          console.log(`   ✓ 1 oturum`);
+          console.log(`   ✓ 1 session`);
         }
 
         // Migrate preferences
@@ -194,7 +194,7 @@ async function migrate(): Promise<MigrationStats> {
               );
               stats.preferencesMigrated++;
             }
-            console.log(`   ✓ ${Object.keys(prefsData).length} tercih`);
+            console.log(`   ✓ ${Object.keys(prefsData).length} preferences`);
           } catch (e) {
             stats.errors.push(`User ${user_id} preferences parse error: ${e}`);
           }
@@ -226,7 +226,7 @@ async function migrate(): Promise<MigrationStats> {
           } catch {}
         }
 
-        console.log(`   User ${user_id}: ${msgCount} mesaj, ${hasSession} oturum, ${prefCount} tercih`);
+        console.log(`   User ${user_id}: ${msgCount} messages, ${hasSession} sessions, ${prefCount} preferences`);
 
         stats.messagesMigrated += msgCount;
         stats.sessionsMigrated += hasSession;
@@ -246,34 +246,34 @@ async function rollback(): Promise<void> {
   const backupPath = `${OLD_DB_PATH}${BACKUP_SUFFIX}`;
 
   if (!existsSync(backupPath)) {
-    console.log("❌ Yedek dosyası bulunamadı. Rollback yapılamıyor.");
-    console.log(`   Beklenen: ${backupPath}`);
+    console.log("❌ Backup file not found. Rollback cannot proceed.");
+    console.log(`   Expected: ${backupPath}`);
     process.exit(1);
   }
 
   if (!existsSync(NEW_BASE_PATH)) {
-    console.log("⚠️  Yeni yapı bulunamadı. Rollback gerekli değil.");
+    console.log("⚠️  New structure not found. Rollback is not required.");
     process.exit(0);
   }
 
-  console.log("🔄 Rollback başlıyor...\n");
+  console.log("🔄 Starting rollback...\n");
 
   if (!isDryRun) {
     // Remove new structure
-    console.log(`🗑️  Siliniyor: ${NEW_BASE_PATH}`);
+    console.log(`🗑️  Removing: ${NEW_BASE_PATH}`);
     rmSync(NEW_BASE_PATH, { recursive: true, force: true });
 
     // Restore backup
-    console.log(`📦 Restore ediliyor: ${backupPath} -> ${OLD_DB_PATH}`);
+    console.log(`📦 Restoring: ${backupPath} -> ${OLD_DB_PATH}`);
     copyFileSync(backupPath, OLD_DB_PATH);
     rmSync(backupPath);
 
-    console.log("\n✅ Rollback tamamlandı!");
+    console.log("\n✅ Rollback completed!");
   } else {
-    console.log("🔵 DRY RUN - Rollback yapılacak işlemler:");
-    console.log(`   - ${NEW_BASE_PATH} silinecek`);
-    console.log(`   - ${backupPath} -> ${OLD_DB_PATH} restore edilecek`);
-    console.log("\n   Gerçek rollback için: bun run scripts/migrate-v02.ts --rollback --execute");
+    console.log("🔵 DRY RUN - Rollback would perform:");
+    console.log(`   - ${NEW_BASE_PATH} would be removed`);
+    console.log(`   - ${backupPath} -> ${OLD_DB_PATH} would be restored`);
+    console.log("\n   To run the rollback: bun run scripts/migrate-v02.ts --rollback --execute");
   }
 }
 
@@ -382,6 +382,6 @@ function initUserDb(db: Database): void {
 }
 
 main().catch((e) => {
-  console.error("❌ Migration hatası:", e);
+  console.error("❌ Migration error:", e);
   process.exit(1);
 });

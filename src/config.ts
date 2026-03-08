@@ -75,8 +75,7 @@ export type ConfigResult =
   | { success: false; errors: string[] };
 
 /**
- * Load config without crashing on error
- * Returns success/error state for setup wizard
+ * Load config without throwing on validation errors.
  */
 export function loadConfigSafe(): ConfigResult {
   const result = envSchema.safeParse(process.env);

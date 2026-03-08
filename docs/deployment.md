@@ -1,74 +1,60 @@
 # Deployment
 
-This guide covers deploying Cobrain to a production server.
+This guide covers deploying the Telegram bot and minimal HTTP API in production.
 
 ## Requirements
 
-- Linux server (Ubuntu 22.04 or similar)
-- Bun v1.3.5 or higher
-- Systemd (for service management)
-- Optional: nginx (for reverse proxy)
+- Linux server with systemd
+- Bun v1.3.5 or newer
+- Telegram bot token and Anthropic API key
+- Optional reverse proxy such as nginx
 
 ## Quick Deploy
 
-### 1. Server Setup
+### 1. Install And Clone
 
 ```bash
-# Install Bun
 curl -fsSL https://bun.sh/install | bash
-
-# Clone repository
 git clone https://github.com/yourusername/cobrain.git
 cd cobrain
-
-# Install dependencies
 bun install
 ```
 
-### 2. Environment Configuration
+### 2. Configure Environment
 
 ```bash
 cp .env.example .env
-nano .env
 ```
 
-Configure production values:
+Production example:
 
 ```env
-# Required
 TELEGRAM_BOT_TOKEN=your_token
-ALLOWED_USER_IDS=123456789
+MY_TELEGRAM_ID=123456789
 ANTHROPIC_API_KEY=sk-ant-xxxxx
 
-# Production settings
-COBRAIN_BASE_PATH=/home/user/.cobrain
-WEB_PORT=3000
-WEB_URL=https://cobrain.yourdomain.com
-ENABLE_WEB_UI=true
+COBRAIN_BASE_PATH=/home/your_user/.cobrain
+API_PORT=3000
+COBRAIN_API_KEY=replace-me
 PERMISSION_MODE=smart
+ENABLE_AUTONOMOUS=true
 ```
 
-### 3. Build CSS
-
-```bash
-bun run build:css
-```
-
-### 4. Test Run
+### 3. Test Locally On The Server
 
 ```bash
 bun run start
 ```
 
-Verify everything works before setting up the service.
+Verify before moving on:
+
+```bash
+curl http://localhost:3000/health
+```
 
 ## Systemd Service
 
-### Create Service File
-
-```bash
-sudo nano /etc/systemd/system/cobrain.service
-```
+Create `/etc/systemd/system/cobrain.service`:
 
 ```ini
 [Unit]
@@ -79,7 +65,7 @@ After=network.target
 Type=simple
 User=your_user
 WorkingDirectory=/home/your_user/projects/cobrain
-ExecStart=/home/your_user/.bun/bin/bun run src/index.ts
+ExecStart=/home/your_user/.bun/bin/bun run start
 Restart=on-failure
 RestartSec=10
 Environment=NODE_ENV=production
@@ -88,7 +74,7 @@ Environment=NODE_ENV=production
 WantedBy=multi-user.target
 ```
 
-### Enable and Start
+Enable and start it:
 
 ```bash
 sudo systemctl daemon-reload
@@ -96,281 +82,123 @@ sudo systemctl enable cobrain
 sudo systemctl start cobrain
 ```
 
-### Service Commands
+Useful commands:
 
 ```bash
-# Check status
 sudo systemctl status cobrain
-
-# View logs
 sudo journalctl -u cobrain -f
-
-# Restart
 sudo systemctl restart cobrain
-
-# Stop
-sudo systemctl stop cobrain
 ```
 
 ## Git-Based Auto-Deploy
 
-Set up automatic deployment on git push.
-
-### 1. Create Bare Repository
-
-```bash
-mkdir -p ~/repos/cobrain.git
-cd ~/repos/cobrain.git
-git init --bare
-```
-
-### 2. Create Post-Receive Hook
-
-```bash
-nano hooks/post-receive
-```
+Example `post-receive` hook:
 
 ```bash
 #!/bin/bash
-
-echo "🚀 Deploying Cobrain..."
+echo "Deploying Cobrain..."
 
 export GIT_WORK_TREE=~/projects/cobrain
 export GIT_DIR=~/repos/cobrain.git
 
-# Checkout code
 git checkout -f main
-
-# Install dependencies
 cd ~/projects/cobrain
 ~/.bun/bin/bun install
+echo "$SUDO_PASS" | sudo -S systemctl restart cobrain
 
-# Build CSS
-~/.bun/bin/bun run build:css
-
-# Restart service (requires sudo without password for this command)
-echo 'YOUR_PASSWORD' | sudo -S systemctl restart cobrain
-
-echo "✅ Deploy complete!"
+echo "Deploy complete."
 ```
 
-```bash
-chmod +x hooks/post-receive
-```
+## Optional Reverse Proxy
 
-### 3. Add Remote Locally
+If you need TLS or public exposure for the HTTP API, proxy `/health` and `/api/` to `API_PORT`.
 
-On your development machine:
-
-```bash
-git remote add production user@server:~/repos/cobrain.git
-```
-
-### 4. Deploy
-
-```bash
-git push production main
-```
-
-## Reverse Proxy (nginx)
-
-### Install nginx
-
-```bash
-sudo apt install nginx
-```
-
-### Configure Site
-
-```bash
-sudo nano /etc/nginx/sites-available/cobrain
-```
+Example nginx config:
 
 ```nginx
 server {
     listen 80;
-    server_name cobrain.yourdomain.com;
-
-    # Redirect to HTTPS
-    return 301 https://$server_name$request_uri;
+    server_name cobrain.example.com;
+    return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name cobrain.yourdomain.com;
+    server_name cobrain.example.com;
 
-    # SSL certificates (use Let's Encrypt)
-    ssl_certificate /etc/letsencrypt/live/cobrain.yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/cobrain.yourdomain.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/cobrain.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/cobrain.example.com/privkey.pem;
 
-    # SSL settings
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
-    ssl_prefer_server_ciphers off;
-
-    # Proxy settings
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
+    location /health {
+        proxy_pass http://127.0.0.1:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
-        # WebSocket timeout
-        proxy_read_timeout 300s;
-        proxy_send_timeout 300s;
+    location /api/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```
 
-### Enable Site
+## Backups
+
+Back up the global and per-user databases under `COBRAIN_BASE_PATH`.
+
+Example:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/cobrain /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
-```
-
-### SSL with Let's Encrypt
-
-```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d cobrain.yourdomain.com
-```
-
-## Environment Variables
-
-For production, consider:
-
-```env
-# Security
-PERMISSION_MODE=smart
-
-# Performance
-MAX_HISTORY=10
-MAX_MEMORY_AGE_DAYS=90
-
-# Monitoring
-ENABLE_AUTONOMOUS=true
-
-# Web UI
-ENABLE_WEB_UI=true
-WEB_PORT=3000
-WEB_URL=https://cobrain.yourdomain.com
-```
-
-## Backup
-
-### Database Backup
-
-```bash
-# Backup script
-#!/bin/bash
-BACKUP_DIR=/home/user/backups/cobrain
+BACKUP_DIR=/home/your_user/backups/cobrain
 DATE=$(date +%Y%m%d_%H%M%S)
 
-mkdir -p $BACKUP_DIR
-
-# Backup global database
-cp ~/.cobrain/cobrain.db $BACKUP_DIR/cobrain_$DATE.db
-
-# Backup user databases
-for dir in ~/.cobrain/user_*; do
-    user_id=$(basename $dir)
-    cp $dir/cobrain.db $BACKUP_DIR/${user_id}_$DATE.db
-done
-
-# Keep last 7 days
-find $BACKUP_DIR -mtime +7 -delete
-```
-
-### Cron Job
-
-```bash
-crontab -e
-```
-
-```
-0 3 * * * /home/user/scripts/backup_cobrain.sh
+mkdir -p "$BACKUP_DIR"
+cp ~/.cobrain/cobrain.db "$BACKUP_DIR/cobrain_$DATE.db"
+find ~/.cobrain/users -name cobrain.db -exec cp {} "$BACKUP_DIR" \;
 ```
 
 ## Monitoring
 
-### Health Check
+Health check:
 
 ```bash
 curl http://localhost:3000/health
 ```
 
-### Log Monitoring
+Logs:
 
 ```bash
-# Live logs
 journalctl -u cobrain -f
-
-# Last 100 lines
 journalctl -u cobrain -n 100
-
-# Errors only
-journalctl -u cobrain -p err
-```
-
-### Process Monitoring
-
-```bash
-# Check if running
-systemctl is-active cobrain
-
-# Memory usage
-ps aux | grep cobrain
 ```
 
 ## Troubleshooting
 
-### Service Won't Start
+### Service Will Not Start
 
-1. Check logs: `journalctl -u cobrain -n 50`
-2. Verify environment: `cat /home/user/projects/cobrain/.env`
-3. Test manually: `cd /home/user/projects/cobrain && bun run start`
+1. Inspect `journalctl -u cobrain -n 100`.
+2. Verify `/home/your_user/projects/cobrain/.env`.
+3. Run `bun run start` manually in the project directory.
 
-### Port Already in Use
+### Port Already In Use
 
 ```bash
-# Find process using port
 ss -tlnp | grep 3000
-
-# Kill if needed
-kill -9 $(lsof -t -i:3000)
 ```
 
-### Database Errors
+### API Returns 401
 
-```bash
-# Check file permissions
-ls -la ~/.cobrain/
-
-# Repair permissions
-chmod 644 ~/.cobrain/*.db
-chmod 755 ~/.cobrain/
-```
-
-### WebSocket Not Connecting
-
-1. Check nginx WebSocket config
-2. Verify SSL certificates
-3. Check firewall rules
-4. Test without proxy first
+1. Set `COBRAIN_API_KEY`.
+2. Send `Authorization: Bearer <COBRAIN_API_KEY>`.
+3. Confirm your reverse proxy is forwarding the header unchanged.
 
 ## Security Checklist
 
-- [ ] Strong `TELEGRAM_BOT_TOKEN`
-- [ ] Limited `ALLOWED_USER_IDS`
-- [ ] HTTPS enabled
-- [ ] Firewall configured (only 80/443 open)
-- [ ] Regular backups
-- [ ] Log rotation enabled
-- [ ] Service runs as non-root user
-- [ ] `.env` file has restricted permissions (600)
+- [ ] Keep `.env` readable only by the service user
+- [ ] Set a strong `COBRAIN_API_KEY` before exposing `/api/*`
+- [ ] Enable TLS at the reverse proxy
+- [ ] Restrict public access if the API is only for local agents
+- [ ] Run the service as a non-root user

@@ -4,17 +4,17 @@
 [![Bun](https://img.shields.io/badge/Bun-1.3.5+-black?logo=bun)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
 
-A personal AI assistant with Telegram, WhatsApp monitoring, and Web UI support. Built with Claude Agent SDK and designed to evolve with your preferences.
+A Telegram-first personal AI assistant with local memory, autonomous workflows, and a minimal HTTP API for external agents and automations.
 
 ## Features
 
-- **Multi-Channel Support** - Chat via Telegram, monitor WhatsApp, or use the Web UI
+- **Telegram-First Interface** - Chat directly with the bot and manage it through Telegram commands
 - **Intelligent Memory** - FTS5 + Haiku powered memory with semantic search
 - **Living Assistant** - Proactive awareness with context-aware notifications
 - **Evolving Persona** - Adapts communication style based on your preferences
 - **Goals & Reminders** - Track objectives and get timely notifications
 - **MCP Tools** - Extensible tool system for memory, files, and more
-- **Streaming Responses** - Real-time AI response streaming
+- **Minimal HTTP API** - Expose `/api/chat`, `/api/report`, and memory endpoints for integrations
 - **Single-User Design** - Self-hosted, your data stays local
 
 ## Quick Start
@@ -59,8 +59,6 @@ See [Configuration Guide](docs/configuration.md) for all options.
 | [Configuration](docs/configuration.md) | Environment variables and options |
 | **Channels** | |
 | [Telegram](docs/channels/telegram.md) | Bot commands and usage |
-| [WhatsApp](docs/channels/whatsapp.md) | WhatsApp monitoring setup |
-| [Web UI](docs/channels/web-ui.md) | Browser interface |
 | **Features** | |
 | [Persona](docs/features/persona.md) | AI personality system |
 | [Memory](docs/features/memory.md) | Memory layers and search |
@@ -68,7 +66,6 @@ See [Configuration Guide](docs/configuration.md) for all options.
 | [Tools](docs/features/tools.md) | MCP tools reference |
 | **API** | |
 | [HTTP API](docs/api/http.md) | HTTP endpoints |
-| [WebSocket](docs/api/websocket.md) | Real-time protocol |
 | **Operations** | |
 | [Deployment](docs/deployment.md) | Production deployment |
 | [Contributing](docs/contributing.md) | Development guide |
@@ -79,24 +76,25 @@ See [Configuration Guide](docs/configuration.md) for all options.
 |-----------|------------|
 | Runtime | Bun |
 | Language | TypeScript |
-| AI | Claude (Agent SDK) |
-| Database | SQLite |
-| Frontend | React + Tailwind CSS |
+| AI | Claude + Gemini (optional transcription) |
+| Database | SQLite + FileMemory |
 | Telegram | grammy |
-| WhatsApp | Baileys |
+| HTTP API | Bun.serve |
 
 ## Project Structure
 
 ```
 src/
-├── agent/          # Claude Agent SDK integration
+├── agent/          # Agent orchestration and tool wiring
+├── agents/         # Seed agents and registry
+├── api-server.ts   # Minimal HTTP API
 ├── brain/          # AI orchestration
-├── channels/       # Telegram, WhatsApp
+├── channels/       # Telegram handlers and routing
+├── i18n/           # Localized strings
 ├── memory/         # Memory subsystem
 ├── services/       # Business logic
 ├── types/          # TypeScript interfaces
-├── utils/          # Helpers
-└── web/            # Web UI (React)
+└── utils/          # Helpers
 ```
 
 ## Scripts
@@ -104,8 +102,6 @@ src/
 ```bash
 bun run dev         # Development with hot reload
 bun run start       # Production
-bun run dev:css     # Tailwind CSS watch
-bun run build:css   # Build CSS
 bun test            # Run tests
 bun run typecheck   # Type check
 ```

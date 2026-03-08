@@ -1,279 +1,100 @@
 # Telegram Channel
 
-Telegram is the primary communication channel for Cobrain. It uses the [grammy](https://grammy.dev) framework with the runner extension for reliable message handling.
+Telegram is Cobrain's primary user interface. The bot runs on [grammy](https://grammy.dev) with `@grammyjs/runner` for long-polling and concurrent update handling.
 
 ## Setup
 
-### 1. Create a Bot
+### 1. Create The Bot
 
 1. Open Telegram and message [@BotFather](https://t.me/BotFather)
-2. Send `/newbot`
-3. Choose a name (e.g., "My Cobrain")
-4. Choose a username (must end in `bot`, e.g., `my_cobrain_bot`)
-5. Copy the token provided
+2. Run `/newbot`
+3. Choose the bot name and username
+4. Copy the token into `.env` as `TELEGRAM_BOT_TOKEN`
 
-### 2. Configure Environment
+### 2. Configure Access
 
 ```env
 TELEGRAM_BOT_TOKEN=123456789:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
 MY_TELEGRAM_ID=123456789
 ```
 
-### 3. Set Bot Commands
+Only `MY_TELEGRAM_ID` is allowed to use the bot.
 
-Send to @BotFather:
-```
+### 3. Register Command Menu
+
+Send this to BotFather:
+
+```text
 /setcommands
 ```
 
 Then paste:
-```
+
+```text
 start - Start the bot
 help - Show available commands
-status - Check bot and WhatsApp status
-scan - List pending WhatsApp messages
-reply - Reply to WhatsApp message
-persona - Persona settings
+status - Show bot status
+clear - Reset the current session
+restart - Restart the bot
 mode - Change permission mode
-web - Get Web UI link
-stats - View usage statistics
-memory - Memory operations
-goals - Manage goals
+lang - Change language
 ```
 
 ## Commands
 
 ### `/start`
 
-Initializes the bot and displays a welcome message.
-
-```
-Welcome to Cobrain - Your Personal AI Assistant!
-
-Use /help to see available commands.
-```
+Shows the welcome message.
 
 ### `/help`
 
-Lists all available commands with descriptions.
+Displays the localized help text and command overview.
 
 ### `/status`
 
-Shows current bot status and WhatsApp connection state.
+Shows runtime status, current base path, and user-level usage stats.
 
-```
-🤖 Cobrain Status
+### `/clear`
 
-Version: 0.4.0
-Uptime: 2 hours, 15 minutes
+Clears the current chat session and resets the saved session state.
 
-WhatsApp: ✅ Connected
-Pending Messages: 3
-```
+### `/restart`
 
-### `/scan`
-
-Lists pending WhatsApp messages that need attention.
-
-```
-📱 Pending WhatsApp Messages
-
-1. Ahmet (2 hours ago)
-   "Yarınki toplantı hala geçerli mi?"
-
-2. Work Group (30 min ago)
-   "Rapor hazır mı?"
-
-Reply with: /reply <name> <message>
-```
-
-### `/reply <name> <message>`
-
-Sends a reply via WhatsApp.
-
-```
-/reply Ahmet Evet, saat 10'da görüşürüz
-```
-
-Response:
-```
-✅ Message sent to Ahmet
-```
-
-### `/persona`
-
-Opens persona settings menu with inline keyboard:
-
-- **Tone**: samimi, resmi, teknik, espirili, destekleyici
-- **Verbosity**: brief, normal, detailed
-- **Emoji Usage**: none, minimal, moderate, frequent
-- **Address Form**: sen, siz
+Restarts the running process. This is mainly useful on self-hosted deployments.
 
 ### `/mode`
 
-Changes the permission mode with inline keyboard:
+Opens an inline keyboard for `strict`, `smart`, and `yolo` permission modes.
 
-- **Strict**: All tools require approval
-- **Smart**: Safe tools auto-approved
-- **Yolo**: All tools auto-approved
+### `/lang`
 
-### `/web`
-
-Generates a Web UI access link valid for 24 hours.
-
-```
-🌐 Web UI Access
-
-Click to open: https://cobrain.example.com?token=abc123...
-
-⏰ Link expires in 24 hours
-```
-
-### `/stats`
-
-Shows usage statistics.
-
-```
-📊 Statistics
-
-Messages: 1,234
-Tokens Used: 456,789
-Cost: $12.34
-
-Memory:
-- Episodic: 89
-- Semantic: 45
-- Procedural: 12
-
-Active Goals: 5
-Pending Reminders: 3
-```
-
-### `/memory`
-
-Memory management menu:
-
-- **Stats**: Show memory statistics
-- **Search**: Search memories
-- **Prune**: Clean expired memories
-
-### `/goals`
-
-Goals management menu:
-
-- **List**: Show all goals
-- **Create**: Create new goal
-- **Progress**: Update goal progress
+Lets you switch the bot language between English and Turkish.
 
 ## Direct Messages
 
-Any message that's not a command is processed by the AI:
+Any non-command message is routed to the main Cobrain chat flow.
 
-```
-User: What's the weather like today?
+Typical flow:
 
-Cobrain: Hava durumu bilgisi için bir araç kullanmam
-         gerekiyor. İzin verir misin?
-         [Approve] [Deny]
-```
+1. Authorization check
+2. Session and memory lookup
+3. Agent execution
+4. Telegram response delivery
+5. Persistence to the user database
 
-## Permission Approval
+## Permission Prompts
 
-When tools require approval (in strict/smart modes):
+When a tool call needs approval, Cobrain sends an inline prompt in Telegram. Approving continues execution; denying cancels the action.
 
-```
-🔧 Tool Permission Request
+## Reliability Notes
 
-Tool: WebFetch
-Action: Fetch weather data from weather.com
-
-[Approve] [Deny]
-```
-
-Clicking **Approve** executes the tool. Clicking **Deny** cancels.
-
-## Conversation Features
-
-### Streaming Responses
-
-Responses stream in real-time. You'll see a typing indicator while the AI generates its response.
-
-### Context Retention
-
-The bot maintains conversation context (last 10 messages by default). Reference previous messages naturally:
-
-```
-User: Tell me about TypeScript
-Cobrain: TypeScript is a typed superset of JavaScript...
-
-User: What about its type system?
-Cobrain: Building on what I just mentioned,
-         TypeScript's type system includes...
-```
-
-### Memory Integration
-
-The AI can remember important information:
-
-```
-User: Remember that my favorite color is blue
-Cobrain: I'll remember that your favorite color is blue.
-
-[Later...]
-
-User: What's my favorite color?
-Cobrain: Your favorite color is blue.
-```
-
-## Error Handling
-
-### Unauthorized User
-
-If a non-allowed user tries to message:
-```
-⛔ Unauthorized
-
-You are not authorized to use this bot.
-Contact the administrator for access.
-```
-
-### Rate Limiting
-
-The bot handles Telegram rate limits automatically with exponential backoff.
-
-### Disconnection Recovery
-
-The grammy runner automatically reconnects if the connection drops.
+- The bot uses grammy runner for concurrent update processing.
+- Pending tool approvals are cleaned up on shutdown.
+- Telegram command descriptions are re-registered when the language changes.
 
 ## Best Practices
 
-1. **Keep Context Fresh**: Start new conversations for unrelated topics
-2. **Use Commands**: Utilize `/web` for complex interactions
-3. **Set Reminders**: Let Cobrain track tasks with `/goals`
-4. **Customize Persona**: Adjust tone and style via `/persona`
-5. **Monitor Costs**: Check usage with `/stats`
-
-## Technical Details
-
-### Framework
-
-- **grammy**: Telegram Bot API framework
-- **@grammyjs/runner**: Long polling with auto-reconnect
-- **Conversation handling**: Per-user state management
-
-### Message Flow
-
-1. Message received via long polling
-2. User authorization check
-3. Command parsing or AI routing
-4. Response streaming back to user
-5. Message persistence to database
-
-### Rate Limits
-
-Cobrain respects Telegram's rate limits:
-- 30 messages/second to same chat
-- 20 messages/minute to same group
-- 1 message/second to same user
-
-The runner handles retries automatically.
+1. Use `/clear` when changing topics completely.
+2. Use `/mode` to tighten or relax tool approval behavior.
+3. Use `/lang` before long conversations if you want responses localized.
+4. Keep `MY_TELEGRAM_ID` scoped to a single trusted account.
