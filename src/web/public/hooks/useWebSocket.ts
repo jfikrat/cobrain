@@ -69,7 +69,7 @@ export function useWebSocket(
     ws.onerror = (e) => {
       console.error("[WS] Error:", e);
       setStatus("error");
-      setError("Bağlantı hatası");
+      setError("Connection error");
     };
 
     ws.onmessage = (event) => {

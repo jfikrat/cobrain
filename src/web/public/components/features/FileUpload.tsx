@@ -29,7 +29,7 @@ export function FileUpload({
   const validateFile = useCallback(
     (file: File): string | null => {
       if (file.size > maxSize * 1024 * 1024) {
-        return `Dosya ${maxSize}MB'dan büyük olamaz`;
+        return `File cannot be larger than ${maxSize}MB`;
       }
       return null;
     },
@@ -43,7 +43,7 @@ export function FileUpload({
 
       // Check max files
       if (files.length + fileArray.length > maxFiles) {
-        setError(`En fazla ${maxFiles} dosya yüklenebilir`);
+        setError(`Maximum ${maxFiles} files can be uploaded`);
         return;
       }
 
@@ -117,14 +117,14 @@ export function FileUpload({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Dosya Yükle"
+      title="Upload File"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
-            İptal
+            Cancel
           </Button>
           <Button onClick={handleUpload} disabled={files.length === 0}>
-            <CheckIcon size={16} /> Yükle ({files.length})
+            <CheckIcon size={16} /> Upload ({files.length})
           </Button>
         </>
       }
@@ -158,13 +158,13 @@ export function FileUpload({
           />
           <PaperclipIcon size={32} />
           <p style={{ marginTop: "var(--space-md)", color: "var(--text-primary)" }}>
-            Dosyaları buraya sürükleyin
+            Drag files here
           </p>
           <p style={{ marginTop: "var(--space-xs)", color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>
-            veya tıklayarak seçin
+            or click to select
           </p>
           <p style={{ marginTop: "var(--space-sm)", color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>
-            Max {maxSize}MB, {maxFiles} dosya
+            Max {maxSize}MB, {maxFiles} file(s)
           </p>
         </div>
 

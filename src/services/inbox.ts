@@ -1,9 +1,9 @@
 /**
- * Agent Inbox — Cortex'in Gelen Kutusu
+ * Agent Inbox — Cortex's Inbox
  *
- * BrainLoop/Mneme/Scheduler mesajlarını bir inbox'a iter.
- * BrainLoop fastTick'te !isUserBusy iken Cortex işler.
- * Bu sayede kullanıcı konuşurken session kirlenmez.
+ * Pushes BrainLoop/Mneme/Scheduler messages into an inbox.
+ * Cortex processes them during BrainLoop fastTick when !isUserBusy.
+ * This way the session stays clean while the user is chatting.
  */
 
 import { join } from "node:path";
@@ -14,24 +14,24 @@ export interface InboxItem {
   /** "inbox_{timestamp}_{random6hex}" */
   id: string;
   from: "brain-loop" | "mneme" | "scheduler";
-  /** Kısa özet (log için) */
+  /** Short summary (for logging) */
   subject: string;
-  /** Tam mesaj (Cortex'e gidecek) */
+  /** Full message (to be sent to Cortex) */
   body: string;
   priority: "urgent" | "normal";
   createdAt: number;
-  /** urgent: 30dk, normal: 2sa */
+  /** urgent: 30min, normal: 2hr */
   ttlMs: number;
   processedAt?: number;
   /**
-   * İşlenmeden önce beklenecek zaman (unix ms).
-   * Şu an < processAfter ise pending() listesine girmez.
-   * WA DM'lerde 60s geciktirme için kullanılır — Fekrat arada cevap verirse Cobrain atlar.
+   * Wait time before processing (unix ms).
+   * Does not appear in pending() if now < processAfter.
+   * Used for 60s delay in WA DMs — if the user replies in between, Cobrain skips.
    */
   processAfter?: number;
-  /** Hangi cortex işleyecek (undefined = ana Cobrain) */
+  /** Which cortex will process (undefined = main Cobrain) */
   cortex?: "wa";
-  /** WA DM'leri için — reply dedup ve per-chat guard için */
+  /** For WA DMs — reply dedup and per-chat guard */
   chatJid?: string;
 }
 
@@ -79,12 +79,12 @@ class InboxService {
   }
 
   async push(item: Omit<InboxItem, "id" | "createdAt">): Promise<void> {
-    // TTL geçenleri temizle
+    // Clean up expired TTL items
     this.cleanExpired();
 
     const pending = this.pending();
 
-    // Kutu doluysa en eski normal olanı at (urgent korunur)
+    // If inbox is full, drop the oldest normal item (urgent is preserved)
     if (pending.length >= MAX_PENDING) {
       const oldest = pending
         .filter(i => i.priority === "normal")
@@ -94,7 +94,7 @@ class InboxService {
         console.warn(`[Inbox] Full — dropping oldest normal item: "${oldest.subject}"`);
         this.items = this.items.filter(i => i.id !== oldest.id);
       } else {
-        // Hepsi urgent — reddet
+        // All urgent — reject
         console.warn(`[Inbox] Full (${MAX_PENDING} urgent items). New item rejected: "${item.subject}"`);
         return;
       }
@@ -113,8 +113,8 @@ class InboxService {
   }
 
   /**
-   * İşlenmemiş öğeler — önce urgent, sonra en eski.
-   * processAfter varsa ve henüz o zaman gelmemişse listeye girmez.
+   * Unprocessed items — urgent first, then oldest.
+   * Does not enter the list if processAfter is set and hasn't been reached yet.
    */
   pending(): InboxItem[] {
     const now = Date.now();
@@ -127,8 +127,8 @@ class InboxService {
   }
 
   /**
-   * Bu chatJid için işlenmemiş (processedAt yok) item var mı?
-   * processAfter bekliyenler dahil — Guard 2 için kullanılır.
+   * Is there an unprocessed (no processedAt) item for this chatJid?
+   * Includes items waiting for processAfter — used for Guard 2.
    */
   hasChatItem(chatJid: string): boolean {
     return this.items.some(i => !i.processedAt && i.chatJid === chatJid);
@@ -146,8 +146,8 @@ class InboxService {
     const now = Date.now();
     const before = this.items.length;
     this.items = this.items.filter(i => {
-      if (i.processedAt) return false; // İşlenmiş — temizle
-      return now - i.createdAt < i.ttlMs; // TTL dolmamış
+      if (i.processedAt) return false; // Processed — clean up
+      return now - i.createdAt < i.ttlMs; // TTL not expired
     });
     const removed = before - this.items.length;
     if (removed > 0) {

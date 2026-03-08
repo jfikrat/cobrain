@@ -13,21 +13,21 @@ export function exportToMarkdown(
   let markdown = `# ${conversation.title}\n\n`;
 
   if (includeTimestamps) {
-    markdown += `> Oluşturulma: ${new Date(conversation.createdAt).toLocaleString("tr-TR")}\n`;
-    markdown += `> Son güncelleme: ${new Date(conversation.updatedAt).toLocaleString("tr-TR")}\n\n`;
+    markdown += `> Created: ${new Date(conversation.createdAt).toLocaleString("en-US")}\n`;
+    markdown += `> Last updated: ${new Date(conversation.updatedAt).toLocaleString("en-US")}\n\n`;
   }
 
   markdown += `---\n\n`;
 
   for (const message of conversation.messages) {
-    const role = message.role === "user" ? "**Sen**" : "**Cobrain**";
+    const role = message.role === "user" ? "**You**" : "**Cobrain**";
     const time = includeTimestamps ? ` _(${formatTime(message.timestamp)})_` : "";
 
     markdown += `### ${role}${time}\n\n`;
     markdown += `${message.content}\n\n`;
 
     if (includeToolUsage && message.toolUses && message.toolUses.length > 0) {
-      markdown += `<details>\n<summary>Kullanılan araçlar</summary>\n\n`;
+      markdown += `<details>\n<summary>Tools used</summary>\n\n`;
       for (const tool of message.toolUses) {
         markdown += `- **${tool.name}**: ${tool.status}\n`;
       }

@@ -33,16 +33,16 @@ if (!configResult.success) {
   ║    ╚██████╗╚██████╔╝██████╔╝██║  ██║██║  ██║██║██║ ╚████║ ║
   ║     ╚═════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ║
   ║                                                           ║
-  ║                    KURULUM MODU                           ║
+  ║                    SETUP MODE                           ║
   ║                                                           ║
   ╚═══════════════════════════════════════════════════════════╝
 
-  Konfigürasyon eksik veya geçersiz.
+  Configuration missing or invalid.
 
-  Hatalar:
+  Errors:
 ${configResult.errors.map((e) => `    • ${e}`).join("\n")}
 
-  Kurulum sihirbazını açın:
+  Open the setup wizard:
   → http://localhost:3000
   `);
 

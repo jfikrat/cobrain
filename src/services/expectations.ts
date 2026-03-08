@@ -1,8 +1,8 @@
 /**
- * Expectations (Pending Actions / Beklentiler)
+ * Expectations (Pending Actions)
  *
- * "Ne bekliyorum?" state'i. Bir aksiyon yapıldığında (mesaj gönderildi,
- * araştırma başlatıldı) buraya bir beklenti kaydedilir.
+ * "What am I expecting?" state. When an action is taken (message sent,
+ * research started), an expectation is recorded here.
  */
 
 import { join } from "node:path";
@@ -11,36 +11,36 @@ import { config } from "../config.ts";
 // ── Types ─────────────────────────────────────────────────────────────────
 
 export type ExpectationType =
-  | "whatsapp_reply"      // Birinden WhatsApp cevabı bekliyorum
-  | "research_result"     // Araştırma sonucu bekliyorum
-  | "reminder_followup"   // Hatırlatıcı sonrası takip
-  | "location_arrival"    // Bir konuma varış bekliyorum
-  | "user_confirmation"   // Kullanıcıdan onay bekliyorum
-  | "scheduled_task"      // Zamanlanmış görev
-  | "custom";             // Özel beklenti
+  | "whatsapp_reply"      // Expecting a WhatsApp reply from someone
+  | "research_result"     // Expecting research results
+  | "reminder_followup"   // Follow-up after reminder
+  | "location_arrival"    // Expecting arrival at a location
+  | "user_confirmation"   // Expecting user confirmation
+  | "scheduled_task"      // Scheduled task
+  | "custom";             // Custom expectation
 
 export interface PendingExpectation {
   /** Unique ID */
   id: string;
-  /** Beklenti tipi */
+  /** Expectation type */
   type: ExpectationType;
-  /** Hedef kişi veya kaynak (WhatsApp numarası, URL, vs.) */
+  /** Target person or source (WhatsApp number, URL, etc.) */
   target: string;
-  /** Beklentinin bağlamı — neden bekliyoruz */
+  /** Context of the expectation — why we're waiting */
   context: string;
-  /** Ne yapılacak — resolve olduğunda */
+  /** What to do — when resolved */
   onResolved: string;
-  /** Oluşturulma zamanı */
+  /** Creation time */
   createdAt: number;
-  /** Zaman aşımı (ms) — 0 = sınırsız */
+  /** Timeout (ms) — 0 = unlimited */
   timeout: number;
-  /** İlişkili kullanıcı */
+  /** Associated user */
   userId: number;
-  /** Durum */
+  /** Status */
   status: "pending" | "resolved" | "expired";
-  /** Çözülme zamanı */
+  /** Resolution time */
   resolvedAt?: number;
-  /** Çözülme verisi */
+  /** Resolution data */
   resolvedData?: Record<string, unknown>;
 }
 
@@ -54,7 +54,7 @@ class ExpectationsManager {
   private saving: Promise<void> = Promise.resolve();
 
   /**
-   * Dosyadan yükle
+   * Load from file
    */
   async load(): Promise<void> {
     try {
@@ -88,7 +88,7 @@ class ExpectationsManager {
   }
 
   /**
-   * Yeni beklenti oluştur
+   * Create a new expectation
    */
   async create(params: {
     type: ExpectationType;
@@ -96,7 +96,7 @@ class ExpectationsManager {
     context: string;
     onResolved: string;
     userId: number;
-    timeout?: number; // ms, default 30 dakika
+    timeout?: number; // ms, default 30 minutes
   }): Promise<PendingExpectation> {
     const expectation: PendingExpectation = {
       id: `exp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -119,7 +119,7 @@ class ExpectationsManager {
   }
 
   /**
-   * Beklentiyi çöz
+   * Resolve an expectation
    */
   async resolve(id: string, data: Record<string, unknown> = {}): Promise<PendingExpectation | null> {
     const exp = this.expectations.find(e => e.id === id && e.status === "pending");
@@ -137,7 +137,7 @@ class ExpectationsManager {
   }
 
   /**
-   * Zaman aşımına uğramış beklentileri temizle
+   * Clean up expired expectations
    */
   cleanExpired(): PendingExpectation[] {
     const now = Date.now();
@@ -161,28 +161,28 @@ class ExpectationsManager {
   }
 
   /**
-   * Bekleyen beklentiler
+   * Pending expectations
    */
   pending(): PendingExpectation[] {
     return this.expectations.filter(e => e.status === "pending");
   }
 
   /**
-   * Belirli bir kullanıcının bekleyen beklentileri
+   * Pending expectations for a specific user
    */
   pendingForUser(userId: number): PendingExpectation[] {
     return this.expectations.filter(e => e.status === "pending" && e.userId === userId);
   }
 
   /**
-   * Tüm beklentiler (debug)
+   * All expectations (debug)
    */
   all(): PendingExpectation[] {
     return [...this.expectations];
   }
 
   /**
-   * Eski resolved/expired kayıtları temizle (7 günden eski)
+   * Clean up old resolved/expired entries (older than 7 days)
    */
   async prune(maxAge: number = 7 * 24 * 60 * 60 * 1000): Promise<number> {
     const before = this.expectations.length;

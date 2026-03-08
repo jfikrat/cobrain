@@ -15,7 +15,7 @@ async function rclone(args: string[]): Promise<{ output: string; error?: string 
     const result = await $`rclone ${args}`.quiet();
     return { output: result.stdout.toString().trim() };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "rclone hatası";
+    const message = error instanceof Error ? error.message : "rclone error";
     return { output: "", error: message };
   }
 }
@@ -25,10 +25,10 @@ async function rclone(args: string[]): Promise<{ output: string; error?: string 
  */
 export const gdriveListTool = tool(
   "gdrive_list",
-  "Google Drive'da dosyaları listele. Varsayılan olarak kök dizini listeler.",
+  "List files in Google Drive. Defaults to the root directory.",
   {
-    path: z.string().default("").describe("Drive yolu (örn: 'Belgeler' veya 'Projeler/2024')"),
-    recursive: z.boolean().default(false).describe("Alt klasörleri de dahil et"),
+    path: z.string().default("").describe("Drive path (e.g. 'Documents' or 'Projects/2024')"),
+    recursive: z.boolean().default(false).describe("Include subfolders"),
   },
   async ({ path, recursive }) => {
     const args = recursive ? ["lsf", "-R", `gdrive:${path}`] : ["lsf", `gdrive:${path}`];
@@ -36,25 +36,25 @@ export const gdriveListTool = tool(
 
     if (error) {
       return {
-        content: [{ type: "text" as const, text: `Drive hatası: ${error}` }],
+        content: [{ type: "text" as const, text: `Drive error: ${error}` }],
         isError: true,
       };
     }
 
     if (!output) {
       return {
-        content: [{ type: "text" as const, text: "Klasör boş veya bulunamadı." }],
+        content: [{ type: "text" as const, text: "Folder is empty or not found." }],
       };
     }
 
-    const files = output.split("\n").slice(0, 50); // Max 50 dosya göster
+    const files = output.split("\n").slice(0, 50); // Show max 50 files
     const hasMore = output.split("\n").length > 50;
 
     return {
       content: [
         {
           type: "text" as const,
-          text: `gdrive:${path || "/"} içeriği:\n${files.join("\n")}${hasMore ? "\n... (daha fazla var)" : ""}`,
+          text: `Contents of gdrive:${path || "/"}:\n${files.join("\n")}${hasMore ? "\n... (more available)" : ""}`,
         },
       ],
     };
@@ -66,23 +66,23 @@ export const gdriveListTool = tool(
  */
 export const gdriveDirsTool = tool(
   "gdrive_dirs",
-  "Google Drive'da sadece klasörleri listele.",
+  "List only folders in Google Drive.",
   {
-    path: z.string().default("").describe("Drive yolu"),
+    path: z.string().default("").describe("Drive path"),
   },
   async ({ path }) => {
     const { output, error } = await rclone(["lsd", `gdrive:${path}`]);
 
     if (error) {
       return {
-        content: [{ type: "text" as const, text: `Drive hatası: ${error}` }],
+        content: [{ type: "text" as const, text: `Drive error: ${error}` }],
         isError: true,
       };
     }
 
     if (!output) {
       return {
-        content: [{ type: "text" as const, text: "Alt klasör bulunamadı." }],
+        content: [{ type: "text" as const, text: "No subfolders found." }],
       };
     }
 
@@ -91,7 +91,7 @@ export const gdriveDirsTool = tool(
       .split("\n")
       .map((line) => {
         const parts = line.trim().split(/\s+/);
-        return parts[parts.length - 1]; // Son eleman klasör adı
+        return parts[parts.length - 1]; // Last item is the folder name
       })
       .filter(Boolean);
 
@@ -99,7 +99,7 @@ export const gdriveDirsTool = tool(
       content: [
         {
           type: "text" as const,
-          text: `gdrive:${path || "/"} klasörleri:\n${dirs.join("\n")}`,
+          text: `Folders in gdrive:${path || "/"}:\n${dirs.join("\n")}`,
         },
       ],
     };
@@ -111,16 +111,16 @@ export const gdriveDirsTool = tool(
  */
 export const gdriveLinkTool = tool(
   "gdrive_link",
-  "Google Drive dosyası için paylaşılabilir link oluştur.",
+  "Create a shareable link for a Google Drive file.",
   {
-    path: z.string().describe("Dosya yolu (örn: 'Belgeler/rapor.pdf')"),
+    path: z.string().describe("File path (e.g. 'Documents/report.pdf')"),
   },
   async ({ path }) => {
     const { output, error } = await rclone(["link", `gdrive:${path}`]);
 
     if (error) {
       return {
-        content: [{ type: "text" as const, text: `Link oluşturulamadı: ${error}` }],
+        content: [{ type: "text" as const, text: `Could not create link: ${error}` }],
         isError: true,
       };
     }
@@ -129,7 +129,7 @@ export const gdriveLinkTool = tool(
       content: [
         {
           type: "text" as const,
-          text: `Paylaşılabilir link:\n${output}`,
+          text: `Shareable link:\n${output}`,
         },
       ],
     };
@@ -141,22 +141,22 @@ export const gdriveLinkTool = tool(
  */
 export const gdriveInfoTool = tool(
   "gdrive_info",
-  "Google Drive dosyası hakkında bilgi al (boyut, tarih, vb.).",
+  "Get info about a Google Drive file (size, date, etc.).",
   {
-    path: z.string().describe("Dosya yolu"),
+    path: z.string().describe("File path"),
   },
   async ({ path }) => {
     const { output, error } = await rclone(["lsl", `gdrive:${path}`]);
 
     if (error) {
       return {
-        content: [{ type: "text" as const, text: `Bilgi alınamadı: ${error}` }],
+        content: [{ type: "text" as const, text: `Could not get info: ${error}` }],
         isError: true,
       };
     }
 
     return {
-      content: [{ type: "text" as const, text: output || "Dosya bulunamadı." }],
+      content: [{ type: "text" as const, text: output || "File not found." }],
     };
   }
 );
@@ -166,10 +166,10 @@ export const gdriveInfoTool = tool(
  */
 export const gdriveSearchTool = tool(
   "gdrive_search",
-  "Google Drive'da dosya ara.",
+  "Search files in Google Drive.",
   {
-    query: z.string().describe("Arama terimi (dosya adında aranır)"),
-    path: z.string().default("").describe("Arama yapılacak klasör"),
+    query: z.string().describe("Search term (matched against file names)"),
+    path: z.string().default("").describe("Folder to search in"),
   },
   async ({ query, path }) => {
     const { output, error } = await rclone([
@@ -182,14 +182,14 @@ export const gdriveSearchTool = tool(
 
     if (error) {
       return {
-        content: [{ type: "text" as const, text: `Arama hatası: ${error}` }],
+        content: [{ type: "text" as const, text: `Search error: ${error}` }],
         isError: true,
       };
     }
 
     if (!output) {
       return {
-        content: [{ type: "text" as const, text: `"${query}" için sonuç bulunamadı.` }],
+        content: [{ type: "text" as const, text: `No results found for "${query}".` }],
       };
     }
 
@@ -200,7 +200,7 @@ export const gdriveSearchTool = tool(
       content: [
         {
           type: "text" as const,
-          text: `"${query}" araması sonuçları:\n${files.join("\n")}${hasMore ? "\n... (daha fazla var)" : ""}`,
+          text: `Search results for "${query}":\n${files.join("\n")}${hasMore ? "\n... (more available)" : ""}`,
         },
       ],
     };

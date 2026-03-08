@@ -24,7 +24,7 @@ export function InputArea({
   onStop,
   status,
   isTyping,
-  placeholder = "Mesajınızı yazın...",
+  placeholder = "Type your message...",
   showFileUpload = false,
   showVoiceInput = false,
   onFileUpload,
@@ -90,7 +90,7 @@ export function InputArea({
                   size="sm"
                   onClick={onFileUpload}
                   disabled={isDisabled}
-                  tooltip="Dosya ekle"
+                  tooltip="Attach file"
                 >
                   <PaperclipIcon size={18} />
                 </IconButton>
@@ -101,7 +101,7 @@ export function InputArea({
                   size="sm"
                   onClick={onVoiceInput}
                   disabled={isDisabled}
-                  tooltip="Sesli giriş"
+                  tooltip="Voice input"
                 >
                   <MicIcon size={18} />
                 </IconButton>
@@ -117,7 +117,7 @@ export function InputArea({
             onKeyDown={handleKeyDown}
             disabled={isDisabled}
             rows={1}
-            aria-label="Mesaj girin"
+            aria-label="Enter message"
           />
         </div>
 
@@ -125,7 +125,7 @@ export function InputArea({
           <button
             className="send-button"
             onClick={onStop}
-            aria-label="Durdur"
+            aria-label="Stop"
             style={{ background: "var(--error)" }}
           >
             <StopIcon size={20} />
@@ -135,7 +135,7 @@ export function InputArea({
             className="send-button"
             onClick={onSend}
             disabled={!canSend}
-            aria-label="Gönder"
+            aria-label="Send"
           >
             <SendIcon size={20} />
           </button>
@@ -153,12 +153,12 @@ export function InputArea({
           background: "var(--bg-tertiary)",
           borderRadius: "var(--radius-xs)",
           fontSize: "0.7rem"
-        }}>Enter</kbd> gönder, <kbd style={{
+        }}>Enter</kbd> send, <kbd style={{
           padding: "2px 6px",
           background: "var(--bg-tertiary)",
           borderRadius: "var(--radius-xs)",
           fontSize: "0.7rem"
-        }}>Shift+Enter</kbd> yeni satır
+        }}>Shift+Enter</kbd> new line
       </div>
     </div>
   );

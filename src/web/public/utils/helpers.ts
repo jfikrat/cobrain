@@ -19,7 +19,7 @@ export function generateId(): string {
  * Format timestamp to time string
  */
 export function formatTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString("tr-TR", {
+  return new Date(timestamp).toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -37,20 +37,20 @@ export function formatRelativeDate(timestamp: number): string {
   const day = 24 * hour;
 
   if (diff < minute) {
-    return "Az önce";
+    return "Just now";
   } else if (diff < hour) {
     const mins = Math.floor(diff / minute);
-    return `${mins} dk önce`;
+    return `${mins}m ago`;
   } else if (diff < day) {
     const hours = Math.floor(diff / hour);
-    return `${hours} sa önce`;
+    return `${hours}h ago`;
   } else if (diff < 2 * day) {
-    return "Dün";
+    return "Yesterday";
   } else if (diff < 7 * day) {
     const days = Math.floor(diff / day);
-    return `${days} gün önce`;
+    return `${days}d ago`;
   } else {
-    return new Date(timestamp).toLocaleDateString("tr-TR");
+    return new Date(timestamp).toLocaleDateString("en-US");
   }
 }
 

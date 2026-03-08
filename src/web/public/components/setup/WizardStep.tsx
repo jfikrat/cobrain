@@ -7,7 +7,7 @@ interface WizardStepProps {
   onStepClick: (step: number) => void;
 }
 
-const STEP_LABELS = ["Telegram", "Gemini API", "Gelişmiş", "Özet"];
+const STEP_LABELS = ["Telegram", "Gemini API", "Advanced", "Summary"];
 
 export function WizardStepIndicator({
   currentStep,

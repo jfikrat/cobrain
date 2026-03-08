@@ -35,11 +35,11 @@ export function initTelegramMcp(bot: Bot): void {
 
 const sendPhotoTool = tool(
   "telegram_send_photo",
-  "Telegram'dan kullanıcıya resim gönderir. Dosya yolu veya URL olabilir.",
+  "Send a photo to a Telegram user. Accepts a file path or URL.",
   {
-    userId: z.number().describe("Alıcı kullanıcı ID"),
-    photo: z.string().describe("Resim dosya yolu veya URL"),
-    caption: z.string().optional().describe("Resim açıklaması"),
+    userId: z.number().describe("Recipient user ID"),
+    photo: z.string().describe("Photo file path or URL"),
+    caption: z.string().optional().describe("Photo caption"),
   },
   async ({ userId, photo, caption }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
@@ -48,18 +48,18 @@ const sendPhotoTool = tool(
 
     await telegramBot.api.sendPhoto(userId, photoSource, { caption });
 
-    return { success: true, message: "Resim gönderildi" };
+    return { success: true, message: "Photo sent" };
   }
 );
 
 const sendDocumentTool = tool(
   "telegram_send_document",
-  "Telegram'dan kullanıcıya dosya gönderir.",
+  "Send a file to a Telegram user.",
   {
-    userId: z.number().describe("Alıcı kullanıcı ID"),
-    document: z.string().describe("Dosya yolu"),
-    caption: z.string().optional().describe("Dosya açıklaması"),
-    filename: z.string().optional().describe("Görüntülenecek dosya adı"),
+    userId: z.number().describe("Recipient user ID"),
+    document: z.string().describe("File path"),
+    caption: z.string().optional().describe("File caption"),
+    filename: z.string().optional().describe("Displayed filename"),
   },
   async ({ userId, document, caption, filename }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
@@ -68,34 +68,34 @@ const sendDocumentTool = tool(
 
     await telegramBot.api.sendDocument(userId, file, { caption });
 
-    return { success: true, message: "Dosya gönderildi" };
+    return { success: true, message: "File sent" };
   }
 );
 
 const sendVoiceTool = tool(
   "telegram_send_voice",
-  "Telegram'dan kullanıcıya ses mesajı gönderir (.ogg formatında).",
+  "Send a voice message to a Telegram user (.ogg format).",
   {
-    userId: z.number().describe("Alıcı kullanıcı ID"),
-    voice: z.string().describe("Ses dosyası yolu (.ogg)"),
-    caption: z.string().optional().describe("Açıklama"),
+    userId: z.number().describe("Recipient user ID"),
+    voice: z.string().describe("Voice file path (.ogg)"),
+    caption: z.string().optional().describe("Caption"),
   },
   async ({ userId, voice, caption }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
 
     await telegramBot.api.sendVoice(userId, new InputFile(voice), { caption });
 
-    return { success: true, message: "Ses mesajı gönderildi" };
+    return { success: true, message: "Voice message sent" };
   }
 );
 
 const sendVideoTool = tool(
   "telegram_send_video",
-  "Telegram'dan kullanıcıya video gönderir.",
+  "Send a video to a Telegram user.",
   {
-    userId: z.number().describe("Alıcı kullanıcı ID"),
-    video: z.string().describe("Video dosya yolu veya URL"),
-    caption: z.string().optional().describe("Video açıklaması"),
+    userId: z.number().describe("Recipient user ID"),
+    video: z.string().describe("Video file path or URL"),
+    caption: z.string().optional().describe("Video caption"),
   },
   async ({ userId, video, caption }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
@@ -104,15 +104,15 @@ const sendVideoTool = tool(
 
     await telegramBot.api.sendVideo(userId, videoSource, { caption });
 
-    return { success: true, message: "Video gönderildi" };
+    return { success: true, message: "Video sent" };
   }
 );
 
 const sendLocationTool = tool(
   "telegram_send_location",
-  "Telegram'dan kullanıcıya konum gönderir.",
+  "Send a location to a Telegram user.",
   {
-    userId: z.number().describe("Alıcı kullanıcı ID"),
+    userId: z.number().describe("Recipient user ID"),
     latitude: z.number().describe("Enlem"),
     longitude: z.number().describe("Boylam"),
   },
@@ -121,35 +121,35 @@ const sendLocationTool = tool(
 
     await telegramBot.api.sendLocation(userId, latitude, longitude);
 
-    return { success: true, message: "Konum gönderildi" };
+    return { success: true, message: "Location sent" };
   }
 );
 
 const sendStickerTool = tool(
   "telegram_send_sticker",
-  "Telegram'dan kullanıcıya sticker gönderir.",
+  "Send a sticker to a Telegram user.",
   {
-    userId: z.number().describe("Alıcı kullanıcı ID"),
-    sticker: z.string().describe("Sticker file_id veya URL"),
+    userId: z.number().describe("Recipient user ID"),
+    sticker: z.string().describe("Sticker file_id or URL"),
   },
   async ({ userId, sticker }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
 
     await telegramBot.api.sendSticker(userId, sticker);
 
-    return { success: true, message: "Sticker gönderildi" };
+    return { success: true, message: "Sticker sent" };
   }
 );
 
 const sendPollTool = tool(
   "telegram_send_poll",
-  "Telegram'dan kullanıcıya anket gönderir.",
+  "Send a poll to a Telegram user.",
   {
-    userId: z.number().describe("Alıcı kullanıcı ID"),
-    question: z.string().describe("Anket sorusu"),
-    options: z.array(z.string()).describe("Seçenekler (en az 2)"),
-    isAnonymous: z.boolean().optional().describe("Anonim mi?"),
-    allowsMultipleAnswers: z.boolean().optional().describe("Çoklu cevap?"),
+    userId: z.number().describe("Recipient user ID"),
+    question: z.string().describe("Poll question"),
+    options: z.array(z.string()).describe("Options (at least 2)"),
+    isAnonymous: z.boolean().optional().describe("Anonymous?"),
+    allowsMultipleAnswers: z.boolean().optional().describe("Multiple answers?"),
   },
   async ({ userId, question, options, isAnonymous, allowsMultipleAnswers }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
@@ -159,50 +159,50 @@ const sendPollTool = tool(
       allows_multiple_answers: allowsMultipleAnswers ?? false,
     });
 
-    return { success: true, message: "Anket gönderildi" };
+    return { success: true, message: "Poll sent" };
   }
 );
 
 const editMessageTool = tool(
   "telegram_edit_message",
-  "Telegram'da gönderilmiş bir mesajı düzenler.",
+  "Edit a sent Telegram message.",
   {
-    userId: z.number().describe("Chat/kullanıcı ID"),
-    messageId: z.number().describe("Düzenlenecek mesaj ID"),
-    text: z.string().describe("Yeni mesaj içeriği"),
+    userId: z.number().describe("Chat/user ID"),
+    messageId: z.number().describe("Message ID to edit"),
+    text: z.string().describe("New message text"),
   },
   async ({ userId, messageId, text }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
 
     await telegramBot.api.editMessageText(userId, messageId, text);
 
-    return { success: true, message: "Mesaj düzenlendi" };
+    return { success: true, message: "Message edited" };
   }
 );
 
 const deleteMessageTool = tool(
   "telegram_delete_message",
-  "Telegram'da bir mesajı siler.",
+  "Delete a Telegram message.",
   {
-    userId: z.number().describe("Chat/kullanıcı ID"),
-    messageId: z.number().describe("Silinecek mesaj ID"),
+    userId: z.number().describe("Chat/user ID"),
+    messageId: z.number().describe("Message ID to delete"),
   },
   async ({ userId, messageId }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
 
     await telegramBot.api.deleteMessage(userId, messageId);
 
-    return { success: true, message: "Mesaj silindi" };
+    return { success: true, message: "Message deleted" };
   }
 );
 
 const pinMessageTool = tool(
   "telegram_pin_message",
-  "Telegram'da bir mesajı sabitler.",
+  "Pin a Telegram message.",
   {
-    userId: z.number().describe("Chat/kullanıcı ID"),
-    messageId: z.number().describe("Sabitlenecek mesaj ID"),
-    disableNotification: z.boolean().optional().describe("Sessiz sabitle?"),
+    userId: z.number().describe("Chat/user ID"),
+    messageId: z.number().describe("Message ID to pin"),
+    disableNotification: z.boolean().optional().describe("Pin silently?"),
   },
   async ({ userId, messageId, disableNotification }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
@@ -211,16 +211,16 @@ const pinMessageTool = tool(
       disable_notification: disableNotification ?? false,
     });
 
-    return { success: true, message: "Mesaj sabitlendi" };
+    return { success: true, message: "Message pinned" };
   }
 );
 
 const unpinMessageTool = tool(
   "telegram_unpin_message",
-  "Telegram'da sabitlenmiş mesajı kaldırır. messageId verilmezse tüm sabitlemeler kaldırılır.",
+  "Unpin a Telegram message. If messageId is omitted, all pins are removed.",
   {
-    userId: z.number().describe("Chat/kullanıcı ID"),
-    messageId: z.number().optional().describe("Mesaj ID (verilmezse tümü)"),
+    userId: z.number().describe("Chat/user ID"),
+    messageId: z.number().optional().describe("Message ID (all if omitted)"),
   },
   async ({ userId, messageId }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
@@ -231,17 +231,17 @@ const unpinMessageTool = tool(
       await telegramBot.api.unpinAllChatMessages(userId);
     }
 
-    return { success: true, message: "Sabitleme kaldırıldı" };
+    return { success: true, message: "Message unpinned" };
   }
 );
 
 const sendAnimationTool = tool(
   "telegram_send_animation",
-  "Telegram'dan kullanıcıya GIF/animasyon gönderir.",
+  "Send a GIF/animation to a Telegram user.",
   {
-    userId: z.number().describe("Alıcı kullanıcı ID"),
-    animation: z.string().describe("GIF dosya yolu veya URL"),
-    caption: z.string().optional().describe("Açıklama"),
+    userId: z.number().describe("Recipient user ID"),
+    animation: z.string().describe("GIF file path or URL"),
+    caption: z.string().optional().describe("Caption"),
   },
   async ({ userId, animation, caption }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
@@ -250,32 +250,32 @@ const sendAnimationTool = tool(
 
     await telegramBot.api.sendAnimation(userId, animSource, { caption });
 
-    return { success: true, message: "Animasyon gönderildi" };
+    return { success: true, message: "Animation sent" };
   }
 );
 
 const forwardMessageTool = tool(
   "telegram_forward_message",
-  "Telegram'da bir mesajı başka bir chat'e iletir.",
+  "Forward a Telegram message to another chat.",
   {
-    toChatId: z.number().describe("Hedef chat ID"),
-    fromChatId: z.number().describe("Kaynak chat ID"),
-    messageId: z.number().describe("İletilecek mesaj ID"),
+    toChatId: z.number().describe("Target chat ID"),
+    fromChatId: z.number().describe("Source chat ID"),
+    messageId: z.number().describe("Message ID to forward"),
   },
   async ({ toChatId, fromChatId, messageId }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
 
     await telegramBot.api.forwardMessage(toChatId, fromChatId, messageId);
 
-    return { success: true, message: "Mesaj iletildi" };
+    return { success: true, message: "Message forwarded" };
   }
 );
 
 const getChatInfoTool = tool(
   "telegram_get_chat_info",
-  "Telegram chat/kullanıcı bilgilerini getirir.",
+  "Get Telegram chat/user information.",
   {
-    chatId: z.number().describe("Chat/kullanıcı ID"),
+    chatId: z.number().describe("Chat/user ID"),
   },
   async ({ chatId }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
@@ -296,21 +296,21 @@ const getChatInfoTool = tool(
 
 const sendMessageWithButtonsTool = tool(
   "telegram_send_message_with_buttons",
-  "Telegram'dan inline butonlu mesaj gönderir.",
+  "Send a Telegram message with inline buttons.",
   {
-    userId: z.number().describe("Alıcı kullanıcı ID"),
-    text: z.string().describe("Mesaj metni"),
+    userId: z.number().describe("Recipient user ID"),
+    text: z.string().describe("Message text"),
     buttons: z
       .array(
         z.array(
           z.object({
-            text: z.string().describe("Buton metni"),
-            url: z.string().optional().describe("Tıklanınca açılacak URL"),
+            text: z.string().describe("Button text"),
+            url: z.string().optional().describe("URL to open when clicked"),
             callbackData: z.string().optional().describe("Callback data"),
           })
         )
       )
-      .describe("Buton satırları"),
+      .describe("Button rows"),
   },
   async ({ userId, text, buttons }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
@@ -333,26 +333,26 @@ const sendMessageWithButtonsTool = tool(
       },
     });
 
-    return { success: true, message: "Butonlu mesaj gönderildi" };
+    return { success: true, message: "Message with buttons sent" };
   }
 );
 
 const setTypingTool = tool(
   "telegram_set_typing",
-  "Telegram'da 'yazıyor...' göstergesi gösterir.",
+  "Show the Telegram 'typing...' indicator.",
   {
-    userId: z.number().describe("Chat/kullanıcı ID"),
+    userId: z.number().describe("Chat/user ID"),
     action: z
       .enum(["typing", "upload_photo", "upload_video", "upload_document", "record_voice"])
       .optional()
-      .describe("Aksiyon tipi"),
+      .describe("Action type"),
   },
   async ({ userId, action }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
 
     await telegramBot.api.sendChatAction(userId, action || "typing");
 
-    return { success: true, message: "Chat action gönderildi" };
+    return { success: true, message: "Chat action sent" };
   }
 );
 
@@ -376,16 +376,16 @@ export async function sendToTopic(
 
 const sendTopicMessageTool = tool(
   "telegram_send_topic_message",
-  "Telegram forum topic'ine mesaj gönderir. Proaktif mesajlar için kullan.",
+  "Send a message to a Telegram forum topic. Use for proactive messages.",
   {
     chatId: z.number().describe("Supergroup chat ID"),
     threadId: z.number().describe("Topic thread ID"),
-    text: z.string().describe("Mesaj metni"),
+    text: z.string().describe("Message text"),
     parseMode: z.enum(["HTML", "Markdown"]).optional().describe("Parse mode"),
   },
   async ({ chatId, threadId, text, parseMode }) => {
     await sendToTopic(chatId, threadId, text, parseMode);
-    return { success: true, message: "Topic'e mesaj gönderildi" };
+    return { success: true, message: "Message sent to topic" };
   },
 );
 
@@ -393,11 +393,11 @@ const sendTopicMessageTool = tool(
 
 const createForumTopicTool = tool(
   "telegram_create_forum_topic",
-  "Telegram supergroup'ta yeni forum topic oluşturur.",
+  "Create a new forum topic in a Telegram supergroup.",
   {
     chatId: z.number().describe("Supergroup chat ID"),
-    name: z.string().describe("Topic adı"),
-    iconColor: z.number().optional().describe("Icon rengi (0x-hex)"),
+    name: z.string().describe("Topic name"),
+    iconColor: z.number().optional().describe("Icon color (0x hex)"),
   },
   async ({ chatId, name, iconColor }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
@@ -416,7 +416,7 @@ const createForumTopicTool = tool(
 
 const closeForumTopicTool = tool(
   "telegram_close_forum_topic",
-  "Telegram forum topic'ini kapatır.",
+  "Close a Telegram forum topic.",
   {
     chatId: z.number().describe("Supergroup chat ID"),
     threadId: z.number().describe("Topic thread ID"),
@@ -426,13 +426,13 @@ const closeForumTopicTool = tool(
 
     await telegramBot.api.closeForumTopic(chatId, threadId);
 
-    return { success: true, message: "Topic kapatıldı" };
+    return { success: true, message: "Topic closed" };
   }
 );
 
 const reopenForumTopicTool = tool(
   "telegram_reopen_forum_topic",
-  "Kapatılmış forum topic'ini yeniden açar.",
+  "Reopen a closed forum topic.",
   {
     chatId: z.number().describe("Supergroup chat ID"),
     threadId: z.number().describe("Topic thread ID"),
@@ -442,7 +442,7 @@ const reopenForumTopicTool = tool(
 
     await telegramBot.api.reopenForumTopic(chatId, threadId);
 
-    return { success: true, message: "Topic yeniden açıldı" };
+    return { success: true, message: "Topic reopened" };
   }
 );
 
@@ -450,13 +450,13 @@ const reopenForumTopicTool = tool(
 
 const agentCreateTool = tool(
   "agent_create",
-  "Yeni agent oluşturur: forum topic + mind dosyaları + registry kaydı. Hub supergroup'ta çalışır.",
+  "Create a new agent: forum topic + mind files + registry entry. Works in the hub supergroup.",
   {
-    name: z.string().describe("Agent görünen adı (örn: 'Kod', 'Araştırma')"),
-    type: z.enum(["genel", "whatsapp", "kod", "arastirma", "custom"]).describe("Agent tipi"),
-    description: z.string().optional().describe("Agent açıklaması"),
-    iconColor: z.number().optional().describe("Topic icon rengi"),
-    workDir: z.string().optional().describe("Agent'ın çalışma dizini (örn: '/home/fjds/apps/finance-app')"),
+    name: z.string().describe("Agent display name (e.g. 'Code', 'Research')"),
+    type: z.enum(["general", "whatsapp", "code", "research", "custom"]).describe("Agent type"),
+    description: z.string().optional().describe("Agent description"),
+    iconColor: z.number().optional().describe("Topic icon color"),
+    workDir: z.string().optional().describe("Agent working directory (e.g. '/home/fjds/apps/finance-app')"),
   },
   async ({ name, type, description, iconColor, workDir }) => {
     if (!telegramBot) throw new Error("Telegram bot not initialized");
@@ -470,15 +470,15 @@ const agentCreateTool = tool(
     const resolvedWorkDir = workDir || `${userFolder}/workspace/${agentId}`;
     await import("node:fs/promises").then(fs => fs.mkdir(resolvedWorkDir, { recursive: true }));
 
-    // 1. Telegram forum topic oluştur
+    // 1. Create Telegram forum topic
     const topic = await telegramBot.api.createForumTopic(hubChatId, name, {
       icon_color: iconColor as any,
     });
 
-    // 2. Mind dosyalarını scaffold et
+    // 2. Scaffold mind files
     const mindDir = await scaffoldAgentMindFiles(userFolder, agentId, type as AgentType, name);
 
-    // 3. Registry'ye kaydet
+    // 3. Save to registry
     const agent = await registerAgent({
       id: agentId,
       name,
@@ -492,7 +492,7 @@ const agentCreateTool = tool(
       workDir: resolvedWorkDir,
     });
 
-    // 4. Route'ları güncelle
+    // 4. Refresh routes
     refreshTopicRoutes();
 
     return {
@@ -504,14 +504,14 @@ const agentCreateTool = tool(
         topicId: agent.topicId,
         mindDir: agent.mindDir,
       },
-      message: `Agent "${name}" oluşturuldu (topic: ${topic.message_thread_id}). Mind dosyaları: identity.md, rules.md, behaviors.md, capabilities.md. BrainLoop otomatik heartbeat gönderecek.`,
+      message: `Agent "${name}" created (topic: ${topic.message_thread_id}). Mind files: identity.md, rules.md, behaviors.md, capabilities.md. BrainLoop will send heartbeat updates automatically.`,
     };
   }
 );
 
 const agentArchiveTool = tool(
   "agent_archive",
-  "Agent'ı arşivler: topic kapatır + registry'den archived yapar.",
+  "Archive an agent: close its topic and mark it archived in the registry.",
   {
     agentId: z.string().describe("Agent ID (slug)"),
   },
@@ -520,24 +520,24 @@ const agentArchiveTool = tool(
     if (!config.COBRAIN_HUB_ID) throw new Error("COBRAIN_HUB_ID not configured");
 
     const agent = getAgentById(agentId);
-    if (!agent) throw new Error(`Agent "${agentId}" bulunamadı`);
+    if (!agent) throw new Error(`Agent "${agentId}" not found`);
 
-    // 1. Topic'i kapat
+    // 1. Close the topic
     try {
       await telegramBot.api.closeForumTopic(config.COBRAIN_HUB_ID, agent.topicId);
     } catch (err) {
-      console.warn(`[AgentArchive] Topic kapatılamadı:`, err);
+      console.warn(`[AgentArchive] Failed to close topic:`, err);
     }
 
-    // 2. Registry'de archived yap
+    // 2. Mark as archived in registry
     await archiveAgent(agentId);
 
-    // 3. Route'ları güncelle
+    // 3. Refresh routes
     refreshTopicRoutes();
 
     return {
       success: true,
-      message: `Agent "${agentId}" arşivlendi`,
+      message: `Agent "${agentId}" archived`,
     };
   }
 );
@@ -546,16 +546,16 @@ const agentArchiveTool = tool(
 
 const agentGetHistoryTool = tool(
   "agent_get_history",
-  "Bir agent'ın son etkileşimlerini getirir. Diğer agent'ların ne konuştuğunu görmek için kullan.",
+  "Get an agent's recent interactions. Use to see what other agents have been talking about.",
   {
-    agentId: z.string().describe("Agent ID (slug, örn: 'kod', 'arastirma')"),
-    limit: z.number().optional().default(5).describe("Kaç etkileşim getirilsin"),
+    agentId: z.string().describe("Agent ID (slug, e.g. 'code', 'research')"),
+    limit: z.number().optional().default(5).describe("Number of interactions to fetch"),
   },
   async ({ agentId, limit }) => {
     const { getAgentHistorySummary } = await import("../../agents/interaction-log.ts");
     const userFolder = userManager.getUserFolder(config.MY_TELEGRAM_ID);
     const summary = await getAgentHistorySummary(userFolder, agentId, limit);
-    return toolSuccess(summary || `Agent "${agentId}" için henüz etkileşim kaydı yok.`);
+    return toolSuccess(summary || `No interaction history yet for agent "${agentId}".`);
   },
 );
 
@@ -563,11 +563,11 @@ const agentGetHistoryTool = tool(
 
 const agentDelegateTool = tool(
   "agent_delegate",
-  "Başka bir agent'a mesaj delege eder. Hedef agent'ın session'ında çalıştırır, cevabı döndürür ve opsiyonel olarak topic'e yazar.",
+  "Delegate a message to another agent. Run it in the target agent's session, return the reply, and optionally post it to the topic.",
   {
-    agentId: z.string().describe("Hedef agent ID (slug, örn: 'kod', 'arastirma')"),
-    message: z.string().describe("Agent'a gönderilecek mesaj"),
-    postToTopic: z.boolean().optional().default(true).describe("Cevabı agent'ın topic'ine yaz"),
+    agentId: z.string().describe("Target agent ID (slug, e.g. 'code', 'research')"),
+    message: z.string().describe("Message to send to the agent"),
+    postToTopic: z.boolean().optional().default(true).describe("Post the reply to the agent's topic"),
   },
   async ({ agentId, message, postToTopic }) => {
     const { buildRouteSystemPrompt } = await import("../../channels/telegram-router.ts");
@@ -576,8 +576,8 @@ const agentDelegateTool = tool(
     const { sendToTopic: sendToTopicFn } = await import("./telegram.ts");
 
     const agent = getAgentById(agentId);
-    if (!agent) throw new Error(`Agent "${agentId}" bulunamadı`);
-    if (agent.status !== "active") throw new Error(`Agent "${agentId}" aktif değil`);
+    if (!agent) throw new Error(`Agent "${agentId}" not found`);
+    if (agent.status !== "active") throw new Error(`Agent "${agentId}" is not active`);
 
     const userFolder = userManager.getUserFolder(config.MY_TELEGRAM_ID);
 
@@ -607,7 +607,7 @@ const agentDelegateTool = tool(
     logAgentInteraction(userFolder, {
       timestamp: new Date().toISOString(),
       agentId,
-      userMessage: `[Delegasyon] ${message}`,
+      userMessage: `[Delegation] ${message}`,
       agentResponse: response.content,
       channel: `telegram:hub:${agentId}:delegated`,
       toolsUsed: response.toolsUsed,
@@ -617,10 +617,10 @@ const agentDelegateTool = tool(
     // Post to agent's topic
     if (postToTopic && config.COBRAIN_HUB_ID && agent.topicId) {
       try {
-        const topicMsg = `📨 <b>Delegasyon</b>\n\n<b>Soru:</b> ${message.slice(0, 200)}\n\n<b>Cevap:</b> ${response.content.slice(0, 3000)}`;
+        const topicMsg = `📨 <b>Delegation</b>\n\n<b>Question:</b> ${message.slice(0, 200)}\n\n<b>Answer:</b> ${response.content.slice(0, 3000)}`;
         await sendToTopicFn(config.COBRAIN_HUB_ID, agent.topicId, topicMsg, "HTML");
       } catch (err) {
-        console.warn("[Delegate] Topic mesajı gönderilemedi:", err);
+        console.warn("[Delegate] Failed to send topic message:", err);
       }
     }
 

@@ -33,7 +33,7 @@ registerMessageHandlers(bot, telegramCtx);
 
 // Error handler
 bot.catch((err) => {
-  console.error("Bot hatası:", err);
+  console.error("Bot error:", err);
 });
 
 // Heartbeat interval reference
@@ -42,7 +42,7 @@ let telegramHeartbeatInterval: ReturnType<typeof setInterval> | null = null;
 // ============ LIFECYCLE ============
 
 export async function startBot(): Promise<void> {
-  console.log("Telegram botu başlatılıyor...");
+  console.log("Starting Telegram bot...");
 
   // Initialize permission system for tool approvals via Telegram
   initPermissions(bot);
@@ -69,7 +69,7 @@ export async function startBot(): Promise<void> {
     heartbeat("telegram_bot", { event: "tick" });
   }, 10_000);
 
-  // Grammy Runner kullan - concurrent processing için
+  // Use Grammy Runner for concurrent processing
   const runner = run(bot, {
     runner: {
       fetch: {
@@ -78,9 +78,9 @@ export async function startBot(): Promise<void> {
     },
   });
 
-  // Bot info'yu al ve logla
+  // Get and log bot info
   const botInfo = await bot.api.getMe();
-  console.log(`Bot başlatıldı: @${botInfo.username}`);
+  console.log(`Bot started: @${botInfo.username}`);
 
   // Startup notification
   const userId = config.MY_TELEGRAM_ID;
@@ -88,8 +88,8 @@ export async function startBot(): Promise<void> {
   clearSession(userId)
     .then(() => getStartupContext(userId))
     .then((contextSummary) => {
-      const contextPart = contextSummary ? `\n\nSon konuşma özeti:\n${contextSummary}` : "";
-      const startupMsg = `[SYSTEM] Bot yeniden başlatıldı.${contextPart}\n\nÖNEMLİ: Bu bir startup mesajıdır. cobrain-restart veya herhangi bir restart komutu ÇALIŞTIRMA.\n\nŞimdi sırayla şunları yap:\n1. recall("all") çağır — hafızanı yükle\n2. Telegram'a kısa özet gönder (max 5 satır): geri döndüğünü bildir, önemli bekleyen şeyler varsa listele`;
+      const contextPart = contextSummary ? `\n\nLast conversation summary:\n${contextSummary}` : "";
+      const startupMsg = `[SYSTEM] Bot restarted.${contextPart}\n\nIMPORTANT: This is a startup message. DO NOT RUN cobrain-restart or any restart command.\n\nNow do the following in order:\n1. Call recall("all") - load your memory\n2. Send a short summary to Telegram (max 5 lines): say you're back and list any important pending items`;
       return think(userId, startupMsg);
     })
     .then((response) => {
@@ -119,7 +119,7 @@ async function getStartupContext(userId: number): Promise<string | null> {
 
     return history
       .filter((m) => !m.content.toLowerCase().includes("cobrain-restart"))
-      .map((m) => `${m.role === "user" ? "Kullanıcı" : "Cobrain"}: ${m.content.slice(0, 150)}`)
+      .map((m) => `${m.role === "user" ? "User" : "Cobrain"}: ${m.content.slice(0, 150)}`)
       .join("\n");
   } catch {
     return null;
@@ -127,7 +127,7 @@ async function getStartupContext(userId: number): Promise<string | null> {
 }
 
 export function stopBot(): Promise<void> {
-  console.log("Bot durduruluyor...");
+  console.log("Stopping bot...");
   clearAllPending();
   if (telegramHeartbeatInterval) {
     clearInterval(telegramHeartbeatInterval);

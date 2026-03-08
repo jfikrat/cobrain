@@ -1,6 +1,6 @@
 /**
  * Cobrain Agent Module
- * Claude Agent SDK tabanlı akıllı asistan
+ * Smart assistant based on Claude Agent SDK
  */
 
 export { chat, clearSession, getSessionInfo, isUserBusy, type ChatResponse, type MultimodalMessage } from "./chat.ts";

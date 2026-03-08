@@ -21,18 +21,18 @@ export function registerCallbacks(bot: Bot, ctx: TelegramContext) {
         energy: mood === "great" ? 4 : mood === "neutral" ? 3 : 2,
         source: "explicit",
       });
-      await c.answerCallbackQuery({ text: "Kaydedildi!" });
+      await c.answerCallbackQuery({ text: "Saved!" });
       await c.editMessageReplyMarkup({ reply_markup: undefined });
     } catch (err) {
       console.error("[MoodCallback] Failed:", err);
-      await c.answerCallbackQuery({ text: "Hata olustu" });
+      await c.answerCallbackQuery({ text: "Error occurred" });
     }
   });
 
   // ============ GENERIC ACK ============
 
-  bot.callbackQuery(/^(restart_ack|ack|tamam)$/, async (c) => {
-    await c.answerCallbackQuery("Tamam");
+  bot.callbackQuery(/^(restart_ack|ack)$/, async (c) => {
+    await c.answerCallbackQuery("OK");
     await c.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
   });
 
@@ -50,7 +50,7 @@ export function registerCallbacks(bot: Bot, ctx: TelegramContext) {
 
     try {
       await c.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
-    } catch { /* mesaj zaten silinmiş veya düzenlenemiyor */ }
+    } catch { /* message already deleted or cannot be edited */ }
 
     recordInteraction(userId);
 

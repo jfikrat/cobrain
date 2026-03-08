@@ -70,13 +70,13 @@ async function complete(
  */
 export async function extractTags(text: string): Promise<string[]> {
   const systemPrompt =
-    "Sen bir anahtar kelime çıkarma asistanısın. Sadece virgülle ayrılmış kelimeler yaz, başka bir şey yazma.";
+    "You are a keyword extraction assistant. Only write comma-separated keywords, nothing else.";
 
-  const prompt = `Metinden en önemli 3-5 anahtar kelimeyi çıkar.
+  const prompt = `Extract the 3-5 most important keywords from the text.
 
-Metin: "${text}"
+Text: "${text}"
 
-Anahtar kelimeler:`;
+Keywords:`;
 
   const response = await complete(prompt, systemPrompt, 100);
 
@@ -93,13 +93,13 @@ export async function summarize(
   text: string,
   maxWords: number = 20
 ): Promise<string> {
-  const systemPrompt = "Sen bir özetleme asistanısın. Sadece özeti yaz.";
+  const systemPrompt = "You are a summarization assistant. Only write the summary.";
 
-  const prompt = `Bu metni maksimum ${maxWords} kelimeyle özetle.
+  const prompt = `Summarize this text in a maximum of ${maxWords} words.
 
-Metin: "${text}"
+Text: "${text}"
 
-Özet:`;
+Summary:`;
 
   return (await complete(prompt, systemPrompt, 100)).trim();
 }
@@ -159,16 +159,16 @@ async function scoreRelevance(
   accessCount?: number
 ): Promise<number> {
   const systemPrompt =
-    "Sen bir ilgi değerlendirme asistanısın. Sadece 0-100 arası bir sayı yaz.";
+    "You are a relevance scoring assistant. Only write a number between 0-100.";
 
   const metaLine = importance !== undefined || daysAgo !== undefined || accessCount !== undefined
-    ? `\nÖnem: ${importance ?? "?"}/1.0 | Yaş: ${daysAgo ?? "?"} gün | Erişim: ${accessCount ?? 0}`
+    ? `\nImportance: ${importance ?? "?"}/1.0 | Age: ${daysAgo ?? "?"} days | Access: ${accessCount ?? 0}`
     : "";
 
-  const prompt = `Sorgu: "${query}"
-Hafıza: "${memoryContent}"${metaLine}
+  const prompt = `Query: "${query}"
+Memory: "${memoryContent}"${metaLine}
 
-Bu hafızanın sorguyla ne kadar alakalı olduğunu 0-100 arası puanla.${metaLine ? "\nDaha önemli ve sık erişilen hafızalara hafif bonus ver." : ""}`;
+Score how relevant this memory is to the query on a scale of 0-100.${metaLine ? "\nGive a slight bonus to more important and frequently accessed memories." : ""}`;
 
   const response = await complete(prompt, systemPrompt, 20);
   const match = response.match(/(\d+)/);
@@ -195,21 +195,21 @@ async function rankBatch(
       const daysAgo = m.createdAt
         ? Math.floor((Date.now() - new Date(m.createdAt).getTime()) / (1000 * 60 * 60 * 24))
         : "?";
-      return `${i + 1}. ${text} [önem:${m.importance ?? "?"},yaş:${daysAgo}g,erişim:${m.accessCount ?? 0}]`;
+      return `${i + 1}. ${text} [importance:${m.importance ?? "?"},age:${daysAgo}d,access:${m.accessCount ?? 0}]`;
     })
     .join("\n");
 
   const systemPrompt =
-    "Sen bir hafıza sıralama asistanısın. Her satırda NUMARA:PUAN formatında yaz.";
+    "You are a memory ranking assistant. Write in NUMBER:SCORE format on each line.";
 
-  const prompt = `Sorgu: "${query}"
+  const prompt = `Query: "${query}"
 
-Hafızalar:
+Memories:
 ${memoriesText}
 
-En alakalı ${limit} hafızanın numaralarını ve puanlarını (0-100) ver.
-Daha önemli ve sık erişilen hafızalara hafif bonus ver.
-Format: NUMARA:PUAN (her satırda bir tane)`;
+Provide the numbers and scores (0-100) of the ${limit} most relevant memories.
+Give a slight bonus to more important and frequently accessed memories.
+Format: NUMBER:SCORE (one per line)`;
 
   const response = await complete(prompt, systemPrompt, 200);
 

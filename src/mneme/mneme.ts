@@ -44,7 +44,7 @@ export class Mneme {
       const mcpServer = createMnemeTools({ memory, bot, userId });
 
       const systemPrompt = buildMnemePrompt(userId);
-      const prompt = `Hafıza konsolidasyonunu başlat. Sırasıyla: eski olayları arşivle, son olaylardan gerçek çıkar, çakışanları çöz.`;
+      const prompt = `Start memory consolidation. In order: archive old events, extract facts from recent events, and resolve conflicts.`;
 
       let totalCost = 0;
 

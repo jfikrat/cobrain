@@ -13,7 +13,7 @@ export function ToolUsage({ tool }: ToolUsageProps) {
         <ToolIcon className="tool-icon" />
         <span className="tool-name">{tool.name}</span>
         <span className={`tool-status ${tool.status}`}>
-          {tool.status === "running" ? "Çalışıyor..." : tool.status === "success" ? "Başarılı" : "Hata"}
+          {tool.status === "running" ? "Running..." : tool.status === "success" ? "Success" : "Error"}
         </span>
       </div>
     </div>

@@ -16,7 +16,7 @@ async function gcalcli(args: string[]): Promise<{ output: string; error?: string
     const result = await $`gcalcli ${args}`.quiet();
     return { output: result.stdout.toString().trim() };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "gcalcli hatası";
+    const message = error instanceof Error ? error.message : "gcalcli error";
     return { output: "", error: message };
   }
 }
@@ -26,26 +26,26 @@ async function gcalcli(args: string[]): Promise<{ output: string; error?: string
  */
 export const calendarTodayTool = tool(
   "calendar_today",
-  "Bugünkü takvim etkinliklerini gösterir.",
+  "Show today's calendar events.",
   {},
   async () => {
     const { output, error } = await gcalcli(["agenda", "--nostarted", "--details", "length"]);
 
     if (error) {
       return {
-        content: [{ type: "text" as const, text: `Takvim hatası: ${error}` }],
+        content: [{ type: "text" as const, text: `Calendar error: ${error}` }],
         isError: true,
       };
     }
 
     if (!output) {
       return {
-        content: [{ type: "text" as const, text: "Bugün için takvimde etkinlik yok." }],
+        content: [{ type: "text" as const, text: "No calendar events for today." }],
       };
     }
 
     return {
-      content: [{ type: "text" as const, text: `📅 Bugünkü program:\n${output}` }],
+      content: [{ type: "text" as const, text: `📅 Today's schedule:\n${output}` }],
     };
   }
 );
@@ -55,10 +55,10 @@ export const calendarTodayTool = tool(
  */
 export const calendarAgendaTool = tool(
   "calendar_agenda",
-  "Takvim etkinliklerini listeler. Bugün, yarın veya belirli bir gün aralığı için.",
+  "List calendar events for today, tomorrow, or a specific date range.",
   {
-    days: z.number().min(1).max(14).default(2).describe("Kaç gün ileriye bak (varsayılan: 2, max: 14)"),
-    start: z.string().optional().describe("Başlangıç tarihi (YYYY-MM-DD). Boş bırakılırsa bugün."),
+    days: z.number().min(1).max(14).default(2).describe("How many days ahead (default: 2, max: 14)"),
+    start: z.string().optional().describe("Start date (YYYY-MM-DD). Defaults to today if omitted."),
   },
   async ({ days, start }) => {
     // Compute end date = start + days
@@ -73,14 +73,14 @@ export const calendarAgendaTool = tool(
 
     if (error) {
       return {
-        content: [{ type: "text" as const, text: `Takvim hatası: ${error}` }],
+        content: [{ type: "text" as const, text: `Calendar error: ${error}` }],
         isError: true,
       };
     }
 
     if (!output) {
       return {
-        content: [{ type: "text" as const, text: `Önümüzdeki ${days} gün için etkinlik bulunamadı.` }],
+        content: [{ type: "text" as const, text: `No events found for the next ${days} days.` }],
       };
     }
 
@@ -96,7 +96,7 @@ export const calendarAgendaTool = tool(
       content: [
         {
           type: "text" as const,
-          text: `📅 Takvim (${days} gün):\n${formatted.join("\n")}`,
+          text: `📅 Calendar (${days} days):\n${formatted.join("\n")}`,
         },
       ],
     };
@@ -108,10 +108,10 @@ export const calendarAgendaTool = tool(
  */
 export const calendarSearchTool = tool(
   "calendar_search",
-  "Takvimde etkinlik ara.",
+  "Search calendar events.",
   {
-    query: z.string().describe("Arama terimi (etkinlik adı, yer, vb.)"),
-    days: z.number().min(1).max(90).default(30).describe("Kaç gün içinde ara (varsayılan: 30)"),
+    query: z.string().describe("Search term (event title, location, etc.)"),
+    days: z.number().min(1).max(90).default(30).describe("Search within how many days (default: 30)"),
   },
   async ({ query, days }) => {
     const today = new Date();
@@ -122,19 +122,19 @@ export const calendarSearchTool = tool(
 
     if (error) {
       return {
-        content: [{ type: "text" as const, text: `Arama hatası: ${error}` }],
+        content: [{ type: "text" as const, text: `Search error: ${error}` }],
         isError: true,
       };
     }
 
     if (!output) {
       return {
-        content: [{ type: "text" as const, text: `"${query}" için sonuç bulunamadı.` }],
+        content: [{ type: "text" as const, text: `No results found for "${query}".` }],
       };
     }
 
     return {
-      content: [{ type: "text" as const, text: `🔍 "${query}" arama sonuçları:\n${output}` }],
+      content: [{ type: "text" as const, text: `🔍 Search results for "${query}":\n${output}` }],
     };
   }
 );
@@ -144,13 +144,13 @@ export const calendarSearchTool = tool(
  */
 export const calendarAddTool = tool(
   "calendar_add",
-  "Google Calendar'a yeni etkinlik ekle.",
+  "Add a new event to Google Calendar.",
   {
-    title: z.string().describe("Etkinlik başlığı"),
-    when: z.string().describe("Tarih ve saat. Örn: '2026-02-21 14:00' veya 'yarın 15:00'"),
-    duration: z.string().optional().describe("Süre. Örn: '1h', '30m', '2h30m'. Varsayılan: 1 saat."),
-    description: z.string().optional().describe("Etkinlik açıklaması"),
-    calendar: z.string().optional().describe("Hangi takvime eklensin (varsayılan: primary)"),
+    title: z.string().describe("Event title"),
+    when: z.string().describe("Date and time. E.g. '2026-02-21 14:00' or 'tomorrow 15:00'"),
+    duration: z.string().optional().describe("Duration. E.g. '1h', '30m', '2h30m'. Default: 1 hour."),
+    description: z.string().optional().describe("Event description"),
+    calendar: z.string().optional().describe("Calendar to add to (default: primary)"),
   },
   async ({ title, when, duration, description, calendar }) => {
     // gcalcli add --noprompt --title "..." --when "..." --duration 60 --description "..."
@@ -169,7 +169,7 @@ export const calendarAddTool = tool(
 
     if (error) {
       return {
-        content: [{ type: "text" as const, text: `Etkinlik eklenemedi: ${error}` }],
+        content: [{ type: "text" as const, text: `Failed to add event: ${error}` }],
         isError: true,
       };
     }
@@ -178,7 +178,7 @@ export const calendarAddTool = tool(
       content: [
         {
           type: "text" as const,
-          text: `✅ Etkinlik eklendi: "${title}" — ${when}${duration ? ` (${duration})` : ""}${output ? `\n${output}` : ""}`,
+          text: `✅ Event added: "${title}" — ${when}${duration ? ` (${duration})` : ""}${output ? `\n${output}` : ""}`,
         },
       ],
     };

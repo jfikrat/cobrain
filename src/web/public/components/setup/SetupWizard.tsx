@@ -90,7 +90,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       <div className="setup-wizard">
         <div className="setup-loading">
           <div className="setup-loading-spinner" />
-          <span>Yükleniyor...</span>
+          <span>Loading...</span>
         </div>
       </div>
     );
@@ -101,11 +101,11 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
       <div className="setup-wizard">
         <div className="setup-restarting">
           <div className="setup-loading-spinner" />
-          <h2>Yeniden Başlatılıyor</h2>
+          <h2>Restarting</h2>
           <p>
-            Ayarlarınız kaydedildi. Uygulama yeniden başlatılıyor...
+            Your settings have been saved. The application is restarting...
             <br />
-            Sayfa birkaç saniye içinde otomatik olarak yenilenecek.
+            The page will automatically refresh in a few seconds.
           </p>
         </div>
       </div>
@@ -152,7 +152,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
         <div className="setup-header">
           <div className="setup-logo">
             <BrainIcon size={32} />
-            <span>Cobrain Kurulum Sihirbazı</span>
+            <span>Cobrain Setup Wizard</span>
           </div>
         </div>
 
@@ -171,7 +171,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           <div className="setup-footer-left">
             {step > 0 && (
               <Button variant="ghost" onClick={prevStep}>
-                ← Geri
+                ← Back
               </Button>
             )}
           </div>
@@ -179,11 +179,11 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
           <div className="setup-footer-right">
             {step < 3 ? (
               <Button onClick={nextStep}>
-                {step === 0 ? "Başla" : "İleri"} →
+                {step === 0 ? "Start" : "Next"} →
               </Button>
             ) : (
               <Button onClick={handleSave} loading={saving}>
-                Kaydet ve Başlat
+                Save and Start
               </Button>
             )}
           </div>

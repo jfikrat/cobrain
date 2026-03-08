@@ -125,7 +125,7 @@ export function SearchModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Mesajlarda Ara">
+    <Modal isOpen={isOpen} onClose={onClose} title="Search Messages">
       <div onKeyDown={handleKeyDown}>
         <div className="search-input-wrapper" style={{ marginBottom: "var(--space-md)" }}>
           <SearchIcon size={18} />
@@ -133,7 +133,7 @@ export function SearchModal({
             ref={inputRef}
             type="text"
             className="search-input"
-            placeholder="Aramak istediğiniz kelimeyi yazın..."
+            placeholder="Type a keyword to search..."
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -143,7 +143,7 @@ export function SearchModal({
           />
           {query && (
             <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
-              {results.length} sonuç
+              {results.length} result(s)
             </span>
           )}
         </div>
@@ -163,7 +163,7 @@ export function SearchModal({
                 color: "var(--text-muted)",
               }}
             >
-              Sonuç bulunamadı
+              No results found
             </div>
           )}
 
@@ -200,7 +200,7 @@ export function SearchModal({
                     color: result.role === "user" ? "var(--accent-primary)" : "var(--text-secondary)",
                   }}
                 >
-                  {result.role === "user" ? "Sen" : "Cobrain"}
+                  {result.role === "user" ? "You" : "Cobrain"}
                 </span>
                 <span
                   style={{
@@ -234,7 +234,7 @@ export function SearchModal({
             >
               <SearchIcon size={32} />
               <p style={{ marginTop: "var(--space-md)" }}>
-                Mesajlarınızda arama yapın
+                Search your messages
               </p>
               <p style={{ fontSize: "var(--text-xs)", marginTop: "var(--space-xs)" }}>
                 <kbd
@@ -246,7 +246,7 @@ export function SearchModal({
                 >
                   ↑↓
                 </kbd>{" "}
-                ile gezin,{" "}
+                to navigate,{" "}
                 <kbd
                   style={{
                     padding: "2px 6px",
@@ -256,7 +256,7 @@ export function SearchModal({
                 >
                   Enter
                 </kbd>{" "}
-                ile seçin
+                to select
               </p>
             </div>
           )}

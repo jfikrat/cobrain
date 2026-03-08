@@ -73,7 +73,7 @@ export function VoiceInput({
   // Initialize speech recognition
   useEffect(() => {
     if (!isSpeechRecognitionSupported) {
-      setError("Tarayıcınız sesli girişi desteklemiyor");
+      setError("Your browser does not support voice input");
       return;
     }
 
@@ -110,11 +110,11 @@ export function VoiceInput({
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error("Speech recognition error:", event.error);
       if (event.error === "not-allowed") {
-        setError("Mikrofon izni verilmedi");
+        setError("Microphone permission denied");
       } else if (event.error === "no-speech") {
-        setError("Ses algılanamadı");
+        setError("No speech detected");
       } else {
-        setError("Bir hata oluştu");
+        setError("An error occurred");
       }
       setIsListening(false);
     };
@@ -182,14 +182,14 @@ export function VoiceInput({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Sesli Giriş"
+      title="Voice Input"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
-            İptal
+            Cancel
           </Button>
           <Button onClick={handleConfirm} disabled={!displayText.trim()}>
-            <CheckIcon size={16} /> Onayla
+            <CheckIcon size={16} /> Confirm
           </Button>
         </>
       }
@@ -204,10 +204,10 @@ export function VoiceInput({
           >
             <MicIcon size={48} />
             <p style={{ marginTop: "var(--space-md)" }}>
-              Sesli giriş bu tarayıcıda desteklenmiyor.
+              Voice input is not supported in this browser.
             </p>
             <p style={{ marginTop: "var(--space-sm)", fontSize: "var(--text-sm)" }}>
-              Lütfen Chrome veya Edge kullanın.
+              Please use Chrome or Edge.
             </p>
           </div>
         ) : (
@@ -241,7 +241,7 @@ export function VoiceInput({
                 fontWeight: 500,
               }}
             >
-              {isListening ? "Dinleniyor..." : "Konuşmak için tıklayın"}
+              {isListening ? "Listening..." : "Click to speak"}
             </p>
 
             {/* Transcript display */}
@@ -262,7 +262,7 @@ export function VoiceInput({
                 </p>
               ) : (
                 <p style={{ color: "var(--text-muted)", textAlign: "center" }}>
-                  Metniniz burada görünecek...
+                  Your text will appear here...
                 </p>
               )}
             </div>

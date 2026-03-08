@@ -15,25 +15,25 @@ import { toolError, toolSuccess } from "../../utils/tool-response.ts";
 export const trackMoodTool = (userId: number) =>
   tool(
     "track_mood",
-    "Kullanıcının ruh halini kaydet. Kullanıcı açıkça belirttiğinde veya manuel kayıt istediğinde kullan.",
+    "Record the user's mood. Use when the user states it explicitly or asks to log it manually.",
     {
       mood: z
         .enum(["great", "good", "neutral", "low", "bad"])
-        .describe("Ruh hali: great (harika), good (iyi), neutral (normal), low (düşük), bad (kötü)"),
+        .describe("Mood: great, good, neutral, low, bad"),
       energy: z
         .number()
         .min(1)
         .max(5)
         .default(3)
-        .describe("Enerji seviyesi (1-5)"),
+        .describe("Energy level (1-5)"),
       context: z
         .string()
         .optional()
-        .describe("Bağlam veya not (opsiyonel)"),
+        .describe("Context or note (optional)"),
       triggers: z
         .array(z.string())
         .default([])
-        .describe("Tetikleyiciler/nedenler (opsiyonel)"),
+        .describe("Triggers/reasons (optional)"),
     },
     async ({ mood, energy, context, triggers }) => {
       try {
@@ -48,17 +48,17 @@ export const trackMoodTool = (userId: number) =>
         });
 
         const moodLabels: Record<MoodType, string> = {
-          great: "harika",
-          good: "iyi",
-          neutral: "normal",
-          low: "düşük",
-          bad: "kötü",
+          great: "great",
+          good: "good",
+          neutral: "neutral",
+          low: "low",
+          bad: "bad",
         };
 
         console.log(`[Mood] User ${userId} explicitly recorded: ${mood}`);
-        return toolSuccess(`Ruh hali kaydedildi: ${moodLabels[mood]} (enerji: ${energy}/5)`);
+        return toolSuccess(`Mood saved: ${moodLabels[mood]} (energy: ${energy}/5)`);
       } catch (error) {
-        return toolError("Mood kayıt hatası", error);
+        return toolError("Mood save error", error);
       }
     }
   );
@@ -66,14 +66,14 @@ export const trackMoodTool = (userId: number) =>
 export const getMoodTrendTool = (userId: number) =>
   tool(
     "get_mood_trend",
-    "Son X günün ruh hali trendini analiz et.",
+    "Analyze mood trend over the last X days.",
     {
       days: z
         .number()
         .min(1)
         .max(30)
         .default(7)
-        .describe("Analiz edilecek gün sayısı"),
+        .describe("Number of days to analyze"),
     },
     async ({ days }) => {
       try {
@@ -81,29 +81,29 @@ export const getMoodTrendTool = (userId: number) =>
         const trend = service.getMoodTrend(days);
 
         const directionLabels: Record<string, string> = {
-          improving: "iyileşiyor 📈",
-          stable: "stabil ➡️",
-          declining: "düşüyor 📉",
+          improving: "improving 📈",
+          stable: "stable ➡️",
+          declining: "declining 📉",
         };
 
         const moodLabels: Record<number, string> = {
-          5: "harika",
-          4: "iyi",
-          3: "normal",
-          2: "düşük",
-          1: "kötü",
+          5: "great",
+          4: "good",
+          3: "neutral",
+          2: "low",
+          1: "bad",
         };
 
-        const avgMoodLabel = moodLabels[Math.round(trend.averageMood)] || "bilinmiyor";
+        const avgMoodLabel = moodLabels[Math.round(trend.averageMood)] || "unknown";
 
-        return toolSuccess(`Ruh Hali Trendi (son ${days} gün):
-- Yön: ${directionLabels[trend.direction]}
-- Ortalama mood: ${avgMoodLabel} (${trend.averageMood.toFixed(1)}/5)
-- Ortalama enerji: ${trend.averageEnergy.toFixed(1)}/5
-- Veri noktası: ${trend.dataPoints}
-- Dönem: ${trend.startDate.split("T")[0]} - ${trend.endDate.split("T")[0]}`);
+        return toolSuccess(`Mood Trend (last ${days} days):
+- Direction: ${directionLabels[trend.direction]}
+- Average mood: ${avgMoodLabel} (${trend.averageMood.toFixed(1)}/5)
+- Average energy: ${trend.averageEnergy.toFixed(1)}/5
+- Data points: ${trend.dataPoints}
+- Period: ${trend.startDate.split("T")[0]} - ${trend.endDate.split("T")[0]}`);
       } catch (error) {
-        return toolError("Trend analiz hatası", error);
+        return toolError("Trend analysis error", error);
       }
     }
   );
@@ -111,20 +111,20 @@ export const getMoodTrendTool = (userId: number) =>
 export const getMoodHistoryTool = (userId: number) =>
   tool(
     "get_mood_history",
-    "Son X günün ruh hali geçmişini getir.",
+    "Get mood history for the last X days.",
     {
       days: z
         .number()
         .min(1)
         .max(30)
         .default(7)
-        .describe("Getirilecek gün sayısı"),
+        .describe("Number of days to fetch"),
       limit: z
         .number()
         .min(1)
         .max(50)
         .default(10)
-        .describe("Maksimum kayıt sayısı"),
+        .describe("Maximum number of entries"),
     },
     async ({ days, limit }) => {
       try {
@@ -132,7 +132,7 @@ export const getMoodHistoryTool = (userId: number) =>
         const history = service.getMoodHistory(days);
 
         if (history.length === 0) {
-          return toolSuccess("Bu dönemde kayıtlı ruh hali yok.");
+          return toolSuccess("No mood entries for this period.");
         }
 
         const moodEmojis: Record<MoodType, string> = {
@@ -146,7 +146,7 @@ export const getMoodHistoryTool = (userId: number) =>
         const formatted = history
           .slice(0, limit)
           .map((entry, i) => {
-            const date = new Date(entry.createdAt).toLocaleDateString("tr-TR", {
+            const date = new Date(entry.createdAt).toLocaleDateString("en-US", {
               weekday: "short",
               month: "short",
               day: "numeric",
@@ -155,14 +155,14 @@ export const getMoodHistoryTool = (userId: number) =>
             });
             const emoji = moodEmojis[entry.mood];
             const context = entry.context ? ` - ${entry.context}` : "";
-            const source = entry.source === "inferred" ? " (çıkarım)" : "";
-            return `${i + 1}. ${emoji} ${entry.mood} (enerji: ${entry.energy}/5) - ${date}${context}${source}`;
+            const source = entry.source === "inferred" ? " (inferred)" : "";
+            return `${i + 1}. ${emoji} ${entry.mood} (energy: ${entry.energy}/5) - ${date}${context}${source}`;
           })
           .join("\n");
 
-        return toolSuccess(`Ruh Hali Geçmişi (son ${days} gün):\n${formatted}`);
+        return toolSuccess(`Mood History (last ${days} days):\n${formatted}`);
       } catch (error) {
-        return toolError("Geçmiş getirme hatası", error);
+        return toolError("History fetch error", error);
       }
     }
   );
@@ -170,7 +170,7 @@ export const getMoodHistoryTool = (userId: number) =>
 export const getMoodStatsTool = (userId: number) =>
   tool(
     "get_mood_stats",
-    "Ruh hali istatistiklerini göster.",
+    "Show mood statistics.",
     {},
     async () => {
       try {
@@ -179,11 +179,11 @@ export const getMoodStatsTool = (userId: number) =>
         const byTimeOfDay = service.getMoodByTimeOfDay();
 
         const moodLabels: Record<MoodType, string> = {
-          great: "Harika",
-          good: "İyi",
-          neutral: "Normal",
-          low: "Düşük",
-          bad: "Kötü",
+          great: "Great",
+          good: "Good",
+          neutral: "Neutral",
+          low: "Low",
+          bad: "Bad",
         };
 
         const breakdown = Object.entries(stats.byMood)
@@ -191,29 +191,29 @@ export const getMoodStatsTool = (userId: number) =>
           .join("\n");
 
         const timeLabels: Record<string, string> = {
-          morning: "Sabah",
-          afternoon: "Öğle",
-          evening: "Akşam",
-          night: "Gece",
+          morning: "Morning",
+          afternoon: "Afternoon",
+          evening: "Evening",
+          night: "Night",
         };
 
         const timeBreakdown = Object.entries(byTimeOfDay)
           .map(([time, avg]) => `  ${timeLabels[time]}: ${avg.toFixed(1)}/5`)
           .join("\n");
 
-        return toolSuccess(`Ruh Hali İstatistikleri:
+        return toolSuccess(`Mood Statistics:
 
-Toplam kayıt: ${stats.total}
-Ortalama enerji: ${stats.averageEnergy.toFixed(1)}/5
-Son kayıt: ${stats.lastEntry ? new Date(stats.lastEntry).toLocaleDateString("tr-TR") : "Yok"}
+Total entries: ${stats.total}
+Average energy: ${stats.averageEnergy.toFixed(1)}/5
+Last entry: ${stats.lastEntry ? new Date(stats.lastEntry).toLocaleDateString("en-US") : "None"}
 
-Mood Dağılımı:
+Mood Breakdown:
 ${breakdown}
 
-Zamana Göre Ortalama (son 30 gün):
+Average by Time of Day (last 30 days):
 ${timeBreakdown}`);
       } catch (error) {
-        return toolError("İstatistik hatası", error);
+        return toolError("Stats error", error);
       }
     }
   );

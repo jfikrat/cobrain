@@ -16,26 +16,26 @@ export function TelegramStep({
   return (
     <div className="setup-step">
       <div className="setup-step-header">
-        <h2 className="setup-step-title">Telegram Botu</h2>
+        <h2 className="setup-step-title">Telegram Bot</h2>
         <p className="setup-step-description">
-          Cobrain, Telegram üzerinden sizinle iletişim kurar. Bunun için bir bot
-          oluşturmanız gerekiyor.
+          Cobrain communicates with you via Telegram. You need to create a bot
+          for this.
         </p>
       </div>
 
       <div className="setup-step-content">
         <div className="setup-info-box">
-          <h4>Bot Nasıl Oluşturulur?</h4>
+          <h4>How to Create a Bot?</h4>
           <ol>
             <li>
-              Telegram'da <code>@BotFather</code>'a mesaj atın
+              Message <code>@BotFather</code> on Telegram
             </li>
             <li>
-              <code>/newbot</code> komutunu gönderin
+              Send the <code>/newbot</code> command
             </li>
-            <li>Bot için bir isim ve kullanıcı adı belirleyin</li>
+            <li>Choose a name and username for the bot</li>
             <li>
-              Size verilen token'ı kopyalayın (örn:{" "}
+              Copy the token you receive (e.g.{" "}
               <code>123456789:ABCdefGHI...</code>)
             </li>
           </ol>
@@ -45,7 +45,7 @@ export function TelegramStep({
           label="Bot Token"
           type="password"
           placeholder="123456789:ABCdefGHI-jklMNOpqrSTUvwxYZ"
-          hint="@BotFather'dan aldığınız token"
+          hint="Token from @BotFather"
           value={formData.TELEGRAM_BOT_TOKEN}
           onChange={(e) => onFieldChange("TELEGRAM_BOT_TOKEN", e.target.value)}
           error={errors.TELEGRAM_BOT_TOKEN}
@@ -54,12 +54,12 @@ export function TelegramStep({
         />
 
         <div className="setup-info-box" style={{ marginTop: "1.5rem" }}>
-          <h4>User ID Nasıl Bulunur?</h4>
+          <h4>How to Find Your User ID?</h4>
           <ol>
             <li>
-              Telegram'da <code>@userinfobot</code>'a mesaj atın
+              Message <code>@userinfobot</code> on Telegram
             </li>
-            <li>Bot size User ID'nizi gösterecek</li>
+            <li>The bot will show your User ID</li>
           </ol>
         </div>
 
@@ -67,7 +67,7 @@ export function TelegramStep({
           label="Telegram User ID"
           type="text"
           placeholder="421261297"
-          hint="Sadece bu ID'den gelen mesajlar işlenir (güvenlik)"
+          hint="Only messages from this ID will be processed (security)"
           value={formData.MY_TELEGRAM_ID}
           onChange={(e) => onFieldChange("MY_TELEGRAM_ID", e.target.value)}
           error={errors.MY_TELEGRAM_ID}

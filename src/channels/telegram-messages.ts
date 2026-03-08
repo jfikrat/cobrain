@@ -8,18 +8,18 @@ import { getTopicRoute, handleTopicMessage } from "./telegram-router.ts";
 
 // Live location log throttle
 const liveLocationLastLog = new Map<number, number>();
-const LIVE_LOCATION_LOG_INTERVAL = 30 * 60 * 1000; // 30 dakika
+const LIVE_LOCATION_LOG_INTERVAL = 30 * 60 * 1000; // 30 minutes
 
 async function handleLocationUpdate(userId: number, latitude: number, longitude: number, isLive: boolean, isUpdate: boolean) {
-  const locationType = isLive ? "canlı konum" : "konum";
-  const updateNote = isUpdate ? " (güncelleme)" : "";
+  const locationType = isLive ? "live location" : "location";
+  const updateNote = isUpdate ? " (update)" : "";
 
-  const locationText = `Kullanıcı Telegram'dan ${locationType} paylaştı${updateNote}: latitude=${latitude}, longitude=${longitude}
+  const locationText = `The user shared a ${locationType} on Telegram${updateNote}: latitude=${latitude}, longitude=${longitude}
 
-Bu konumu analiz et:
-1. Reverse geocode yaparak adresini bul
-2. Kullanıcıya kısaca nerede olduğunu söyle (sadece adres, kısa)
-3. Eğer bağlamda konum kaydetme/mesafe hesaplama varsa o bağlamda kullan`;
+Analyze this location:
+1. Find the address via reverse geocoding
+2. Briefly tell the user where they are (address only, short)
+3. If the context involves saving location or calculating distance, use it in that context`;
 
   await userManager.ensureUser(userId);
   const response = await think(userId, locationText);
@@ -27,20 +27,20 @@ Bu konumu analiz et:
 }
 
 export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
-  // ============ SES MESAJI ============
+  // ============ VOICE MESSAGE ============
 
   bot.on("message:voice", async (c) => {
     const userId = c.from?.id ?? 0;
 
     if (!isAuthorized(userId)) {
-      console.log(`Yetkisiz ses mesajı: ${userId}`);
+      console.log(`Unauthorized voice message: ${userId}`);
       return;
     }
 
     recordInteraction(userId);
 
     if (!config.GEMINI_API_KEY) {
-      await c.reply("❌ Ses tanıma yapılandırılmamış (GEMINI_API_KEY eksik)");
+      await c.reply("❌ Voice transcription is not configured (GEMINI_API_KEY missing)");
       return;
     }
 
@@ -49,15 +49,15 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
     try {
       const file = await c.getFile();
       if (!file.file_path) {
-        await c.reply("❌ Ses dosyası indirilemedi");
+        await c.reply("❌ Could not download voice file");
         return;
       }
 
       const audioBuffer = await downloadTelegramFileAsBuffer(file.file_path, config.TELEGRAM_BOT_TOKEN);
       const transcript = await transcribeAudio(audioBuffer, "audio/ogg");
 
-      if (!transcript.trim() || transcript.includes("[ses kaydı boş veya anlaşılmıyor]")) {
-        await c.reply("Ses anlasilamadi, tekrar dener misin?");
+      if (!transcript.trim() || transcript.includes("[voice recording is empty or unintelligible]")) {
+        await c.reply("I couldn't understand the voice message. Can you try again?");
         return;
       }
 
@@ -80,7 +80,7 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
             await c.reply(voiceMsg, { parse_mode: "HTML", message_thread_id: threadId })
               .catch(() => c.reply(`🎤 ${transcript}\n\n${topicResponse}`, { message_thread_id: threadId }));
           } catch (err) {
-            console.error(`[TG Hub] Voice topic hata (${topicRoute.name}):`, err);
+            console.error(`[TG Hub] Voice topic error (${topicRoute.name}):`, err);
           }
           return;
         }
@@ -107,36 +107,36 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
         `[${userId}] 🎤 ${transcript.slice(0, 30)}... -> ${response.inputTokens}/${response.outputTokens} tokens`
       );
     } catch (error) {
-      console.error("Ses işleme hatası:", error);
-      await c.reply(`❌ Ses işlenemedi: ${error instanceof Error ? error.message : "Bilinmeyen hata"}`);
+      console.error("Voice processing error:", error);
+      await c.reply(`❌ Voice could not be processed: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   });
 
-  // ============ RESİM MESAJI ============
+  // ============ IMAGE MESSAGE ============
 
   bot.on("message:photo", async (c) => {
     const userId = c.from?.id ?? 0;
 
     if (!isAuthorized(userId)) {
-      console.log(`Yetkisiz erişim denemesi: ${userId}`);
+      console.log(`Unauthorized access attempt: ${userId}`);
       return;
     }
 
     recordInteraction(userId);
 
     try {
-      const processingMsg = await c.reply("🖼️ Resim işleniyor...");
+      const processingMsg = await c.reply("🖼️ Processing image...");
 
       const photo = c.message.photo[c.message.photo.length - 1];
       if (!photo?.file_id) {
-        await c.reply("Resim alınamadı!");
+        await c.reply("Could not get image!");
         return;
       }
 
       const file = await bot.api.getFile(photo.file_id);
       const filePath = file.file_path;
       if (!filePath) {
-        await c.reply("Resim dosya yolu alınamadı!");
+        await c.reply("Could not get image file path!");
         return;
       }
 
@@ -155,8 +155,8 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
 
       const caption = c.message.caption || "";
       const prompt = caption
-        ? `Kullanıcı bu resmi gönderdi ve şunu söyledi: "${caption}"\n\nResmi analiz et ve cevap ver.`
-        : "Kullanıcı bu resmi gönderdi. Resimde ne görüyorsun? Detaylı açıkla.";
+        ? `The user sent this image and said: "${caption}"\n\nAnalyze the image and reply.`
+        : "The user sent this image. What do you see in it? Describe in detail.";
 
       const multimodalMessage: MultimodalMessage = {
         text: prompt,
@@ -180,8 +180,8 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
         if (topicRoute) {
           try { await bot.api.deleteMessage(c.chat.id, processingMsg.message_id); } catch {}
           const photoPrompt = caption
-            ? `[Kullanıcı bir resim gönderdi: "${caption}"] Resmi göremiyorsun ama açıklama ile yardımcı ol.`
-            : "[Kullanıcı bir resim gönderdi] Resmi göremiyorsun, bunu belirt.";
+            ? `[The user sent an image: "${caption}"] You cannot see the image, but help using the description.`
+            : "[The user sent an image] You cannot see the image; say that clearly.";
           const topicPhotoResponse = await handleTopicMessage(userId, c.chat.id, photoThreadId, topicRoute, photoPrompt);
           await c.reply(topicPhotoResponse, { message_thread_id: photoThreadId })
             .catch(() => c.reply(topicPhotoResponse, { message_thread_id: photoThreadId }));
@@ -210,17 +210,17 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
       }
     } catch (error) {
       console.error("Photo handler error:", error);
-      await c.reply("❌ Resim işlenirken hata oluştu!");
+      await c.reply("❌ An error occurred while processing the image!");
     }
   });
 
-  // ============ KONUM MESAJI ============
+  // ============ LOCATION MESSAGE ============
 
   bot.on("message:location", async (c) => {
     const userId = c.from?.id ?? 0;
 
     if (!isAuthorized(userId)) {
-      console.log(`Yetkisiz erişim denemesi: ${userId}`);
+      console.log(`Unauthorized access attempt: ${userId}`);
       return;
     }
 
@@ -247,11 +247,11 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
       console.log(`[Location] ${userId}: ${latitude},${longitude}`);
     } catch (error) {
       console.error("Location handler error:", error);
-      await c.reply("❌ Konum işlenirken hata oluştu!");
+      await c.reply("❌ An error occurred while processing the location!");
     }
   });
 
-  // Live location güncellemeleri — sadece cache'e yaz
+  // Live location updates - only write to cache
   bot.on("edited_message:location", (c) => {
     const userId = c.from?.id ?? 0;
 
@@ -276,13 +276,13 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
     }
   });
 
-  // ============ TEXT MESAJI (AI Sohbet) ============
+  // ============ TEXT MESSAGE (AI Chat) ============
 
   bot.on("message:text", async (c) => {
     const userId = c.from?.id ?? 0;
 
     if (!isAuthorized(userId)) {
-      console.log(`Yetkisiz erişim denemesi: ${userId}`);
+      console.log(`Unauthorized access attempt: ${userId}`);
       return;
     }
 
@@ -317,15 +317,15 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
               })
             );
           } catch (err) {
-            console.error(`[TG Hub] Topic hata (${topicRoute.name}):`, err);
+            console.error(`[TG Hub] Topic error (${topicRoute.name}):`, err);
           }
           return;
         }
       }
-      // threadId yoksa veya route yoksa → "Genel" topic → normal Cobrain (fall through)
+      // No threadId or no route → "General" topic → normal Cobrain (fall through)
     }
 
-    // ============ NORMAL AI SOHBET ============
+    // ============ NORMAL AI CHAT ============
     try {
       const response = await withTypingIndicator(c, () => think(userId, text));
 
@@ -354,9 +354,9 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
         console.warn("[Telegram] Mood extraction failed:", err);
       });
     } catch (error) {
-      console.error("Chat hatası:", error);
-      const errorMessage = error instanceof Error ? error.message : "Bilinmeyen hata";
-      await c.reply(`❌ Hata: ${errorMessage}`);
+      console.error("Chat error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      await c.reply(`❌ Error: ${errorMessage}`);
     }
   });
 }

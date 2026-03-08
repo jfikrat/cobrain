@@ -1,6 +1,6 @@
 /**
  * Cobrain Agent Chat
- * Ana chat fonksiyonu - Claude Agent SDK kullanarak
+ * Main chat function - using Claude Agent SDK
  * v0.4 - MD-based System Prompt
  */
 
@@ -49,22 +49,22 @@ const userSessions = new Map<number, string>();
 const cortexSessions = new Map<string, string>();
 
 export interface ChatOptions {
-  /** WA cortex veya diğer sub-cortex için system prompt override */
+  /** System prompt override for WA cortex or other sub-cortex agents */
   systemPromptOverride?: string;
-  /** Ayrı session cache anahtarı (örn: "wa_cortex"). Undefined = ana Cobrain session */
+  /** Separate session cache key (e.g. "wa_cortex"). Undefined = main Cobrain session */
   sessionKey?: string;
-  /** Mesajın geldiği kanal: "telegram" | "api" | "wa" */
+  /** Channel the message came from: "telegram" | "api" | "wa" */
   channel?: string;
-  /** true ise ToolStreamNotifier (Telegram bildirim) devre dışı */
+  /** If true, ToolStreamNotifier (Telegram notifications) is disabled */
   silent?: boolean;
   /**
-   * Hub agent topic mesajları için: tool bildirimleri bu chat/thread'e yazılır.
-   * Verilmezse userId'ye (DM) yazılır. silent=true ise görmezden gelinir.
+   * For hub-agent topic messages: tool notifications are posted to this chat/thread.
+   * If not provided, they are sent to userId (DM). Ignored when silent=true.
    */
   notifierTarget?: { chatId: number; threadId: number };
-  /** Agent'ın çalışma dizini — verilirse hafıza bu dizinden okunur/yazılır */
+  /** Agent working directory - if provided, memory is read from and written to this directory */
   workDir?: string;
-  /** Agent adı — ToolStreamNotifier header'ında gösterilir */
+  /** Agent name - shown in the ToolStreamNotifier header */
   agentName?: string;
 }
 
@@ -128,14 +128,14 @@ async function getOrResumeSession(userId: number): Promise<string | undefined> {
   const cached = userSessions.get(userId);
   if (cached) return cached;
 
-  // 2. DB'den son aktif session
+  // 2. Last active session from DB
   try {
     const userDb = await userManager.getUserDb(userId);
     const memory = new UserMemory(userDb);
     const session = memory.getSession();
     if (!session?.lastUsedAt) return undefined;
 
-    // 3. TTL kontrolü
+    // 3. TTL check
     if (isSessionExpired(session.lastUsedAt)) {
       const age = Date.now() - new Date(session.lastUsedAt).getTime();
       console.log(`[Cortex] Session expired (${Math.round(age / 60000)}min), starting fresh`);
@@ -296,7 +296,7 @@ export async function _executeChat(
 
   let systemPrompt: string;
   if (options?.systemPromptOverride) {
-    // Sub-cortex (WA cortex vb.) kendi system prompt'unu geçiyor
+    // Sub-cortex (WA cortex etc.) passes its own system prompt
     systemPrompt = options.systemPromptOverride;
   } else {
     const mindContent = await readMindFiles(userFolder);
@@ -371,17 +371,17 @@ export async function _executeChat(
       : {
           // Sub-agents of Cortex (main agent) — brain-themed names
           frontal: {
-            description: "Web'de araştırma yapar, bilgi toplar. Güncel bilgi, haber, teknik dokümantasyon aramak için kullan.",
-            prompt: "Sen Cortex'in araştırma sub-agent'ısın (Frontal). Verilen konuyu web'de araştır, güvenilir kaynaklardan bilgi topla ve özet sun. Türkçe yanıt ver.",
+            description: "Research the web and gather information. Use for current information, news, and technical documentation.",
+            prompt: "You are Cortex's research sub-agent (Frontal). Research the given topic on the web, gather information from reliable sources, and provide a summary.",
             tools: ["WebSearch", "WebFetch"],
           },
           wernicke: {
-            description: "Uzun metinleri özetler ve analiz eder. Makale, döküman, konuşma özeti için kullan.",
-            prompt: "Sen Cortex'in dil ve anlam sub-agent'ısın (Wernicke). Verilen metni kısa, öz ve anlaşılır şekilde özetle. Önemli noktaları vurgula. Türkçe yanıt ver.",
+            description: "Summarize and analyze long texts. Use for articles, documents, and conversation summaries.",
+            prompt: "You are Cortex's language and meaning sub-agent (Wernicke). Summarize the given text clearly and concisely. Highlight the important points.",
           },
           mneme: {
-            description: "Kullanıcının hafızasında arama ve analiz yapar. Geçmiş konuşmalar, kaydedilen bilgiler için kullan.",
-            prompt: "Sen Cortex'in hafıza sub-agent'ısın (Mneme). Kullanıcının hafızasında detaylı arama yap, ilgili bilgileri bul ve özetle. Türkçe yanıt ver.",
+            description: "Search and analyze the user's memory. Use for past conversations and saved information.",
+            prompt: "You are Cortex's memory sub-agent (Mneme). Search the user's memory in detail, find relevant information, and summarize it.",
             tools: ["mcp__memory__recall", "mcp__memory__memory_stats"],
           },
         };
@@ -419,7 +419,7 @@ export async function _executeChat(
           memory: options?.workDir ? createMemoryServerFromPath(options.workDir) : getMemoryServer(userId),
           telegram: getTelegramMcpServer(),
           agentLoop: getAgentLoopServer(),
-          // Gateway — tüm dış servisler (whatsapp, calendar, gmail, helm, squad vs.)
+          // Gateway - all external services (whatsapp, calendar, gmail, helm, squad, etc.)
           gateway: {
             type: "stdio" as const,
             command: "bun",
@@ -489,7 +489,7 @@ export async function _executeChat(
             // Error case
             console.error(`[Cortex] Error: ${result.subtype} (stop: ${stopReason})`, (result as any).errors);
             if (!lastAssistantContent) {
-              lastAssistantContent = `Bir hata oluştu: ${result.subtype}`;
+              lastAssistantContent = `An error occurred: ${result.subtype}`;
             }
           }
           break;
@@ -527,7 +527,7 @@ export async function _executeChat(
     }
 
     return {
-      content: lastAssistantContent || "Yanıt alınamadı.",
+      content: lastAssistantContent || "No response received.",
       sessionId,
       totalCost,
       inputTokens,
@@ -587,7 +587,7 @@ export async function _executeChat(
     }
 
     return {
-      content: `Hata: ${errorMessage}`,
+      content: `Error: ${errorMessage}`,
       sessionId: "",
       totalCost: 0,
       inputTokens: 0,

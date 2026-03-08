@@ -25,15 +25,15 @@ export function CodeBlock({ language, code }: CodeBlockProps) {
         <button
           className={`code-copy ${copied ? "copied" : ""}`}
           onClick={handleCopy}
-          aria-label={copied ? "Kopyalandı" : "Kopyala"}
+          aria-label={copied ? "Copied" : "Copy"}
         >
           {copied ? (
             <>
-              <CheckIcon size={12} /> Kopyalandı
+              <CheckIcon size={12} /> Copied
             </>
           ) : (
             <>
-              <CopyIcon size={12} /> Kopyala
+              <CopyIcon size={12} /> Copy
             </>
           )}
         </button>

@@ -60,7 +60,7 @@ export function Modal({
             <h2 id="modal-title" className="modal-title">
               {title}
             </h2>
-            <IconButton variant="ghost" onClick={onClose} tooltip="Kapat">
+            <IconButton variant="ghost" onClick={onClose} tooltip="Close">
               <XIcon size={18} />
             </IconButton>
           </div>

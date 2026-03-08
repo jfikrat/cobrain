@@ -125,15 +125,15 @@ export function useSetupWizard() {
     if (step === 0) {
       // Telegram step
       if (!formData.TELEGRAM_BOT_TOKEN.trim()) {
-        errors.TELEGRAM_BOT_TOKEN = "Bot token gerekli";
+        errors.TELEGRAM_BOT_TOKEN = "Bot token is required";
       } else if (!formData.TELEGRAM_BOT_TOKEN.includes(":")) {
-        errors.TELEGRAM_BOT_TOKEN = "Geçersiz token formatı";
+        errors.TELEGRAM_BOT_TOKEN = "Invalid token format";
       }
 
       if (!formData.MY_TELEGRAM_ID.trim()) {
-        errors.MY_TELEGRAM_ID = "User ID gerekli";
+        errors.MY_TELEGRAM_ID = "User ID is required";
       } else if (!/^\d+$/.test(formData.MY_TELEGRAM_ID)) {
-        errors.MY_TELEGRAM_ID = "User ID sadece rakam olmalı";
+        errors.MY_TELEGRAM_ID = "User ID must be numeric only";
       }
     }
 
@@ -192,7 +192,7 @@ export function useSetupWizard() {
         setState((prev) => ({
           ...prev,
           saving: false,
-          saveError: data.error || "Kaydetme başarısız",
+          saveError: data.error || "Save failed",
         }));
         return false;
       }
@@ -207,7 +207,7 @@ export function useSetupWizard() {
       setState((prev) => ({
         ...prev,
         saving: false,
-        saveError: "Bağlantı hatası",
+        saveError: "Connection error",
       }));
       return false;
     }

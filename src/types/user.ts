@@ -35,17 +35,17 @@ export interface UserSettings {
   /** Custom preferences (JSON) */
   custom?: Record<string, unknown>;
 
-  // ===== Kullanıcı Profili =====
-  /** Kullanıcının adı */
+  // ===== User Profile =====
+  /** User's name */
   profileName?: string;
 
-  /** Kullanıcının mesleği/rolü */
+  /** User's profession/role */
   profileRole?: string;
 
-  /** Kullanıcının ilgi alanları */
+  /** User's interests */
   profileInterests?: string[];
 
-  /** Özel notlar/tercihler */
+  /** Custom notes/preferences */
   profileNotes?: string;
 }
 

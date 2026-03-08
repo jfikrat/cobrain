@@ -4,8 +4,8 @@ import { join } from "node:path";
 
 const envSchema = z.object({
   // Core
-  TELEGRAM_BOT_TOKEN: z.string().min(1, "Telegram bot token gerekli"),
-  MY_TELEGRAM_ID: z.coerce.number().min(1, "Telegram user ID gerekli"),
+  TELEGRAM_BOT_TOKEN: z.string().min(1, "Telegram bot token is required"),
+  MY_TELEGRAM_ID: z.coerce.number().min(1, "Telegram user ID is required"),
   MAX_HISTORY: z.coerce.number().default(10),
 
   // v0.2: Per-user folders
@@ -137,13 +137,13 @@ export function getConfigSchema() {
       {
         key: "TELEGRAM_BOT_TOKEN",
         label: "Telegram Bot Token",
-        hint: "@BotFather'dan bot oluşturup token'ı buraya yapıştırın",
+        hint: "Create a bot via @BotFather and paste the token here",
         type: "password" as const,
       },
       {
         key: "MY_TELEGRAM_ID",
         label: "Telegram User ID",
-        hint: "@userinfobot'a mesaj atarak ID'nizi öğrenebilirsiniz",
+        hint: "Send a message to @userinfobot to get your ID",
         type: "text" as const,
       },
     ],
@@ -151,21 +151,21 @@ export function getConfigSchema() {
       {
         key: "GEMINI_API_KEY",
         label: "Gemini API Key",
-        hint: "Ses mesajları için gerekli (opsiyonel)",
+        hint: "Required for voice messages (optional)",
         type: "password" as const,
         default: "",
       },
       {
         key: "WEB_PORT",
         label: "Web Port",
-        hint: "Web arayüzü portu",
+        hint: "Web UI port",
         type: "text" as const,
         default: "3000",
       },
       {
         key: "AGENT_MODEL",
         label: "AI Model",
-        hint: "Kullanılacak Claude modeli",
+        hint: "Claude model to use",
         type: "text" as const,
         default: "claude-opus-4-6",
       },

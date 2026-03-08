@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { invalidateHubContextCache } from "./hub-context.ts";
 
-export type AgentType = "genel" | "whatsapp" | "kod" | "arastirma" | "custom";
+export type AgentType = "general" | "whatsapp" | "code" | "research" | "custom";
 
 export interface AgentEntry {
   id: string;

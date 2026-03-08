@@ -1,6 +1,6 @@
 /**
  * Session State Persistence
- * Restart sonrası conversation continuity ve operational state
+ * Conversation continuity and operational state after restart
  * v0.10 - Feature flag: FF_SESSION_STATE
  */
 
@@ -17,9 +17,9 @@ export type ConversationPhase = "exploring" | "decided" | "implementing" | "depl
 export interface WhatsAppNotification {
   senderName: string;
   chatJid: string;
-  preview: string;        // mesaj özeti (max 100 char)
+  preview: string;        // message preview (max 100 char)
   tier: number;           // 1=auto-replied, 2=suggested, 3=notify-only
-  autoReply?: string;     // tier 1 ise gönderilen cevap
+  autoReply?: string;     // auto-reply sent if tier 1
   isGroup: boolean;
   timestamp: number;      // Date.now()
 }
@@ -41,7 +41,7 @@ export interface SessionState {
 
   // WhatsApp context
   recentWhatsApp: WhatsAppNotification[];
-  // chatJid → son görülen incoming mesajın unix timestamp'i (sn). Restart'ta kaybetmemek için persist.
+  // chatJid → unix timestamp (sec) of the last seen incoming message. Persisted to survive restarts.
   lastSeenMsgTimestamps: Record<string, number>;
 
   // Meta
@@ -191,7 +191,7 @@ export function detectTopic(userMsg: string, responseText: string): string | nul
 
 // ============ WHATSAPP CONTEXT ============
 
-/** Son WA mesajını session state'e ekle (max 10, 24 saat TTL) */
+/** Add the last WA message to session state (max 10, 24h TTL) */
 export async function addWhatsAppNotification(userId: number, notif: WhatsAppNotification): Promise<void> {
   const state = getSessionState(userId);
   const cutoff = Date.now() - WA_NOTIFICATION_TTL_MS;

@@ -127,14 +127,14 @@ export function startSetupServer(): void {
           // Validate required fields
           if (!formData.TELEGRAM_BOT_TOKEN) {
             return Response.json(
-              { success: false, error: "Telegram Bot Token gerekli" },
+              { success: false, error: "Telegram Bot Token is required" },
               { status: 400 }
             );
           }
 
           if (!formData.MY_TELEGRAM_ID) {
             return Response.json(
-              { success: false, error: "Telegram User ID gerekli" },
+              { success: false, error: "Telegram User ID is required" },
               { status: 400 }
             );
           }
@@ -150,7 +150,7 @@ export function startSetupServer(): void {
               {
                 success: false,
                 error:
-                  "Dosya yazma hatası. Manuel olarak .env dosyası oluşturmanız gerekebilir.",
+                  "Failed to write file. You may need to create the .env file manually.",
                 manualContent: envContent,
               },
               { status: 500 }
@@ -161,7 +161,7 @@ export function startSetupServer(): void {
         } catch (err) {
           console.error("[Setup] Save error:", err);
           return Response.json(
-            { success: false, error: "Geçersiz istek" },
+            { success: false, error: "Invalid request" },
             { status: 400 }
           );
         }
@@ -183,7 +183,7 @@ export function startSetupServer(): void {
           });
         }, 1000);
 
-        return Response.json({ success: true, message: "Yeniden başlatılıyor..." });
+        return Response.json({ success: true, message: "Restarting..." });
       },
     },
 

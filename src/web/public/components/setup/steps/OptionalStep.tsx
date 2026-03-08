@@ -16,18 +16,18 @@ export function OptionalStep({
   return (
     <div className="setup-step">
       <div className="setup-step-header">
-        <h2 className="setup-step-title">Gelişmiş Ayarlar</h2>
+        <h2 className="setup-step-title">Advanced Settings</h2>
         <p className="setup-step-description">
-          Bu ayarlar varsayılan değerlerle çalışır. Değiştirmeniz gerekmez.
+          These settings work with default values. You don't need to change them.
         </p>
       </div>
 
       <div className="setup-step-content">
         <TextInput
-          label="Web Arayüzü Portu"
+          label="Web Interface Port"
           type="text"
           placeholder="3000"
-          hint="Web arayüzünün çalışacağı port"
+          hint="Port for the web interface"
           value={formData.WEB_PORT}
           onChange={(e) => onFieldChange("WEB_PORT", e.target.value)}
           error={errors.WEB_PORT}
@@ -38,7 +38,7 @@ export function OptionalStep({
           label="AI Model"
           type="text"
           placeholder="claude-opus-4-6"
-          hint="Kullanılacak Claude modeli"
+          hint="Claude model to use"
           value={formData.AGENT_MODEL}
           onChange={(e) => onFieldChange("AGENT_MODEL", e.target.value)}
           error={errors.AGENT_MODEL}
@@ -47,8 +47,7 @@ export function OptionalStep({
         <div className="setup-note">
           <span className="setup-note-icon">ℹ️</span>
           <span>
-            Bu ayarları daha sonra <code>.env</code> dosyasından
-            değiştirebilirsiniz.
+            You can change these settings later in the <code>.env</code> file.
           </span>
         </div>
       </div>

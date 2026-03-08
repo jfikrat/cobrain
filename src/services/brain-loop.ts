@@ -237,8 +237,8 @@ class BrainLoop {
 
   // ── Agent Loop System ──────────────────────────────────────────────
   //
-  // Her fastTick'te çalışır. Agent'ların loop.json dosyasını okuyup
-  // dinamik olarak heartbeat gönderir. Precondition registry ile
+  // Runs every fastTick. Reads agents' loop.json files and
+  // sends dynamic heartbeats. Works with precondition registry
   // lightweight check yapabilir.
 
   private static readonly LOOP_CACHE_TTL_MS = 30_000; // 30s cache

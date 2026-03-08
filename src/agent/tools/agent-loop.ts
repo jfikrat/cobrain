@@ -1,8 +1,8 @@
 /**
  * Agent Loop Tool — agent_set_loop MCP Server
  *
- * Agent'ların kendi uyanma döngülerini kontrol etmesini sağlar.
- * loop.json dosyasını yazarak BrainLoop'un dinamik tetiklemesini yönetir.
+ * Lets agents control their own wake-up loops.
+ * Manages BrainLoop's dynamic triggering by writing loop.json.
  */
 
 import { join } from "node:path";
@@ -24,7 +24,7 @@ export interface LoopConfig {
 }
 
 export const DEFAULT_LOOP_CONFIG: LoopConfig = {
-  intervalMs: 3_600_000, // 1 saat
+  intervalMs: 3_600_000, // 1 hour
   precondition: null,
   activeIntervalMs: null,
   activeUntil: null,
@@ -33,9 +33,9 @@ export const DEFAULT_LOOP_CONFIG: LoopConfig = {
 
 // ── Constraints ──────────────────────────────────────────────────────────────
 
-const MIN_INTERVAL_MS = 10_000;          // 10 saniye
-const MAX_INTERVAL_MS = 86_400_000;      // 24 saat
-const MAX_ACTIVE_DURATION_MS = 1_800_000; // 30 dakika
+const MIN_INTERVAL_MS = 10_000;          // 10 seconds
+const MAX_INTERVAL_MS = 86_400_000;      // 24 hours
+const MAX_ACTIVE_DURATION_MS = 1_800_000; // 30 minutes
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -69,17 +69,17 @@ async function writeLoopConfig(agentId: string, loopConfig: LoopConfig): Promise
 
 const agentSetLoopTool = tool(
   "agent_set_loop",
-  "Kendi uyanma döngünü ayarla. intervalMs: normal kontrol aralığı (ms). activeIntervalMs + activeDurationMs: geçici hızlı mod (örn. aktif konuşma sırasında 15s).",
+  "Configure your own wake-up loop. intervalMs: normal check interval (ms). activeIntervalMs + activeDurationMs: temporary fast mode (e.g. 15s during an active conversation).",
   {
-    agentId: z.string().describe("Kendi agent ID'n"),
+    agentId: z.string().describe("Your agent ID"),
     intervalMs: z.number().min(MIN_INTERVAL_MS).max(MAX_INTERVAL_MS).optional()
-      .describe("Normal uyanma aralığı (ms). Min: 10000, Max: 86400000"),
+      .describe("Normal wake-up interval (ms). Min: 10000, Max: 86400000"),
     activeIntervalMs: z.number().min(MIN_INTERVAL_MS).max(MAX_INTERVAL_MS).optional()
-      .describe("Geçici hızlı interval (ms). Min: 10000"),
+      .describe("Temporary fast interval (ms). Min: 10000"),
     activeDurationMs: z.number().min(MIN_INTERVAL_MS).max(MAX_ACTIVE_DURATION_MS).optional()
-      .describe("Hızlı mod süresi (ms). Max: 1800000 (30dk)"),
+      .describe("Fast-mode duration (ms). Max: 1800000 (30 min)"),
     reason: z.string().max(200).optional()
-      .describe("Debug/log bilgisi"),
+      .describe("Debug/log info"),
   },
   async ({ agentId, intervalMs, activeIntervalMs, activeDurationMs, reason }) => {
     try {
@@ -93,9 +93,9 @@ const agentSetLoopTool = tool(
         current.activeIntervalMs = activeIntervalMs;
         current.activeUntil = Date.now() + activeDurationMs;
       } else if (activeIntervalMs === undefined && activeDurationMs === undefined) {
-        // İkisi de verilmediyse mevcut değerleri koru
+        // If neither is provided, keep current values
       } else {
-        return toolError("agent_set_loop", new Error("activeIntervalMs ve activeDurationMs birlikte verilmeli"));
+        return toolError("agent_set_loop", new Error("activeIntervalMs and activeDurationMs must be provided together"));
       }
 
       if (reason !== undefined) {
@@ -109,9 +109,9 @@ const agentSetLoopTool = tool(
         : current.intervalMs;
 
       return toolSuccess(
-        `Loop güncellendi: interval=${current.intervalMs}ms` +
-        (current.activeIntervalMs ? `, activeInterval=${current.activeIntervalMs}ms (${Math.round((current.activeUntil! - Date.now()) / 1000)}s kaldı)` : "") +
-        `. Efektif: ${effectiveInterval}ms`
+        `Loop updated: interval=${current.intervalMs}ms` +
+        (current.activeIntervalMs ? `, activeInterval=${current.activeIntervalMs}ms (${Math.round((current.activeUntil! - Date.now()) / 1000)}s remaining)` : "") +
+        `. Effective: ${effectiveInterval}ms`
       );
     } catch (err) {
       return toolError("agent_set_loop", err);

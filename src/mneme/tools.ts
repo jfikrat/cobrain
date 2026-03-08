@@ -17,88 +17,88 @@ export function createMnemeTools(deps: {
 
   const readMemoryTool = tool(
     "read_memory_files",
-    "facts.md ve events.md dosyalarını oku.",
+    "Read the facts.md and events.md files.",
     {
-      days: z.number().default(90).describe("Kaç günlük olay geçmişi"),
+      days: z.number().default(90).describe("How many days of event history"),
     },
     async ({ days }) => {
       try {
         const all = await memory.readAll(days);
-        if (!all) return toolSuccess("Hafıza dosyaları boş.");
+        if (!all) return toolSuccess("Memory files are empty.");
         return toolSuccess(all);
       } catch (error) {
-        return toolError("Okuma hatası", error);
+        return toolError("Read error", error);
       }
     }
   );
 
   const archiveEventsTool = tool(
     "archive_old_events",
-    "Belirtilen günden daha eski olayları archive/ klasörüne taşı.",
+    "Move events older than the given number of days into the archive/ folder.",
     {
-      days_old: z.number().default(90).describe("Kaç günden eski olaylar arşivlensin"),
+      days_old: z.number().default(90).describe("Archive events older than how many days"),
     },
     async ({ days_old }) => {
       try {
         const count = await memory.archiveOldEvents(days_old);
-        if (count === 0) return toolSuccess("Arşivlenecek eski olay bulunamadı.");
+        if (count === 0) return toolSuccess("No old events to archive.");
         console.log(`[Mneme] Archived ${count} date sections (>${days_old} days old)`);
-        return toolSuccess(`${count} olay bölümü arşivlendi.`);
+        return toolSuccess(`${count} event sections archived.`);
       } catch (error) {
-        return toolError("Arşivleme hatası", error);
+        return toolError("Archive error", error);
       }
     }
   );
 
   const updateFactsTool = tool(
     "update_facts",
-    "facts.md'de bir bölümü güncelle veya yeni bölüm ekle.",
+    "Update a section in facts.md or add a new one.",
     {
-      section: z.string().describe("Bölüm başlığı (ör: 'Konum', 'Meslek', 'Aile')"),
-      content: z.string().describe("Bölüm içeriği"),
+      section: z.string().describe("Section heading (e.g. 'Location', 'Career', 'Family')"),
+      content: z.string().describe("Section content"),
     },
     async ({ section, content }) => {
       try {
         await memory.storeFact(section, content);
         console.log(`[Mneme] Updated facts [${section}]`);
-        return toolSuccess(`facts.md güncellendi: [${section}]`);
+        return toolSuccess(`facts.md updated: [${section}]`);
       } catch (error) {
-        return toolError("Güncelleme hatası", error);
+        return toolError("Update error", error);
       }
     }
   );
 
   const logEventTool = tool(
     "log_event",
-    "events.md'ye yeni olay ekle.",
+    "Add a new event to events.md.",
     {
-      description: z.string().describe("Olay açıklaması"),
-      date: z.string().optional().describe("Tarih (YYYY-MM-DD, default: bugün)"),
+      description: z.string().describe("Event description"),
+      date: z.string().optional().describe("Date (YYYY-MM-DD, default: today)"),
     },
     async ({ description, date }) => {
       try {
         await memory.logEvent(description, date);
-        return toolSuccess(`Olay kaydedildi: ${description}`);
+        return toolSuccess(`Event saved: ${description}`);
       } catch (error) {
-        return toolError("Olay kayıt hatası", error);
+        return toolError("Event save error", error);
       }
     }
   );
 
   const sendReportTool = tool(
     "send_report",
-    "Konsolidasyon özet raporunu Telegram'dan gönder.",
+    "Send the consolidation summary report via Telegram.",
     {
-      text: z.string().describe("Rapor metni"),
+      text: z.string().describe("Report text"),
     },
     async ({ text }) => {
       try {
-        await bot.api.sendMessage(userId, `🧠 <b>Hafıza Konsolidasyonu</b>\n\n${text}`, {
+        await bot.api.sendMessage(userId, `🧠 <b>Memory Consolidation</b>\n\n${text}`, {
           parse_mode: "HTML",
         });
-        return toolSuccess("Rapor gönderildi.");
+        return toolSuccess("Report sent.");
       } catch (error) {
-        return toolError("Rapor gönderme hatası", error);
+        return toolError("Report send error", error);
       }
     }
   );

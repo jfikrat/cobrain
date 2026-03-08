@@ -150,7 +150,7 @@ export class UserManager {
     // Initialize user database
     await this.initUserDb(userId, folderPath);
 
-    console.log(`[UserManager] Yeni kullanıcı oluşturuldu: ${userId}`);
+    console.log(`[UserManager] New user created: ${userId}`);
 
     return {
       id: userId,

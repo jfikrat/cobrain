@@ -52,7 +52,7 @@ export function TextInput({
             className="text-input-toggle"
             onClick={() => setShowPassword(!showPassword)}
             tabIndex={-1}
-            aria-label={showPassword ? "Şifreyi gizle" : "Şifreyi göster"}
+            aria-label={showPassword ? "Hide password" : "Show password"}
           >
             {showPassword ? (
               <EyeOffIcon size={18} />

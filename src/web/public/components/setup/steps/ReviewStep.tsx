@@ -8,7 +8,7 @@ interface ReviewStepProps {
 
 export function ReviewStep({ formData, saveError }: ReviewStepProps) {
   const maskToken = (token: string): string => {
-    if (!token) return "(boş)";
+    if (!token) return "(empty)";
     if (token.length <= 10) return "***";
     return token.slice(0, 6) + "..." + token.slice(-4);
   };
@@ -16,9 +16,9 @@ export function ReviewStep({ formData, saveError }: ReviewStepProps) {
   return (
     <div className="setup-step">
       <div className="setup-step-header">
-        <h2 className="setup-step-title">Özet</h2>
+        <h2 className="setup-step-title">Summary</h2>
         <p className="setup-step-description">
-          Ayarlarınızı kontrol edin ve kaydedin.
+          Review your settings and save.
         </p>
       </div>
 
@@ -35,25 +35,25 @@ export function ReviewStep({ formData, saveError }: ReviewStepProps) {
             <div className="setup-review-item">
               <span className="setup-review-label">User ID:</span>
               <code className="setup-review-value">
-                {formData.MY_TELEGRAM_ID || "(boş)"}
+                {formData.MY_TELEGRAM_ID || "(empty)"}
               </code>
             </div>
           </div>
 
           <div className="setup-review-section">
-            <h4>API Anahtarları</h4>
+            <h4>API Keys</h4>
             <div className="setup-review-item">
               <span className="setup-review-label">Gemini API:</span>
               <code className="setup-review-value">
                 {formData.GEMINI_API_KEY
                   ? maskToken(formData.GEMINI_API_KEY)
-                  : "(yapılandırılmamış)"}
+                  : "(not configured)"}
               </code>
             </div>
           </div>
 
           <div className="setup-review-section">
-            <h4>Gelişmiş Ayarlar</h4>
+            <h4>Advanced Settings</h4>
             <div className="setup-review-item">
               <span className="setup-review-label">Web Port:</span>
               <code className="setup-review-value">
@@ -79,8 +79,8 @@ export function ReviewStep({ formData, saveError }: ReviewStepProps) {
         <div className="setup-note" style={{ marginTop: "1.5rem" }}>
           <span className="setup-note-icon">✨</span>
           <span>
-            Kaydet butonuna tıkladığınızda <code>.env</code> dosyası oluşturulacak
-            ve uygulama yeniden başlatılacak.
+            When you click Save, the <code>.env</code> file will be created
+            and the application will restart.
           </span>
         </div>
       </div>

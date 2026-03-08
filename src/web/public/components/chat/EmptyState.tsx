@@ -6,7 +6,7 @@ export function EmptyState() {
     <div className="empty-state">
       <BrainIcon size={64} />
       <h2>Cobrain</h2>
-      <p>Merhaba! Sana nasıl yardımcı olabilirim?</p>
+      <p>Hello! How can I help you?</p>
     </div>
   );
 }

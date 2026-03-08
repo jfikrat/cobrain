@@ -99,9 +99,9 @@ export function startWebServer(): void {
           const {
             message,
             model,
-            sessionKey,  // Agent'lar için izole session — ana session kirlenmez
-            silent,      // true ise Telegram mirror kapalı (agent-to-agent çağrılar için)
-            systemPromptOverride,  // WA Agent vb. için custom system prompt
+            sessionKey,  // Isolated session for agents — main session stays clean
+            silent,      // If true, Telegram mirror is off (for agent-to-agent calls)
+            systemPromptOverride,  // Custom system prompt for WA Agent etc.
           } = body as { message: string; model?: string; sessionKey?: string; silent?: boolean; systemPromptOverride?: string };
           if (!message) {
             return Response.json({ error: "message required" }, { status: 400 });
@@ -109,7 +109,7 @@ export function startWebServer(): void {
 
           const userId = config.MY_TELEGRAM_ID;
 
-          // Mirror to Telegram (silent=true ise atla — agent iç çağrıları için)
+          // Mirror to Telegram (skip if silent=true — for agent internal calls)
           if (!silent) {
             const label = sessionKey ? `📡 [${sessionKey}]:` : `📡 API:`;
             const mirrorText = `${label} ${message}`.slice(0, 4096);
@@ -137,8 +137,8 @@ export function startWebServer(): void {
         }
       }
 
-      // POST /api/report — Agent'ların Cobrain'e rapor/mesaj gönderdiği endpoint
-      // Agent'lar tamamlandığında veya onay istediklerinde buraya POST atar → inbox'a düşer
+      // POST /api/report — Endpoint for agents to send reports/messages to Cobrain
+      // Agents POST here when done or when requesting approval → goes to inbox
       if (url.pathname === "/api/report" && req.method === "POST") {
         const authHeader = req.headers.get("authorization");
         const apiKey = config.COBRAIN_API_KEY;
@@ -159,7 +159,7 @@ export function startWebServer(): void {
             return Response.json({ error: "agentId, subject, message required" }, { status: 400 });
           }
 
-          // WA Agent kendi işini askCobrain() ile hallediyor — raporları inbox'a düşürme, sadece logla
+          // WA Agent handles its own work via askCobrain() — don't push reports to inbox, just log
           if (agentId === "wa") {
             console.log(`[API] WA Agent report (log-only): "${subject}"`);
             return Response.json({ ok: true, logged: true });
@@ -169,7 +169,7 @@ export function startWebServer(): void {
           await inbox.push({
             from: "brain-loop",
             subject: `[agent:${agentId}] ${subject}`,
-            body: `Agent raporu — ${agentId}\n\n${reportBody}`,
+            body: `Agent report — ${agentId}\n\n${reportBody}`,
             priority: priority as "urgent" | "normal",
             ttlMs: 2 * 60 * 60 * 1000,
           });
@@ -216,7 +216,7 @@ export function startWebServer(): void {
         return handleMediaServe(req, mediaMatch[1]);
       }
 
-      // GET /api/memory/recall — Agent hafıza okuma
+      // GET /api/memory/recall — Agent memory read
       if (url.pathname === "/api/memory/recall" && req.method === "GET") {
         const authHeader = req.headers.get("authorization");
         const apiKey = config.COBRAIN_API_KEY;
@@ -238,7 +238,7 @@ export function startWebServer(): void {
         }
       }
 
-      // POST /api/memory/remember — Agent hafıza yazma
+      // POST /api/memory/remember — Agent memory write
       if (url.pathname === "/api/memory/remember" && req.method === "POST") {
         const authHeader = req.headers.get("authorization");
         const apiKey = config.COBRAIN_API_KEY;

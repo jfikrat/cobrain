@@ -27,10 +27,10 @@ export function Header({
   showMenuButton = true,
 }: HeaderProps) {
   const statusText = {
-    connected: "Bağlı",
-    connecting: "Bağlanıyor...",
-    disconnected: "Bağlantı yok",
-    error: "Hata",
+    connected: "Connected",
+    connecting: "Connecting...",
+    disconnected: "Disconnected",
+    error: "Error",
   }[status];
 
   return (
@@ -40,7 +40,7 @@ export function Header({
           <IconButton
             variant="ghost"
             onClick={onToggleSidebar}
-            tooltip="Menü (Ctrl+B)"
+            tooltip="Menu (Ctrl+B)"
           >
             <MenuIcon size={20} />
           </IconButton>
@@ -58,13 +58,13 @@ export function Header({
         </div>
         <IconButton
           onClick={onClearHistory}
-          tooltip="Geçmişi temizle"
+          tooltip="Clear history"
         >
           <TrashIcon size={18} />
         </IconButton>
         <IconButton
           onClick={onToggleTheme}
-          tooltip={theme === "dark" ? "Açık tema" : "Koyu tema"}
+          tooltip={theme === "dark" ? "Light theme" : "Dark theme"}
         >
           {theme === "dark" ? <SunIcon size={18} /> : <MoonIcon size={18} />}
         </IconButton>

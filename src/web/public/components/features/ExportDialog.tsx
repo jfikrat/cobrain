@@ -41,20 +41,20 @@ export function ExportDialog({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Sohbetleri Dışa Aktar"
+      title="Export Conversations"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
-            İptal
+            Cancel
           </Button>
           <Button onClick={handleExport} disabled={!hasConversations || exported}>
             {exported ? (
               <>
-                <CheckIcon size={16} /> İndirildi
+                <CheckIcon size={16} /> Downloaded
               </>
             ) : (
               <>
-                <DownloadIcon size={16} /> Dışa Aktar
+                <DownloadIcon size={16} /> Export
               </>
             )}
           </Button>
@@ -70,7 +70,7 @@ export function ExportDialog({
           }}
         >
           <DownloadIcon size={48} />
-          <p style={{ marginTop: "var(--space-md)" }}>Dışa aktarılacak sohbet yok</p>
+          <p style={{ marginTop: "var(--space-md)" }}>No conversations to export</p>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-lg)" }}>
@@ -83,7 +83,7 @@ export function ExportDialog({
                 fontWeight: 500,
               }}
             >
-              Dışa Aktar
+              Export
             </label>
             <div style={{ display: "flex", gap: "var(--space-sm)" }}>
               {activeConversation && (
@@ -103,7 +103,7 @@ export function ExportDialog({
                     color: "var(--text-primary)",
                   }}
                 >
-                  <div style={{ fontWeight: 500 }}>Aktif Sohbet</div>
+                  <div style={{ fontWeight: 500 }}>Active Conversation</div>
                   <div
                     style={{
                       fontSize: "var(--text-sm)",
@@ -130,7 +130,7 @@ export function ExportDialog({
                   color: "var(--text-primary)",
                 }}
               >
-                <div style={{ fontWeight: 500 }}>Tüm Sohbetler</div>
+                <div style={{ fontWeight: 500 }}>All Conversations</div>
                 <div
                   style={{
                     fontSize: "var(--text-sm)",
@@ -138,7 +138,7 @@ export function ExportDialog({
                     marginTop: "var(--space-xs)",
                   }}
                 >
-                  {conversations.length} sohbet
+                  {conversations.length} conversation(s)
                 </div>
               </button>
             </div>
@@ -180,7 +180,7 @@ export function ExportDialog({
                     marginTop: "var(--space-xs)",
                   }}
                 >
-                  Okunabilir format (.md)
+                  Readable format (.md)
                 </div>
               </button>
               <button
@@ -206,7 +206,7 @@ export function ExportDialog({
                     marginTop: "var(--space-xs)",
                   }}
                 >
-                  Yapısal veri (.json)
+                  Structured data (.json)
                 </div>
               </button>
             </div>

@@ -34,11 +34,11 @@ export class FileMemory {
     await rename(tmp, path);
   }
 
-  // ── Facts (kalıcı gerçekler/tercihler) ──────────────────────────────────
+  // ── Facts (persistent facts/preferences) ──────────────────────────────────
 
   /**
    * Store a fact under a section heading. Creates or overwrites the section.
-   * section: e.g. "Konum", "Meslek", "Eş"
+   * section: e.g. "Location", "Career", "Spouse"
    */
   async storeFact(section: string, content: string): Promise<void> {
     const date = today();
@@ -68,7 +68,7 @@ export class FileMemory {
     return this.readFile(this.factsPath);
   }
 
-  // ── Events (tarih damgalı olaylar) ──────────────────────────────────────
+  // ── Events (date-stamped events) ──────────────────────────────────────
 
   /**
    * Append an event under today's date heading.
@@ -160,8 +160,8 @@ export class FileMemory {
     const facts = await this.readFacts();
     const events = await this.readRecentEvents(eventDays);
     const parts: string[] = [];
-    if (facts) parts.push(`# Gerçekler & Tercihler\n\n${facts}`);
-    if (events) parts.push(`# Son Olaylar (${eventDays} gün)\n\n${events}`);
+    if (facts) parts.push(`# Facts & Preferences\n\n${facts}`);
+    if (events) parts.push(`# Recent Events (${eventDays} days)\n\n${events}`);
     return parts.join("\n\n---\n\n");
   }
 

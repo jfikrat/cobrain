@@ -175,7 +175,7 @@ export function ChatLayout({ token, onOpenSearch, onOpenExport }: ChatLayoutProp
 
   // Handle clear history
   const handleClearHistory = useCallback(() => {
-    if (confirm("Tüm sohbet geçmişi silinsin mi?")) {
+    if (confirm("Delete all chat history?")) {
       clearConversations();
     }
   }, [clearConversations]);

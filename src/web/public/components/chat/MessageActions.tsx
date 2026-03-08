@@ -35,7 +35,7 @@ export function MessageActions({
         variant="ghost"
         size="sm"
         onClick={handleCopy}
-        tooltip={copied ? "Kopyalandı!" : "Kopyala"}
+        tooltip={copied ? "Copied!" : "Copy"}
       >
         {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
       </IconButton>
@@ -45,7 +45,7 @@ export function MessageActions({
           variant="ghost"
           size="sm"
           onClick={onEdit}
-          tooltip="Düzenle"
+          tooltip="Edit"
         >
           <EditIcon size={14} />
         </IconButton>
@@ -56,7 +56,7 @@ export function MessageActions({
           variant="ghost"
           size="sm"
           onClick={onRegenerate}
-          tooltip="Yeniden oluştur"
+          tooltip="Regenerate"
         >
           <RefreshIcon size={14} />
         </IconButton>

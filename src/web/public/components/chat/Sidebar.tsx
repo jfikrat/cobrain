@@ -53,7 +53,7 @@ export function Sidebar({
             isActive={conv.id === activeConversationId}
             onSelect={() => onSelectConversation(conv.id)}
             onDelete={() => {
-              if (confirm("Bu sohbet silinsin mi?")) {
+              if (confirm("Delete this conversation?")) {
                 onDeleteConversation(conv.id);
               }
             }}
@@ -76,13 +76,13 @@ export function Sidebar({
 
       <aside className={cn("sidebar", !isOpen && "collapsed")}>
         <div className="sidebar-header">
-          <IconButton onClick={onNewConversation} tooltip="Yeni sohbet (Ctrl+N)">
+          <IconButton onClick={onNewConversation} tooltip="New chat (Ctrl+N)">
             <PlusIcon size={18} />
           </IconButton>
-          <IconButton onClick={onOpenSearch} tooltip="Ara (Ctrl+K)">
+          <IconButton onClick={onOpenSearch} tooltip="Search (Ctrl+K)">
             <SearchIcon size={18} />
           </IconButton>
-          <IconButton variant="ghost" onClick={onClose} tooltip="Kenar çubuğunu kapat">
+          <IconButton variant="ghost" onClick={onClose} tooltip="Close sidebar">
             <ChevronLeftIcon size={18} />
           </IconButton>
         </div>
@@ -90,10 +90,10 @@ export function Sidebar({
         <div className="sidebar-content">
           {hasConversations ? (
             <div className="conversation-list">
-              {renderGroup("Bugün", conversations.today)}
-              {renderGroup("Dün", conversations.yesterday)}
-              {renderGroup("Bu Hafta", conversations.thisWeek)}
-              {renderGroup("Daha Eski", conversations.older)}
+              {renderGroup("Today", conversations.today)}
+              {renderGroup("Yesterday", conversations.yesterday)}
+              {renderGroup("This Week", conversations.thisWeek)}
+              {renderGroup("Older", conversations.older)}
             </div>
           ) : (
             <div className="sidebar-empty" style={{
@@ -107,7 +107,7 @@ export function Sidebar({
               padding: "var(--space-lg)",
             }}>
               <MessageIcon size={32} />
-              <p style={{ marginTop: "var(--space-md)" }}>Henüz sohbet yok</p>
+              <p style={{ marginTop: "var(--space-md)" }}>No conversations yet</p>
               <button
                 onClick={onNewConversation}
                 style={{
@@ -120,17 +120,17 @@ export function Sidebar({
                   cursor: "pointer",
                 }}
               >
-                Yeni sohbet başlat
+                Start new chat
               </button>
             </div>
           )}
         </div>
 
         <div className="sidebar-footer">
-          <IconButton onClick={onOpenExport} tooltip="Dışa aktar (Ctrl+E)">
+          <IconButton onClick={onOpenExport} tooltip="Export (Ctrl+E)">
             <DownloadIcon size={18} />
           </IconButton>
-          <IconButton tooltip="Ayarlar">
+          <IconButton tooltip="Settings">
             <SettingsIcon size={18} />
           </IconButton>
         </div>
@@ -172,7 +172,7 @@ function ConversationItem({
           e.stopPropagation();
           onDelete();
         }}
-        tooltip="Sil"
+        tooltip="Delete"
         style={{ opacity: 0, transition: "opacity 0.2s" }}
         className="conversation-delete"
       >

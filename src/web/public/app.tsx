@@ -74,7 +74,7 @@ function App() {
       >
         <div className="setup-loading">
           <div className="setup-loading-spinner" />
-          <span>Yükleniyor...</span>
+          <span>Loading...</span>
         </div>
       </div>
     );
@@ -98,8 +98,8 @@ function App() {
         }}
       >
         <div className="error-banner" style={{ maxWidth: "400px", textAlign: "center" }}>
-          <h2 style={{ marginBottom: "var(--space-md)" }}>Token Bulunamadı</h2>
-          <p>Lütfen Telegram'dan /web komutu ile yeni link alın.</p>
+          <h2 style={{ marginBottom: "var(--space-md)" }}>Token Not Found</h2>
+          <p>Please get a new link via the /web command in Telegram.</p>
         </div>
       </div>
     );

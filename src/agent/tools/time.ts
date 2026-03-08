@@ -10,7 +10,7 @@ import { toolError, toolSuccess } from "../../utils/tool-response.ts";
 
 // Default settings
 const DEFAULT_TIMEZONE = "Europe/Istanbul";
-const DEFAULT_LOCALE = "tr-TR";
+const DEFAULT_LOCALE = "en-US";
 
 /**
  * Get formatted date parts for a given date and timezone
@@ -59,7 +59,7 @@ function getDateInfo(date: Date, timezone: string, locale: string) {
 }
 
 /**
- * Format date as relative time ("2 gün sonra", "3 saat önce")
+ * Format date as relative time ("in 2 days", "3 hours ago")
  */
 function formatRelative(date: Date, locale: string): string {
   const now = new Date();
@@ -112,12 +112,12 @@ function parseDate(dateStr: string): Date | null {
 
 export const getCurrentTimeTool = tool(
   "get_current_time",
-  "Şu anki tarih ve saati gösterir. Timezone destekler.",
+  "Show the current date and time. Supports timezones.",
   {
     timezone: z
       .string()
       .optional()
-      .describe(`Timezone (varsayılan: ${DEFAULT_TIMEZONE}). Örnekler: Europe/Istanbul, UTC, America/New_York`),
+      .describe(`Timezone (default: ${DEFAULT_TIMEZONE}). Examples: Europe/Istanbul, UTC, America/New_York`),
   },
   async ({ timezone }) => {
     try {
@@ -139,22 +139,22 @@ export const getCurrentTimeTool = tool(
       const formatted = formatter.format(now);
       const isoString = now.toISOString();
 
-      return toolSuccess(`🕐 Şu an: ${formatted}\n📅 ISO: ${isoString}\n🌍 Timezone: ${tz}`);
+      return toolSuccess(`🕐 Now: ${formatted}\n📅 ISO: ${isoString}\n🌍 Timezone: ${tz}`);
     } catch (error) {
-      return toolError("Saat alınamadı", error);
+      return toolError("Could not get time", error);
     }
   }
 );
 
 export const getDateInfoTool = tool(
   "get_date_info",
-  "Belirli bir tarih hakkında detaylı bilgi verir (gün adı, hafta numarası, çeyrek, yılın kaçıncı günü).",
+  "Get detailed information about a date (weekday, week number, quarter, day of year).",
   {
     date: z
       .string()
       .optional()
-      .describe("Tarih (YYYY-MM-DD, DD.MM.YYYY veya DD/MM/YYYY). Boş bırakılırsa bugün."),
-    timezone: z.string().optional().describe(`Timezone (varsayılan: ${DEFAULT_TIMEZONE})`),
+      .describe("Date (YYYY-MM-DD, DD.MM.YYYY, or DD/MM/YYYY). Defaults to today if omitted."),
+    timezone: z.string().optional().describe(`Timezone (default: ${DEFAULT_TIMEZONE})`),
   },
   async ({ date, timezone }) => {
     try {
@@ -162,37 +162,37 @@ export const getDateInfoTool = tool(
       const targetDate = date ? parseDate(date) : new Date();
 
       if (!targetDate) {
-        return toolError("Geçersiz tarih formatı", new Error(`"${date}" - YYYY-MM-DD veya DD.MM.YYYY kullanın`));
+        return toolError("Invalid date format", new Error(`"${date}" - use YYYY-MM-DD or DD.MM.YYYY`));
       }
 
       const info = getDateInfo(targetDate, tz, DEFAULT_LOCALE);
 
-      return toolSuccess(`📅 Tarih Bilgisi:
-- Gün: ${info.weekday}, ${info.day} ${info.month} ${info.year}
-- Hafta: ${info.weekNumber}. hafta
-- Çeyrek: Q${info.quarter}
-- Yılın ${info.dayOfYear}. günü
-- Hafta sonu: ${info.isWeekend ? "Evet ✓" : "Hayır"}`);
+      return toolSuccess(`📅 Date Info:
+- Day: ${info.weekday}, ${info.day} ${info.month} ${info.year}
+- Week: ${info.weekNumber}
+- Quarter: Q${info.quarter}
+- Day ${info.dayOfYear} of the year
+- Weekend: ${info.isWeekend ? "Yes ✓" : "No"}`);
     } catch (error) {
-      return toolError("Tarih bilgisi alınamadı", error);
+      return toolError("Could not get date info", error);
     }
   }
 );
 
 export const calculateDateTool = tool(
   "calculate_date",
-  "Bir tarihten X gün/hafta/ay sonra veya önce hangi tarih olduğunu hesaplar.",
+  "Calculate the date X days, weeks, months, or years after or before a given date.",
   {
-    amount: z.number().describe("Miktar (pozitif = sonra, negatif = önce)"),
+    amount: z.number().describe("Amount (positive = after, negative = before)"),
     unit: z.enum(["day", "week", "month", "year"]).describe("Birim: day, week, month, year"),
-    fromDate: z.string().optional().describe("Başlangıç tarihi (varsayılan: bugün)"),
+    fromDate: z.string().optional().describe("Start date (default: today)"),
   },
   async ({ amount, unit, fromDate }) => {
     try {
       const startDate = fromDate ? parseDate(fromDate) : new Date();
 
       if (!startDate) {
-        return toolError("Geçersiz tarih formatı", new Error(`"${fromDate}"`));
+        return toolError("Invalid date format", new Error(`"${fromDate}"`));
       }
 
       const result = new Date(startDate);
@@ -213,9 +213,9 @@ export const calculateDateTool = tool(
       }
 
       const info = getDateInfo(result, DEFAULT_TIMEZONE, DEFAULT_LOCALE);
-      const direction = amount > 0 ? "sonra" : "önce";
+      const direction = amount > 0 ? "later" : "ago";
       const absAmount = Math.abs(amount);
-      const unitTr = { day: "gün", week: "hafta", month: "ay", year: "yıl" }[unit];
+      const unitTr = { day: "day", week: "week", month: "month", year: "year" }[unit];
 
       const formatted = `${info.day} ${info.month} ${info.year}, ${info.weekday}`;
 
@@ -223,17 +223,17 @@ export const calculateDateTool = tool(
 ${formatted}
 ISO: ${result.toISOString().split("T")[0]}`);
     } catch (error) {
-      return toolError("Tarih hesaplanamadı", error);
+      return toolError("Could not calculate date", error);
     }
   }
 );
 
 export const timeUntilTool = tool(
   "time_until",
-  "İki tarih arasındaki farkı hesaplar. Bir tarihe kaç gün kaldığını öğrenmek için kullan.",
+  "Calculate the difference between two dates. Use to find how many days remain until a date.",
   {
-    targetDate: z.string().describe("Hedef tarih (YYYY-MM-DD, DD.MM.YYYY veya DD/MM/YYYY)"),
-    fromDate: z.string().optional().describe("Başlangıç tarihi (varsayılan: bugün)"),
+    targetDate: z.string().describe("Target date (YYYY-MM-DD, DD.MM.YYYY, or DD/MM/YYYY)"),
+    fromDate: z.string().optional().describe("Start date (default: today)"),
   },
   async ({ targetDate, fromDate }) => {
     try {
@@ -241,11 +241,11 @@ export const timeUntilTool = tool(
       const from = fromDate ? parseDate(fromDate) : new Date();
 
       if (!target) {
-        return toolError("Geçersiz hedef tarih", new Error(`"${targetDate}"`));
+        return toolError("Invalid target date", new Error(`"${targetDate}"`));
       }
 
       if (!from) {
-        return toolError("Geçersiz başlangıç tarihi", new Error(`"${fromDate}"`));
+        return toolError("Invalid start date", new Error(`"${fromDate}"`));
       }
 
       // Reset time parts for accurate day calculation
@@ -262,43 +262,43 @@ export const timeUntilTool = tool(
 
       let resultText = "";
       if (diffDays === 0) {
-        resultText = "🎯 Bugün!";
+        resultText = "🎯 Today!";
       } else if (diffDays > 0) {
-        resultText = `⏳ ${diffDays} gün kaldı`;
+        resultText = `⏳ ${diffDays} days left`;
         if (diffWeeks > 0) {
-          resultText += ` (${diffWeeks} hafta${remainingDays > 0 ? ` ${remainingDays} gün` : ""})`;
+          resultText += ` (${diffWeeks} weeks${remainingDays > 0 ? ` ${remainingDays} days` : ""})`;
         }
       } else {
-        resultText = `📆 ${Math.abs(diffDays)} gün geçti`;
+        resultText = `📆 ${Math.abs(diffDays)} days ago`;
         if (diffWeeks > 0) {
-          resultText += ` (${diffWeeks} hafta${remainingDays > 0 ? ` ${remainingDays} gün` : ""})`;
+          resultText += ` (${diffWeeks} weeks${remainingDays > 0 ? ` ${remainingDays} days` : ""})`;
         }
       }
 
       return toolSuccess(`${resultText}
-📅 Hedef: ${formatted}`);
+📅 Target: ${formatted}`);
     } catch (error) {
-      return toolError("Tarih farkı hesaplanamadı", error);
+      return toolError("Could not calculate date difference", error);
     }
   }
 );
 
 export const formatDateTool = tool(
   "format_date",
-  "Tarihi farklı formatlarda gösterir (relative: '2 gün sonra', long, short, ISO).",
+  "Format a date in different ways (relative: 'in 2 days', long, short, ISO).",
   {
-    date: z.string().describe("Tarih (YYYY-MM-DD, DD.MM.YYYY veya DD/MM/YYYY)"),
+    date: z.string().describe("Date (YYYY-MM-DD, DD.MM.YYYY, or DD/MM/YYYY)"),
     format: z
       .enum(["relative", "long", "short", "iso"])
       .optional()
-      .describe("Format tipi (varsayılan: relative)"),
-    timezone: z.string().optional().describe(`Timezone (varsayılan: ${DEFAULT_TIMEZONE})`),
+      .describe("Format type (default: relative)"),
+    timezone: z.string().optional().describe(`Timezone (default: ${DEFAULT_TIMEZONE})`),
   },
   async ({ date, format, timezone }) => {
     try {
       const targetDate = parseDate(date);
       if (!targetDate) {
-        return toolError("Geçersiz tarih", new Error(`"${date}"`));
+        return toolError("Invalid date", new Error(`"${date}"`));
       }
 
       const tz = timezone || DEFAULT_TIMEZONE;
@@ -338,7 +338,7 @@ export const formatDateTool = tool(
 
       return toolSuccess(`📅 ${result}`);
     } catch (error) {
-      return toolError("Tarih formatlanamadı", error);
+      return toolError("Could not format date", error);
     }
   }
 );

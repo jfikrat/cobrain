@@ -10,12 +10,12 @@ import type { AgentType } from "../registry.ts";
 const SEED_DIR = resolve(import.meta.dir);
 
 // Types that have seed directories
-const SEED_TYPES: AgentType[] = ["genel", "kod", "arastirma", "whatsapp"];
+const SEED_TYPES: AgentType[] = ["general", "code", "research", "whatsapp"];
 
 /**
  * Scaffold mind files for a new agent.
  * Copies seed files from src/agents/seed/{type}/ to {userFolder}/agents/{agentId}/mind/
- * Returns the relative mindDir path (e.g. "agents/kod/mind")
+ * Returns the relative mindDir path (e.g. "agents/code/mind")
  */
 export async function scaffoldAgentMindFiles(
   userFolder: string,
@@ -28,8 +28,8 @@ export async function scaffoldAgentMindFiles(
 
   await mkdir(targetDir, { recursive: true });
 
-  // Determine seed source — custom types fall back to "genel"
-  const seedType = SEED_TYPES.includes(agentType) ? agentType : "genel";
+  // Determine seed source - custom types fall back to "general"
+  const seedType = SEED_TYPES.includes(agentType) ? agentType : "general";
   const sourceDir = join(SEED_DIR, seedType);
 
   try {
@@ -42,7 +42,7 @@ export async function scaffoldAgentMindFiles(
     console.warn(`[Seed] Failed to copy seed files for ${agentType}:`, err);
     // Write a minimal identity.md fallback
     const displayName = customName || agentId;
-    const fallback = `# Kimlik\n\nSen Cobrain'in "${displayName}" agent'ısın.\nTürkçe, kısa ve doğal cevaplar ver.\n`;
+    const fallback = `# Identity\n\nYou are Cobrain's "${displayName}" agent.\nReply briefly and naturally.\n`;
     await Bun.write(join(targetDir, "identity.md"), fallback);
   }
 
@@ -52,7 +52,7 @@ export async function scaffoldAgentMindFiles(
     try {
       let content = await Bun.file(identityPath).text();
       // Append custom name context
-      content += `\nAgent adın: ${customName}\n`;
+      content += `\nYour agent name: ${customName}\n`;
       await Bun.write(identityPath, content);
     } catch (e) {
       console.warn("[Seed] Identity customize failed:", e);

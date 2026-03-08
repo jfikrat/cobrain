@@ -1,19 +1,19 @@
 /**
  * User Service Cache
- * Per-user service instance'larını cache'lemek için generic factory
+ * Generic factory for caching per-user service instances
  */
 
 /**
- * User bazlı service cache oluştur
- * @param factory - Service oluşturan async fonksiyon
- * @returns get, clear, closeAll metodları olan cache objesi
+ * Create a user-based service cache
+ * @param factory - Async function that creates a service
+ * @returns Cache object with get, clear, closeAll methods
  */
 export function createUserCache<T>(factory: (userId: number) => T | Promise<T>) {
   const cache = new Map<number, T>();
 
   return {
     /**
-     * User için service al (yoksa oluştur)
+     * Get service for user (create if not exists)
      */
     async get(userId: number): Promise<T> {
       let instance = cache.get(userId);
@@ -25,7 +25,7 @@ export function createUserCache<T>(factory: (userId: number) => T | Promise<T>) 
     },
 
     /**
-     * Sync versiyon (factory sync ise kullan)
+     * Sync version (use when factory is sync)
      */
     getSync(userId: number): T {
       let instance = cache.get(userId);
@@ -41,21 +41,21 @@ export function createUserCache<T>(factory: (userId: number) => T | Promise<T>) 
     },
 
     /**
-     * Belirli user'ın cache'ini temizle
+     * Clear a specific user's cache
      */
     clear(userId: number): boolean {
       return cache.delete(userId);
     },
 
     /**
-     * Tüm cache'i temizle
+     * Clear entire cache
      */
     clearAll(): void {
       cache.clear();
     },
 
     /**
-     * Tüm instance'ları döndür (cleanup için)
+     * Return all instances (for cleanup)
      */
     values(): IterableIterator<T> {
       return cache.values();
@@ -69,14 +69,14 @@ export function createUserCache<T>(factory: (userId: number) => T | Promise<T>) 
     },
 
     /**
-     * User var mı?
+     * Does user exist?
      */
     has(userId: number): boolean {
       return cache.has(userId);
     },
 
     /**
-     * Tüm entries (userId, instance)
+     * All entries (userId, instance)
      */
     entries(): IterableIterator<[number, T]> {
       return cache.entries();
@@ -85,7 +85,7 @@ export function createUserCache<T>(factory: (userId: number) => T | Promise<T>) 
 }
 
 /**
- * Closeable service için cache (close metodu olan service'ler için)
+ * Cache for closeable services (services with a close method)
  */
 export function createCloseableUserCache<T extends { close: () => void }>(
   factory: (userId: number) => T | Promise<T>
@@ -142,7 +142,7 @@ export function createCloseableUserCache<T extends { close: () => void }>(
     },
 
     /**
-     * Belirli user'ı kapat ve cache'den sil
+     * Close a specific user and remove from cache
      */
     close(userId: number): boolean {
       const instance = cache.get(userId);
@@ -154,7 +154,7 @@ export function createCloseableUserCache<T extends { close: () => void }>(
     },
 
     /**
-     * Tüm instance'ları kapat ve cache'i temizle
+     * Close all instances and clear cache
      */
     closeAll(): void {
       for (const instance of cache.values()) {

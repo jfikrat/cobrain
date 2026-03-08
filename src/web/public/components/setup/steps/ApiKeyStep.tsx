@@ -16,18 +16,19 @@ export function ApiKeyStep({
   return (
     <div className="setup-step">
       <div className="setup-step-header">
-        <h2 className="setup-step-title">Gemini API (Opsiyonel)</h2>
+        <h2 className="setup-step-title">Gemini API (Optional)</h2>
         <p className="setup-step-description">
-          Ses mesajlarını yazıya dönüştürmek için Gemini API kullanılır. Bu adımı
-          atlayabilirsiniz.
+          Gemini API is used for voice message transcription. You can skip this
+          step.
         </p>
       </div>
 
       <div className="setup-step-content">
         <div className="setup-info-box">
-          <h4>Gemini API Key Nasıl Alınır?</h4>
+          <h4>How to Get a Gemini API Key?</h4>
           <ol>
             <li>
+              Go to{" "}
               <a
                 href="https://aistudio.google.com/apikey"
                 target="_blank"
@@ -35,11 +36,10 @@ export function ApiKeyStep({
               >
                 Google AI Studio
               </a>
-              'ya gidin
             </li>
-            <li>Google hesabınızla giriş yapın</li>
-            <li>"Create API Key" butonuna tıklayın</li>
-            <li>Oluşturulan key'i kopyalayın</li>
+            <li>Sign in with your Google account</li>
+            <li>Click the "Create API Key" button</li>
+            <li>Copy the generated key</li>
           </ol>
         </div>
 
@@ -47,7 +47,7 @@ export function ApiKeyStep({
           label="Gemini API Key"
           type="password"
           placeholder="AIzaSy..."
-          hint="Ses mesajları için gerekli. Boş bırakabilirsiniz."
+          hint="Required for voice messages. You can leave this empty."
           value={formData.GEMINI_API_KEY}
           onChange={(e) => onFieldChange("GEMINI_API_KEY", e.target.value)}
           error={errors.GEMINI_API_KEY}
@@ -57,8 +57,8 @@ export function ApiKeyStep({
         <div className="setup-note">
           <span className="setup-note-icon">💡</span>
           <span>
-            Bu alan opsiyoneldir. Ses mesajı göndermeyecekseniz boş
-            bırakabilirsiniz.
+            This field is optional. You can leave it empty if you won't be
+            sending voice messages.
           </span>
         </div>
       </div>

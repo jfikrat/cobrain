@@ -344,14 +344,14 @@ async function handleChat(ws: ServerWebSocket<WebSocketData>, message: string, a
       if (imageAttachments.length > 0) {
         // Prepend image context info so the agent knows images were attached
         const imageNote = imageAttachments.length === 1
-          ? "[Kullanıcı bir görsel ekledi. Görseli analiz et.]"
-          : `[Kullanıcı ${imageAttachments.length} görsel ekledi. Görselleri analiz et.]`;
-        finalMessage = `${imageNote}\n\n${message || "Bu görseli analiz et."}`;
+          ? "[The user attached an image. Analyze the image.]"
+          : `[The user attached ${imageAttachments.length} images. Analyze the images.]`;
+        finalMessage = `${imageNote}\n\n${message || "Analyze this image."}`;
       }
 
       const audioAttachments = attachments.filter((a) => a.type === "audio");
       if (audioAttachments.length > 0) {
-        const audioNote = "[Kullanıcı sesli mesaj gönderdi. Mesaj transkribe edildi.]";
+        const audioNote = "[The user sent a voice message. The message has been transcribed.]";
         finalMessage = `${audioNote}\n\n${message}`;
       }
     }
@@ -419,17 +419,17 @@ async function streamChat(
       },
       agents: {
         researcher: {
-          description: "Web'de araştırma yapar, bilgi toplar.",
-          prompt: "Sen bir araştırmacısın. Verilen konuyu araştır ve özetle. Türkçe yanıt ver.",
+          description: "Research the web and gather information.",
+          prompt: "You are a researcher. Research the given topic and provide a summary.",
           tools: ["WebSearch", "WebFetch"],
         },
         summarizer: {
-          description: "Uzun metinleri özetler.",
-          prompt: "Sen bir özetleyicisin. Metni kısa ve öz özetle. Türkçe yanıt ver.",
+          description: "Summarize long texts.",
+          prompt: "You are a summarizer. Summarize the text briefly and concisely.",
         },
         "memory-expert": {
-          description: "Hafızada arama yapar.",
-          prompt: "Hafızada detaylı arama yap. Türkçe yanıt ver.",
+          description: "Search memory.",
+          prompt: "Search the user's memory in detail, find relevant information, and summarize it.",
           tools: ["mcp__memory__recall", "mcp__memory__memory_stats"],
         },
       },

@@ -28,7 +28,7 @@ async function getToken(userId: number): Promise<string> {
   const file = Bun.file(tokenPath);
 
   if (!(await file.exists())) {
-    throw new Error("Gmail token bulunamadı. /gmail komutu ile yetkilendirme yapın.");
+    throw new Error("Gmail token not found. Authorize with the /gmail command.");
   }
 
   const token: GmailToken = await file.json();
@@ -38,7 +38,7 @@ async function getToken(userId: number): Promise<string> {
     // Prefer credentials embedded in token file (Desktop app client)
     const clientId = (token as GmailToken & { client_id?: string }).client_id || process.env.GOOGLE_CLIENT_ID;
     const clientSecret = (token as GmailToken & { client_secret?: string }).client_secret || process.env.GOOGLE_CLIENT_SECRET;
-    if (!clientId || !clientSecret) throw new Error("GOOGLE_CLIENT_ID/SECRET eksik");
+    if (!clientId || !clientSecret) throw new Error("GOOGLE_CLIENT_ID/SECRET missing");
 
     const resp = await fetch(TOKEN_URL, {
       method: "POST",
@@ -51,7 +51,7 @@ async function getToken(userId: number): Promise<string> {
       }),
     });
 
-    if (!resp.ok) throw new Error(`Token refresh başarısız: ${resp.status}`);
+    if (!resp.ok) throw new Error(`Token refresh failed: ${resp.status}`);
     const fresh = await resp.json() as { access_token: string; expires_in: number };
 
     token.access_token = fresh.access_token;
@@ -84,7 +84,7 @@ async function gmailGet(userId: number, path: string, params?: Record<string, st
 
   if (!resp.ok) {
     const err = await resp.text();
-    throw new Error(`Gmail API hatası ${resp.status}: ${err.slice(0, 200)}`);
+    throw new Error(`Gmail API error ${resp.status}: ${err.slice(0, 200)}`);
   }
   return resp.json();
 }
@@ -102,7 +102,7 @@ async function gmailPost(userId: number, path: string, body: unknown) {
 
   if (!resp.ok) {
     const err = await resp.text();
-    throw new Error(`Gmail API hatası ${resp.status}: ${err.slice(0, 200)}`);
+    throw new Error(`Gmail API error ${resp.status}: ${err.slice(0, 200)}`);
   }
   return resp.json();
 }
@@ -155,7 +155,7 @@ function extractBody(payload: {
     }
   }
 
-  return "(İçerik okunamadı)";
+  return "(Content could not be read)";
 }
 
 // ========== TOOLS ==========
@@ -163,10 +163,10 @@ function extractBody(payload: {
 export const gmailInboxTool = (userId: number) =>
   tool(
     "gmail_inbox",
-    "Gmail gelen kutusunu listeler. Okunmamış veya son mailler.",
+    "List the Gmail inbox. Use for unread or recent emails.",
     {
-      query: z.string().default("is:unread").describe("Gmail arama sorgusu (örn: 'is:unread', 'from:ali', 'is:important')"),
-      limit: z.number().min(1).max(20).default(10).describe("Kaç mail gösterilsin (max 20)"),
+      query: z.string().default("is:unread").describe("Gmail search query (e.g. 'is:unread', 'from:ali', 'is:important')"),
+      limit: z.number().min(1).max(20).default(10).describe("How many emails to show (max 20)"),
     },
     async ({ query, limit }) => {
       try {
@@ -177,7 +177,7 @@ export const gmailInboxTool = (userId: number) =>
         }) as { messages?: Array<{ id: string; threadId: string }>; resultSizeEstimate?: number };
 
         if (!data.messages?.length) {
-          return { content: [{ type: "text" as const, text: `"${query}" için mail bulunamadı.` }] };
+          return { content: [{ type: "text" as const, text: `No emails found for "${query}".` }] };
         }
 
         // Fetch snippet + headers for each message
@@ -195,23 +195,23 @@ export const gmailInboxTool = (userId: number) =>
 
             const h = parseHeaders(detail.payload?.headers ?? []);
             const from = h.from?.replace(/<[^>]+>/, "").trim() || "?";
-            const subject = h.subject || "(Konu yok)";
-            const date = h.date ? new Date(h.date).toLocaleDateString("tr-TR") : "?";
+            const subject = h.subject || "(No subject)";
+            const date = h.date ? new Date(h.date).toLocaleDateString("en-US") : "?";
             const snippet = detail.snippet?.slice(0, 100) || "";
 
-            return `📧 **${subject}**\n   Kimden: ${from} | ${date}\n   ${snippet}...\n   ID: \`${msg.id}\``;
+            return `📧 **${subject}**\n   From: ${from} | ${date}\n   ${snippet}...\n   ID: \`${msg.id}\``;
           })
         );
 
         return {
           content: [{
             type: "text" as const,
-            text: `📬 Gmail (${data.resultSizeEstimate ?? data.messages.length} sonuç, ${limit} gösteriliyor):\n\n${summaries.join("\n\n")}`,
+            text: `📬 Gmail (${data.resultSizeEstimate ?? data.messages.length} results, showing ${limit}):\n\n${summaries.join("\n\n")}`,
           }],
         };
       } catch (err) {
         return {
-          content: [{ type: "text" as const, text: `Gmail hatası: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [{ type: "text" as const, text: `Gmail error: ${err instanceof Error ? err.message : String(err)}` }],
           isError: true,
         };
       }
@@ -221,9 +221,9 @@ export const gmailInboxTool = (userId: number) =>
 export const gmailReadTool = (userId: number) =>
   tool(
     "gmail_read",
-    "Belirli bir Gmail mesajını tam olarak okur.",
+    "Read a specific Gmail message in full.",
     {
-      messageId: z.string().describe("Mesaj ID'si (gmail_inbox'tan alınır)"),
+      messageId: z.string().describe("Message ID (from gmail_inbox)"),
     },
     async ({ messageId }) => {
       try {
@@ -247,10 +247,10 @@ export const gmailReadTool = (userId: number) =>
           content: [{
             type: "text" as const,
             text: [
-              `📧 **${h.subject || "(Konu yok)"}**`,
-              `Kimden: ${h.from || "?"}`,
-              `Kime: ${h.to || "?"}`,
-              `Tarih: ${h.date ? new Date(h.date).toLocaleString("tr-TR") : "?"}`,
+              `📧 **${h.subject || "(No subject)"}**`,
+              `From: ${h.from || "?"}`,
+              `To: ${h.to || "?"}`,
+              `Date: ${h.date ? new Date(h.date).toLocaleString("en-US") : "?"}`,
               ``,
               body,
             ].join("\n"),
@@ -258,7 +258,7 @@ export const gmailReadTool = (userId: number) =>
         };
       } catch (err) {
         return {
-          content: [{ type: "text" as const, text: `Mail okunamadı: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [{ type: "text" as const, text: `Could not read email: ${err instanceof Error ? err.message : String(err)}` }],
           isError: true,
         };
       }
@@ -268,10 +268,10 @@ export const gmailReadTool = (userId: number) =>
 export const gmailSearchTool = (userId: number) =>
   tool(
     "gmail_search",
-    "Gmail'de arama yapar. Gmail arama operatörlerini destekler.",
+    "Search Gmail. Supports Gmail search operators.",
     {
-      query: z.string().describe("Arama sorgusu (örn: 'from:ali fatura', 'subject:toplantı', 'after:2026/02/01')"),
-      limit: z.number().min(1).max(10).default(5).describe("Sonuç sayısı"),
+      query: z.string().describe("Search query (e.g. 'from:ali invoice', 'subject:meeting', 'after:2026/02/01')"),
+      limit: z.number().min(1).max(10).default(5).describe("Result count"),
     },
     async ({ query, limit }) => {
       try {
@@ -281,7 +281,7 @@ export const gmailSearchTool = (userId: number) =>
         }) as { messages?: Array<{ id: string }>; resultSizeEstimate?: number };
 
         if (!data.messages?.length) {
-          return { content: [{ type: "text" as const, text: `"${query}" için sonuç bulunamadı.` }] };
+          return { content: [{ type: "text" as const, text: `No results found for "${query}".` }] };
         }
 
         const summaries = await Promise.all(
@@ -296,20 +296,20 @@ export const gmailSearchTool = (userId: number) =>
             };
 
             const h = parseHeaders(detail.payload?.headers ?? []);
-            const date = h.date ? new Date(h.date).toLocaleDateString("tr-TR") : "?";
-            return `• **${h.subject || "(Konu yok)"}** — ${h.from?.replace(/<[^>]+>/, "").trim()} (${date})\n  ${detail.snippet?.slice(0, 120)}...\n  ID: \`${msg.id}\``;
+            const date = h.date ? new Date(h.date).toLocaleDateString("en-US") : "?";
+            return `• **${h.subject || "(No subject)"}** — ${h.from?.replace(/<[^>]+>/, "").trim()} (${date})\n  ${detail.snippet?.slice(0, 120)}...\n  ID: \`${msg.id}\``;
           })
         );
 
         return {
           content: [{
             type: "text" as const,
-            text: `🔍 "${query}" — ${data.resultSizeEstimate ?? data.messages.length} sonuç:\n\n${summaries.join("\n\n")}`,
+            text: `🔍 "${query}" — ${data.resultSizeEstimate ?? data.messages.length} results:\n\n${summaries.join("\n\n")}`,
           }],
         };
       } catch (err) {
         return {
-          content: [{ type: "text" as const, text: `Arama hatası: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [{ type: "text" as const, text: `Search error: ${err instanceof Error ? err.message : String(err)}` }],
           isError: true,
         };
       }
@@ -319,12 +319,12 @@ export const gmailSearchTool = (userId: number) =>
 export const gmailSendTool = (userId: number) =>
   tool(
     "gmail_send",
-    "Gmail üzerinden mail gönderir.",
+    "Send an email via Gmail.",
     {
-      to: z.string().describe("Alıcı email adresi"),
-      subject: z.string().describe("Mail konusu"),
-      body: z.string().describe("Mail içeriği (plain text)"),
-      cc: z.string().optional().describe("CC adresleri (virgülle ayırın)"),
+      to: z.string().describe("Recipient email address"),
+      subject: z.string().describe("Email subject"),
+      body: z.string().describe("Email body (plain text)"),
+      cc: z.string().optional().describe("CC addresses (comma-separated)"),
     },
     async ({ to, subject, body, cc }) => {
       try {
@@ -345,12 +345,12 @@ export const gmailSendTool = (userId: number) =>
         return {
           content: [{
             type: "text" as const,
-            text: `✅ Mail gönderildi: "${subject}" → ${to}`,
+            text: `✅ Email sent: "${subject}" → ${to}`,
           }],
         };
       } catch (err) {
         return {
-          content: [{ type: "text" as const, text: `Mail gönderilemedi: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [{ type: "text" as const, text: `Failed to send email: ${err instanceof Error ? err.message : String(err)}` }],
           isError: true,
         };
       }
@@ -360,14 +360,14 @@ export const gmailSendTool = (userId: number) =>
 export const gmailReplyTool = (userId: number) =>
   tool(
     "gmail_reply",
-    "Mevcut bir maile cevap yazar. messageId ile orijinal maili bulur, thread'e ekler.",
+    "Reply to an existing email. Finds the original by messageId and adds to the thread.",
     {
-      messageId: z.string().describe("Cevap verilecek mailin ID'si (gmail_inbox'tan alınan ID)"),
-      body: z.string().describe("Cevap içeriği (plain text)"),
+      messageId: z.string().describe("ID of the email to reply to (from gmail_inbox)"),
+      body: z.string().describe("Reply body (plain text)"),
     },
     async ({ messageId, body }) => {
       try {
-        // Orijinal maili al — Message-ID, thread, gönderen için
+        // Get the original email - for Message-ID, thread, and sender
         const original = await gmailGet(userId, `/messages/${messageId}`, {
           format: "metadata",
           metadataHeaders: ["From", "Subject", "Message-ID", "References"],
@@ -403,12 +403,12 @@ export const gmailReplyTool = (userId: number) =>
         return {
           content: [{
             type: "text" as const,
-            text: `✅ Cevap gönderildi: "${subject}" → ${replyTo}`,
+            text: `✅ Reply sent: "${subject}" → ${replyTo}`,
           }],
         };
       } catch (err) {
         return {
-          content: [{ type: "text" as const, text: `Cevap gönderilemedi: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [{ type: "text" as const, text: `Failed to send reply: ${err instanceof Error ? err.message : String(err)}` }],
           isError: true,
         };
       }

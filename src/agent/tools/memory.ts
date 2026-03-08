@@ -25,32 +25,32 @@ function getMemory(userId: number): FileMemory {
 function createRememberToolFrom(memory: FileMemory) {
   return tool(
     "remember",
-    "Önemli bir bilgiyi uzun vadeli hafızaya kaydet. Kişisel bilgiler, tercihler, gerçekler için kullan.",
+    "Save important information to long-term memory. Use for personal information, preferences, and facts.",
     {
-      content: z.string().describe("Hatırlanacak bilgi"),
+      content: z.string().describe("Information to remember"),
       type: z
         .enum(["semantic", "episodic", "procedural"])
         .default("semantic")
-        .describe("semantic=gerçek/tercih (facts.md), episodic=olay (events.md), procedural=nasıl yapılır (facts.md)"),
+        .describe("semantic=fact/preference (facts.md), episodic=event (events.md), procedural=how-to (facts.md)"),
       section: z
         .string()
         .optional()
-        .describe("facts.md için bölüm başlığı (ör: 'Konum', 'Meslek', 'Tercihler'). Episodic için kullanılmaz."),
+        .describe("Section heading for facts.md (e.g. 'Location', 'Career', 'Preferences'). Not used for episodic."),
     },
     async ({ content, type, section }) => {
       try {
         if (type === "episodic") {
           await memory.logEvent(content);
           console.log(`[Memory] Event logged: ${content.slice(0, 60)}...`);
-          return toolSuccess(`Olay kaydedildi: ${content.slice(0, 60)}`);
+          return toolSuccess(`Event saved: ${content.slice(0, 60)}`);
         } else {
           const sectionName = section || inferSection(content, type);
           await memory.storeFact(sectionName, content);
           console.log(`[Memory] Fact stored [${sectionName}]: ${content.slice(0, 60)}...`);
-          return toolSuccess(`Hafızaya kaydedildi [${sectionName}]: ${content.slice(0, 60)}`);
+          return toolSuccess(`Saved to memory [${sectionName}]: ${content.slice(0, 60)}`);
         }
       } catch (error) {
-        return toolError("Hafıza hatası", error);
+        return toolError("Memory error", error);
       }
     }
   );
@@ -59,16 +59,16 @@ function createRememberToolFrom(memory: FileMemory) {
 function createRecallToolFrom(memory: FileMemory) {
   return tool(
     "recall",
-    "Hafızada ara. Daha önce kaydedilen gerçekler ve olayları getir.",
+    "Search memory. Returns previously saved facts and events.",
     {
-      query: z.string().describe("Arama sorgusu veya 'all' ile tüm hafızayı oku"),
-      days: z.number().default(30).describe("Kaç günlük olay geçmişi (sadece events için)"),
+      query: z.string().describe("Search query, or 'all' to read all memory"),
+      days: z.number().default(30).describe("How many days of event history (events only)"),
     },
     async ({ query, days }) => {
       try {
         if (query === "all") {
           const all = await memory.readAll(days);
-          if (!all) return toolSuccess("Hafıza boş.");
+          if (!all) return toolSuccess("Memory is empty.");
           return toolSuccess(all);
         }
 
@@ -85,20 +85,20 @@ function createRecallToolFrom(memory: FileMemory) {
           .filter(l => l.toLowerCase().includes(q));
 
         const results: string[] = [];
-        if (matchingFacts.length > 0) results.push(`**Gerçekler:**\n${matchingFacts.join("\n")}`);
-        if (matchingEvents.length > 0) results.push(`**Olaylar:**\n${matchingEvents.join("\n")}`);
+        if (matchingFacts.length > 0) results.push(`**Facts:**\n${matchingFacts.join("\n")}`);
+        if (matchingEvents.length > 0) results.push(`**Events:**\n${matchingEvents.join("\n")}`);
 
-        if (results.length === 0) return toolSuccess("İlgili hafıza bulunamadı.");
+        if (results.length === 0) return toolSuccess("No relevant memory found.");
         return toolSuccess(results.join("\n\n"));
       } catch (error) {
-        return toolError("Arama hatası", error);
+        return toolError("Search error", error);
       }
     }
   );
 }
 
 function createStatsToolFrom(memory: FileMemory) {
-  return tool("memory_stats", "Hafıza dosyalarının içeriğini ve boyutunu göster.", {}, async () => {
+  return tool("memory_stats", "Show memory file contents and size.", {}, async () => {
     try {
       const facts = await memory.readFacts();
       const events = await memory.readRecentEvents(90);
@@ -106,11 +106,11 @@ function createStatsToolFrom(memory: FileMemory) {
       const factLines = facts.split("\n").filter(l => l.trim()).length;
       const eventLines = events.split("\n").filter(l => l.startsWith("- ")).length;
 
-      return toolSuccess(`Hafıza Durumu:
-- facts.md: ${factLines} satır
-- events.md (90 gün): ${eventLines} olay kaydı`);
+      return toolSuccess(`Memory Status:
+- facts.md: ${factLines} lines
+- events.md (90 days): ${eventLines} event entries`);
     } catch (error) {
-      return toolError("İstatistik hatası", error);
+      return toolError("Stats error", error);
     }
   });
 }
@@ -148,12 +148,12 @@ export const memoryStatsTool = (userId: number) => createStatsToolFrom(getMemory
 
 function inferSection(content: string, type: string): string {
   const lower = content.toLowerCase();
-  if (lower.includes("yaşıyor") || lower.includes("otur") || lower.includes("istanbul") || lower.includes("ankara") || lower.includes("şehir")) return "Konum";
-  if (lower.includes("meslek") || lower.includes("çalış") || lower.includes("iş") || lower.includes("mühendis") || lower.includes("yazılım")) return "Meslek";
-  if (lower.includes("eş") || lower.includes("karı") || lower.includes("koca") || lower.includes("evli")) return "Aile";
-  if (lower.includes("anne") || lower.includes("baba") || lower.includes("kardeş") || lower.includes("çocuk")) return "Aile";
-  if (lower.includes("sever") || lower.includes("tercih") || lower.includes("hoşlan") || lower.includes("sevmez")) return "Tercihler";
-  if (lower.includes("hedef") || lower.includes("plan") || lower.includes("yapmak istiyor")) return "Hedefler";
-  if (type === "procedural") return "Nasıl Yapılır";
-  return "Notlar";
+  if (lower.includes("yaşıyor") || lower.includes("otur") || lower.includes("istanbul") || lower.includes("ankara") || lower.includes("şehir")) return "Location";
+  if (lower.includes("meslek") || lower.includes("çalış") || lower.includes("iş") || lower.includes("mühendis") || lower.includes("yazılım")) return "Career";
+  if (lower.includes("eş") || lower.includes("karı") || lower.includes("koca") || lower.includes("evli")) return "Family";
+  if (lower.includes("anne") || lower.includes("baba") || lower.includes("kardeş") || lower.includes("çocuk")) return "Family";
+  if (lower.includes("sever") || lower.includes("tercih") || lower.includes("hoşlan") || lower.includes("sevmez")) return "Preferences";
+  if (lower.includes("hedef") || lower.includes("plan") || lower.includes("yapmak istiyor")) return "Goals";
+  if (type === "procedural") return "How-To";
+  return "Notes";
 }

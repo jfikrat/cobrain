@@ -36,7 +36,7 @@ console.log(`
   ╚██████╗╚██████╔╝██████╔╝██║  ██║██║  ██║██║██║ ╚████║
    ╚═════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝
 
-  Kişisel AI Asistan v0.5.0
+  Personal AI Assistant v0.5.0
   Base: ${config.COBRAIN_BASE_PATH}
   Mode: ${config.USE_AGENT_SDK ? "Agent SDK" : "CLI (tmux)"}
   Autonomous: ${config.ENABLE_AUTONOMOUS ? "Enabled" : "Disabled"}
@@ -126,13 +126,13 @@ if (config.ENABLE_AUTONOMOUS) {
     brainLoop.start(bot);
     console.log("[Startup] BrainLoop started");
 
-    // WA Agent artık hub üzerinden çalışıyor — standalone process gerekmiyor
-    // BrainLoop her 5dk'da checkWAMessages() ile pending mesajları kontrol eder
+    // WA Agent now runs through the hub — no standalone process needed
+    // BrainLoop checks pending messages every 5min via checkWAMessages()
   }, 1000);
 }
 
 const shutdown = async () => {
-  console.log("\nKapatılıyor...");
+  console.log("\nShutting down...");
 
   await brainLoop.stop();
   stopProjectionScheduler();

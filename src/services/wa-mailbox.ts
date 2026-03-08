@@ -55,7 +55,7 @@ class WaMailbox {
     const box = this.boxes.get(chatJid);
     if (!box) return;
     const ts = timestampMs ?? Date.now();
-    // Dedup: aynı içerik + yakın timestamp (2sn tolerans) varsa ekleme
+    // Dedup: skip if same content + close timestamp (2s tolerance) exists
     const isDuplicate = box.history.some(m =>
       m.direction === "outgoing" &&
       m.content === content &&

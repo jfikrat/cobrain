@@ -17,7 +17,7 @@ export interface TopicRoute {
 
 const TOPIC_ROUTES = new Map<number, TopicRoute>();
 
-/** Registry'den topic route'larını yükle */
+/** Load topic routes from registry */
 export function initTopicRoutes(): void {
   TOPIC_ROUTES.clear();
   const agents = listActiveAgents();
@@ -27,7 +27,7 @@ export function initTopicRoutes(): void {
   console.log(`[TopicRouter] ${TOPIC_ROUTES.size} topic route loaded`);
 }
 
-/** Agent create/archive sonrası route'ları güncelle */
+/** Refresh routes after agent create/archive */
 export function refreshTopicRoutes(): void {
   initTopicRoutes();
 }
@@ -49,7 +49,7 @@ function agentToTopicRoute(agent: AgentEntry): TopicRoute {
 }
 
 /**
- * Grup route'u için mind dosyalarından system prompt oluştur.
+ * Build system prompt from mind files for a group route.
  */
 export async function buildRouteSystemPrompt(route: TopicRoute, userFolder: string): Promise<string> {
   const sections: string[] = [];
@@ -101,7 +101,7 @@ export async function buildRouteSystemPrompt(route: TopicRoute, userFolder: stri
 }
 
 /**
- * Forum topic mesajını ilgili agent profiliyle işle.
+ * Process a forum topic message with the relevant agent profile.
  */
 export async function handleTopicMessage(
   userId: number,
