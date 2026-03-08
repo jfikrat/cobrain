@@ -23,13 +23,8 @@ const envSchema = z.object({
     .enum(["strict", "smart", "yolo"])
     .default("smart"),
 
-  // v0.4: Web UI
-  WEB_PORT: z.coerce.number().default(3000),
-  WEB_URL: z.string().default("http://localhost:3000"),
-  ENABLE_WEB_UI: z
-    .string()
-    .default("true")
-    .transform((val) => val === "true" || val === "1"),
+  // API Server
+  API_PORT: z.coerce.number().default(3000),
 
   // v0.5: Gemini API (for voice transcription)
   GEMINI_API_KEY: z.string().default(""),
@@ -103,52 +98,6 @@ export function loadConfigSafe(): ConfigResult {
  */
 export function isConfigValid(): boolean {
   return loadConfigSafe().success;
-}
-
-/**
- * Get config schema for setup wizard
- * Returns required and optional fields with descriptions
- */
-export function getConfigSchema() {
-  return {
-    required: [
-      {
-        key: "TELEGRAM_BOT_TOKEN",
-        label: "Telegram Bot Token",
-        hint: "Create a bot via @BotFather and paste the token here",
-        type: "password" as const,
-      },
-      {
-        key: "MY_TELEGRAM_ID",
-        label: "Telegram User ID",
-        hint: "Send a message to @userinfobot to get your ID",
-        type: "text" as const,
-      },
-    ],
-    optional: [
-      {
-        key: "GEMINI_API_KEY",
-        label: "Gemini API Key",
-        hint: "Required for voice messages (optional)",
-        type: "password" as const,
-        default: "",
-      },
-      {
-        key: "WEB_PORT",
-        label: "Web Port",
-        hint: "Web UI port",
-        type: "text" as const,
-        default: "3000",
-      },
-      {
-        key: "AGENT_MODEL",
-        label: "AI Model",
-        hint: "Claude model to use",
-        type: "text" as const,
-        default: "claude-opus-4-6",
-      },
-    ],
-  };
 }
 
 // Config type derived from schema

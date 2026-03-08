@@ -1,7 +1,6 @@
 import type { Bot } from "grammy";
 import { config } from "../config.ts";
 import { clearSession, getStats, userManager } from "../brain/index.ts";
-import { generateSessionToken } from "../web/auth.ts";
 import { isAuthorized, type TelegramContext } from "./telegram-helpers.ts";
 import { t } from "../i18n/index.ts";
 import { setLocale, getLocale, LOCALE_LABELS, type Locale } from "../i18n/index.ts";
@@ -54,28 +53,6 @@ export function registerCommands(bot: Bot, _ctx: TelegramContext) {
     if (!isAuthorized(c.from?.id ?? 0)) return;
     await c.reply(t("cmd.restarting"));
     setTimeout(() => process.exit(0), 500);
-  });
-
-  bot.command("web", async (c) => {
-    const userId = c.from?.id;
-    if (!userId || !isAuthorized(userId)) return;
-    if (!config.ENABLE_WEB_UI) {
-      await c.reply(t("cmd.web_disabled"));
-      return;
-    }
-    try {
-      const token = generateSessionToken(userId);
-      const url = `${config.WEB_URL}?token=${token}`;
-      await c.reply(
-        `${t("cmd.web_title")}\n\n${t("cmd.web_link_valid")}\n<code>${url}</code>`,
-        {
-          parse_mode: "HTML",
-          reply_markup: { inline_keyboard: [[{ text: t("cmd.web_open"), url }]] },
-        }
-      );
-    } catch (error) {
-      await c.reply(t("cmd.error", { message: error instanceof Error ? error.message : "Unknown" }));
-    }
   });
 
   bot.command("mode", async (c) => {
@@ -161,7 +138,6 @@ export function registerCommands(bot: Bot, _ctx: TelegramContext) {
       { command: "status", description: t("menu.status") },
       { command: "clear", description: t("menu.clear") },
       { command: "restart", description: t("menu.restart") },
-      { command: "web", description: t("menu.web") },
       { command: "mode", description: t("menu.mode") },
       { command: "lang", description: t("menu.lang") },
     ]).catch(() => {});

@@ -14,7 +14,7 @@ import {
   startHeartbeatMonitor,
   stopHeartbeatMonitor,
 } from "./services/heartbeat.ts";
-import { startWebServer, stopWebServer } from "./web/server.ts";
+import { startApiServer, stopApiServer } from "./api-server.ts";
 import { initEventStore } from "./brain/event-store.ts";
 import { startProjectionScheduler, stopProjectionScheduler } from "./brain/projections.ts";
 import { userManager } from "./services/user-manager.ts";
@@ -37,7 +37,7 @@ console.log(`
   Base: ${config.COBRAIN_BASE_PATH}
   Mode: Agent SDK
   Autonomous: ${config.ENABLE_AUTONOMOUS ? "Enabled" : "Disabled"}
-  Web UI: ${config.ENABLE_WEB_UI ? `Enabled (port ${config.WEB_PORT})` : "Disabled"}
+  API: port ${config.API_PORT}
 `);
 
 // Phase 1: Event Brain — initialize event store on global DB
@@ -51,7 +51,7 @@ if (config.FF_BRAIN_EVENTS) {
 registerHeartbeatComponent("app", { required: true });
 registerHeartbeatComponent("ai_agent", { required: true });
 registerHeartbeatComponent("telegram_bot", { required: true });
-registerHeartbeatComponent("web_server", { required: config.ENABLE_WEB_UI });
+registerHeartbeatComponent("api_server", { required: true });
 registerHeartbeatComponent("brain_loop", { required: config.ENABLE_AUTONOMOUS });
 
 heartbeat("app", { event: "startup" });
@@ -84,10 +84,8 @@ if (config.COBRAIN_HUB_ID) {
 // Start Telegram bot
 startBot();
 
-// Start Web Server
-if (config.ENABLE_WEB_UI) {
-  startWebServer();
-}
+// Start API Server
+startApiServer();
 
 // Initialize proactive features after bot starts
 if (config.ENABLE_AUTONOMOUS) {
@@ -120,9 +118,7 @@ const shutdown = async () => {
   await brainLoop.stop();
   stopProjectionScheduler();
 
-  if (config.ENABLE_WEB_UI) {
-    stopWebServer();
-  }
+  stopApiServer();
 
   clearInterval(appHeartbeatInterval);
   clearInterval(aiAgentHeartbeatInterval);

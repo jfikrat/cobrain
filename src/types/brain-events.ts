@@ -8,7 +8,7 @@
 export interface TraceContext {
   traceId: string; // 12-char hex — unique per user request
   causationId?: string; // event ID that triggered this event
-  channel: "telegram" | "whatsapp" | "web" | "system";
+  channel: "telegram" | "whatsapp" | "api" | "system";
 }
 
 /** Generate a 12-character trace ID (no external deps) */

@@ -24,26 +24,6 @@ export interface Session {
   lastUsedAt: string | null;
 }
 
-/** Web UI conversation row type */
-interface ConversationRow {
-  id: string;
-  title: string;
-  created_at: number;
-  updated_at: number;
-  is_deleted: number;
-}
-
-/** Web UI conversation message row type */
-interface ConversationMessageRow {
-  id: string;
-  conversation_id: string;
-  role: string;
-  content: string;
-  tool_uses: string;
-  attachments: string;
-  timestamp: number;
-}
-
 /**
  * UserMemory - Per-user database operations
  * Each user has their own instance with isolated data
@@ -93,38 +73,6 @@ export class UserMemory {
 
     this.db.run(`CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at DESC)`);
 
-    // Web UI Conversations table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS conversations (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL DEFAULT 'Yeni Sohbet',
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        is_deleted INTEGER DEFAULT 0
-      )
-    `);
-
-    // Web UI Conversation Messages table
-    this.db.run(`
-      CREATE TABLE IF NOT EXISTS conversation_messages (
-        id TEXT PRIMARY KEY,
-        conversation_id TEXT NOT NULL,
-        role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
-        content TEXT NOT NULL,
-        tool_uses TEXT DEFAULT '[]',
-        attachments TEXT DEFAULT '[]',
-        timestamp INTEGER NOT NULL,
-        FOREIGN KEY (conversation_id) REFERENCES conversations(id)
-      )
-    `);
-
-    // Add attachments column if it doesn't exist (migration for existing DBs)
-    try {
-      this.db.run(`ALTER TABLE conversation_messages ADD COLUMN attachments TEXT DEFAULT '[]'`);
-    } catch {
-      // Column already exists, ignore
-    }
-
     // Add session_key column for hub agent session persistence
     try {
       this.db.run(`ALTER TABLE sessions ADD COLUMN session_key TEXT DEFAULT NULL`);
@@ -132,7 +80,6 @@ export class UserMemory {
       // Column already exists, ignore
     }
 
-    this.db.run(`CREATE INDEX IF NOT EXISTS idx_conv_messages ON conversation_messages(conversation_id, timestamp)`);
   }
 
   // ========== MESSAGE METHODS ==========
@@ -314,159 +261,6 @@ export class UserMemory {
       .query<{ key: string; value: string }, []>("SELECT key, value FROM preferences")
       .all();
     return Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  }
-
-  // ========== WEB UI CONVERSATION METHODS ==========
-
-  /**
-   * Get all conversations updated since timestamp
-   */
-  getConversationsSince(sinceTimestamp: number | null): Array<{
-    id: string;
-    title: string;
-    createdAt: number;
-    updatedAt: number;
-    messages: Array<{
-      id: string;
-      role: "user" | "assistant";
-      content: string;
-      toolUses: unknown[];
-      timestamp: number;
-    }>;
-  }> {
-    const whereClause = sinceTimestamp !== null
-      ? `WHERE is_deleted = 0 AND updated_at > ?`
-      : `WHERE is_deleted = 0`;
-
-    const params = sinceTimestamp !== null ? [sinceTimestamp] : [];
-
-    const conversations = this.db
-      .query<ConversationRow, number[]>(
-        `SELECT id, title, created_at, updated_at, is_deleted FROM conversations ${whereClause} ORDER BY updated_at DESC`
-      )
-      .all(...params);
-
-    return conversations.map((conv) => {
-      const messages = this.db
-        .query<ConversationMessageRow, [string]>(
-          `SELECT id, conversation_id, role, content, tool_uses, attachments, timestamp FROM conversation_messages WHERE conversation_id = ? ORDER BY timestamp ASC`
-        )
-        .all(conv.id);
-
-      return {
-        id: conv.id,
-        title: conv.title,
-        createdAt: conv.created_at,
-        updatedAt: conv.updated_at,
-        messages: messages.map((msg) => ({
-          id: msg.id,
-          role: msg.role as "user" | "assistant",
-          content: msg.content,
-          toolUses: JSON.parse(msg.tool_uses || "[]"),
-          attachments: JSON.parse(msg.attachments || "[]"),
-          timestamp: msg.timestamp,
-        })),
-      };
-    });
-  }
-
-  /**
-   * Get all conversations (for full sync)
-   */
-  getAllConversations() {
-    return this.getConversationsSince(null);
-  }
-
-  /**
-   * Create a new conversation
-   */
-  createConversation(id: string, title: string, createdAt: number): void {
-    this.db.run(
-      `INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET title = excluded.title, updated_at = excluded.updated_at`,
-      [id, title, createdAt, createdAt]
-    );
-  }
-
-  /**
-   * Update conversation title
-   */
-  updateConversationTitle(id: string, title: string): void {
-    this.db.run(
-      `UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?`,
-      [title, Date.now(), id]
-    );
-  }
-
-  /**
-   * Soft delete a conversation
-   */
-  deleteConversation(id: string): void {
-    this.db.run(
-      `UPDATE conversations SET is_deleted = 1, updated_at = ? WHERE id = ?`,
-      [Date.now(), id]
-    );
-  }
-
-  /**
-   * Save a message to a conversation
-   */
-  saveConversationMessage(
-    conversationId: string,
-    message: {
-      id: string;
-      role: "user" | "assistant";
-      content: string;
-      toolUses?: unknown[];
-      attachments?: unknown[];
-      timestamp: number;
-    }
-  ): void {
-    // Ensure conversation exists
-    const exists = this.db
-      .query<{ id: string }, [string]>(`SELECT id FROM conversations WHERE id = ?`)
-      .get(conversationId);
-
-    if (!exists) {
-      // Create conversation with default title
-      this.createConversation(conversationId, "Yeni Sohbet", message.timestamp);
-    }
-
-    // Insert or update message
-    this.db.run(
-      `INSERT INTO conversation_messages (id, conversation_id, role, content, tool_uses, attachments, timestamp)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET content = excluded.content, tool_uses = excluded.tool_uses, attachments = excluded.attachments`,
-      [
-        message.id,
-        conversationId,
-        message.role,
-        message.content,
-        JSON.stringify(message.toolUses || []),
-        JSON.stringify(message.attachments || []),
-        message.timestamp,
-      ]
-    );
-
-    // Update conversation timestamp
-    this.db.run(
-      `UPDATE conversations SET updated_at = ? WHERE id = ?`,
-      [Date.now(), conversationId]
-    );
-  }
-
-  /**
-   * Update conversation title based on first user message
-   */
-  autoTitleConversation(conversationId: string, userMessage: string): void {
-    const conv = this.db
-      .query<{ title: string }, [string]>(`SELECT title FROM conversations WHERE id = ?`)
-      .get(conversationId);
-
-    if (conv && conv.title === "Yeni Sohbet") {
-      const newTitle = userMessage.slice(0, 50) + (userMessage.length > 50 ? "..." : "");
-      this.updateConversationTitle(conversationId, newTitle);
-    }
   }
 
   // ========== STATS ==========

@@ -61,7 +61,7 @@ export const tr: Record<string, string> = {
   // ── Bot commands ──
   "cmd.unauthorized": "Bu bot özel kullanım içindir.",
   "cmd.start": `🧠 <b>Cobrain</b> — Kişisel AI Asistan\n\n<b>Hızlı Kurulum:</b>\n1. /lang — Dilini seç\n2. Kendini tanıt (isim, meslek, ilgi alanları)\n3. Sohbete başla!\n\nTüm komutlar için /help yaz.`,
-  "cmd.help": `🧠 <b>Cobrain Yardım</b>\n\n<b>AI Sohbet:</b>\nDirekt mesaj yaz. Cobrain'in hafızası var, web'de gezinebilir, dosya yönetebilir ve araçları otonom kullanabilir.\n\n<b>Agent'lar:</b>\nCobrain özelleşmiş agent'lar çalıştırır (kod, araştırma, WhatsApp...). Her agent Hub grubunda kendi topic'inde çalışır.\n\n<b>Komutlar:</b>\n/status — Bot istatistikleri\n/clear — Oturumu sıfırla\n/mode — İzin modu (strict/smart/yolo)\n/lang — Dil değiştir\n/web — Web arayüzünü aç\n/restart — Botu yeniden başlat\n\n<b>İpuçları:</b>\n• "Bunu hatırla: ..." — hafızaya kaydeder\n• "15:00'te hatırlat: ..." — hatırlatıcı kurar\n• Sesli/görsel/dosya gönder — Cobrain işler`,
+  "cmd.help": `🧠 <b>Cobrain Yardım</b>\n\n<b>AI Sohbet:</b>\nDirekt mesaj yaz. Cobrain'in hafızası var, web'de gezinebilir, dosya yönetebilir ve araçları otonom kullanabilir.\n\n<b>Agent'lar:</b>\nCobrain özelleşmiş agent'lar çalıştırır (kod, araştırma, WhatsApp...). Her agent Hub grubunda kendi topic'inde çalışır.\n\n<b>Komutlar:</b>\n/status — Bot istatistikleri\n/clear — Oturumu sıfırla\n/mode — İzin modu (strict/smart/yolo)\n/lang — Dil değiştir\n/restart — Botu yeniden başlat\n\n<b>İpuçları:</b>\n• "Bunu hatırla: ..." — hafızaya kaydeder\n• "15:00'te hatırlat: ..." — hatırlatıcı kurar\n• Sesli/görsel/dosya gönder — Cobrain işler`,
   "cmd.status_title": "🧠 <b>Cobrain Durum</b>",
   "cmd.active": "Aktif ✅",
   "cmd.your_stats": "Senin İstatistiklerin",
@@ -70,10 +70,6 @@ export const tr: Record<string, string> = {
   "cmd.total_cost": "Toplam maliyet",
   "cmd.cleared": "🗑️ Temizlendi! Session ve sohbet geçmişi sıfırlandı.",
   "cmd.restarting": "🔄 Bot yeniden başlatılıyor...",
-  "cmd.web_disabled": "❌ Web arayüzü devre dışı.",
-  "cmd.web_title": "🌐 <b>Web Arayüzü</b>",
-  "cmd.web_link_valid": "Link 24 saat geçerli.",
-  "cmd.web_open": "🌐 Web'de Aç",
   "cmd.error": "❌ Hata: {{message}}",
 
   // ── Permission mode ──
@@ -98,7 +94,6 @@ export const tr: Record<string, string> = {
   "menu.status": "Bot ve session durumu",
   "menu.clear": "Konuşma geçmişini temizle",
   "menu.restart": "Botu yeniden başlat",
-  "menu.web": "Web arayüzü linki al",
   "menu.mode": "Permission modunu değiştir",
   "menu.lang": "Dil değiştir",
 

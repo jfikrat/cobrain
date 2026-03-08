@@ -1,0 +1,1166 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "mcp-excalidraw-server",
+  "elements": [
+    {
+      "id": "zone-current",
+      "type": "rectangle",
+      "x": 0,
+      "y": 0,
+      "width": 1200,
+      "height": 520,
+      "backgroundColor": "#ffc9c9",
+      "strokeColor": "#e03131",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 30,
+      "createdAt": "2026-03-05T10:26:33.923Z",
+      "updatedAt": "2026-03-05T10:26:33.923Z",
+      "version": 1
+    },
+    {
+      "id": "title-current",
+      "type": "text",
+      "x": 40,
+      "y": 20,
+      "strokeColor": "#e03131",
+      "text": "ŞİMDİKİ DURUM — Senkron Delegasyon (Bloklayan)",
+      "fontSize": 28,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:26:33.923Z",
+      "updatedAt": "2026-03-05T10:26:33.923Z",
+      "version": 1
+    },
+    {
+      "id": "zone-new",
+      "type": "rectangle",
+      "x": 0,
+      "y": 600,
+      "width": 1200,
+      "height": 580,
+      "backgroundColor": "#b2f2bb",
+      "strokeColor": "#2f9e44",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 30,
+      "createdAt": "2026-03-05T10:26:33.924Z",
+      "updatedAt": "2026-03-05T10:26:33.924Z",
+      "version": 1
+    },
+    {
+      "id": "title-new",
+      "type": "text",
+      "x": 40,
+      "y": 620,
+      "strokeColor": "#2f9e44",
+      "text": "YENİ MİMARİ — WebSocket + Supergroup (Asenkron)",
+      "fontSize": 28,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:26:33.924Z",
+      "updatedAt": "2026-03-05T10:26:33.924Z",
+      "version": 1
+    },
+    {
+      "id": "divider-line",
+      "type": "rectangle",
+      "x": 0,
+      "y": 555,
+      "width": 1200,
+      "height": 4,
+      "backgroundColor": "#868e96",
+      "strokeColor": "#868e96",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 60,
+      "createdAt": "2026-03-05T10:26:33.924Z",
+      "updatedAt": "2026-03-05T10:26:33.924Z",
+      "version": 1
+    },
+    {
+      "id": "vs-label",
+      "type": "text",
+      "x": 530,
+      "y": 535,
+      "strokeColor": "#1e1e1e",
+      "text": "VS",
+      "fontSize": 24,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:26:33.924Z",
+      "updatedAt": "2026-03-05T10:26:33.924Z",
+      "version": 1
+    },
+    {
+      "id": "cur-user",
+      "type": "rectangle",
+      "x": 40,
+      "y": 120,
+      "width": 140,
+      "height": 80,
+      "backgroundColor": "#a5d8ff",
+      "strokeColor": "#1971c2",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "label": {
+        "text": "Kullanıcı"
+      },
+      "createdAt": "2026-03-05T10:26:51.257Z",
+      "updatedAt": "2026-03-05T10:26:51.257Z",
+      "version": 1
+    },
+    {
+      "id": "cur-mudur",
+      "type": "rectangle",
+      "x": 300,
+      "y": 120,
+      "width": 200,
+      "height": 80,
+      "backgroundColor": "#ffc9c9",
+      "strokeColor": "#e03131",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "label": {
+        "text": "Müdür\n(Ana Cobrain)"
+      },
+      "createdAt": "2026-03-05T10:26:51.257Z",
+      "updatedAt": "2026-03-05T10:26:51.257Z",
+      "version": 1
+    },
+    {
+      "id": "cur-blocked-label",
+      "type": "text",
+      "x": 310,
+      "y": 210,
+      "strokeColor": "#e03131",
+      "text": "❌ DONUK — Bekliyor...",
+      "fontSize": 18,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:26:51.257Z",
+      "updatedAt": "2026-03-05T10:26:51.257Z",
+      "version": 1
+    },
+    {
+      "id": "cur-research",
+      "type": "rectangle",
+      "x": 640,
+      "y": 80,
+      "width": 200,
+      "height": 70,
+      "backgroundColor": "#ffc9c9",
+      "strokeColor": "#e03131",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "label": {
+        "text": "Araştırma Agent"
+      },
+      "createdAt": "2026-03-05T10:26:51.257Z",
+      "updatedAt": "2026-03-05T10:26:51.257Z",
+      "version": 1
+    },
+    {
+      "id": "cur-code",
+      "type": "rectangle",
+      "x": 640,
+      "y": 200,
+      "width": 200,
+      "height": 70,
+      "backgroundColor": "#e9ecef",
+      "strokeColor": "#868e96",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "label": {
+        "text": "Kod Agent"
+      },
+      "createdAt": "2026-03-05T10:26:51.257Z",
+      "updatedAt": "2026-03-05T10:26:51.257Z",
+      "version": 1
+    },
+    {
+      "id": "cur-waiting-label",
+      "type": "text",
+      "x": 660,
+      "y": 280,
+      "strokeColor": "#868e96",
+      "text": "⏳ Sıra bekliyor...",
+      "fontSize": 16,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:26:51.257Z",
+      "updatedAt": "2026-03-05T10:26:51.257Z",
+      "version": 1
+    },
+    {
+      "id": "cur-telegram",
+      "type": "rectangle",
+      "x": 960,
+      "y": 100,
+      "width": 200,
+      "height": 180,
+      "backgroundColor": "#a5d8ff",
+      "strokeColor": "#1971c2",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "label": {
+        "text": "Telegram\nSupergroup\n\nTopic 1\nTopic 2"
+      },
+      "createdAt": "2026-03-05T10:26:51.257Z",
+      "updatedAt": "2026-03-05T10:26:51.257Z",
+      "version": 1
+    },
+    {
+      "id": "lock-icon",
+      "type": "text",
+      "x": 555,
+      "y": 75,
+      "strokeColor": "#e03131",
+      "text": "🔒",
+      "fontSize": 28,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:26:51.257Z",
+      "updatedAt": "2026-03-05T10:26:51.257Z",
+      "version": 1
+    },
+    {
+      "id": "cur-arrow-user-mudur",
+      "type": "arrow",
+      "x": 188,
+      "y": 160,
+      "width": 120,
+      "height": 0,
+      "strokeColor": "#1971c2",
+      "strokeWidth": 2,
+      "label": {
+        "text": "mesaj"
+      },
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          104,
+          0
+        ]
+      ],
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:27:10.153Z",
+      "updatedAt": "2026-03-05T10:27:10.153Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "cur-user",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "cur-mudur",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "cur-arrow-mudur-research",
+      "type": "arrow",
+      "x": 507.9308381279197,
+      "y": 145.71503613012825,
+      "width": 140,
+      "height": 0,
+      "strokeColor": "#e03131",
+      "strokeWidth": 3,
+      "label": {
+        "text": "SENKRON (bloklayan)"
+      },
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          124.13832374416069,
+          -16.43007226025651
+        ]
+      ],
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:27:10.154Z",
+      "updatedAt": "2026-03-05T10:27:10.154Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "cur-mudur",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "cur-research",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "cur-arrow-mudur-code",
+      "type": "arrow",
+      "x": 507.81219018771145,
+      "y": 183.78210077670107,
+      "width": 140,
+      "height": 0,
+      "strokeColor": "#868e96",
+      "strokeWidth": 2,
+      "strokeStyle": "dashed",
+      "label": {
+        "text": "beklemede..."
+      },
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          124.37561962457715,
+          27.435798446597886
+        ]
+      ],
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:27:10.154Z",
+      "updatedAt": "2026-03-05T10:27:10.154Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "cur-mudur",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "cur-code",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "cur-arrow-research-tg",
+      "type": "arrow",
+      "x": 847.7889304845424,
+      "y": 140.26303058231463,
+      "width": 120,
+      "height": 0,
+      "strokeColor": "#1971c2",
+      "strokeWidth": 1,
+      "strokeStyle": "dashed",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          104.4221390309151,
+          24.473938835370745
+        ]
+      ],
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:27:10.154Z",
+      "updatedAt": "2026-03-05T10:27:10.154Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "cur-research",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "cur-telegram",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "cur-step1",
+      "type": "text",
+      "x": 80,
+      "y": 340,
+      "strokeColor": "#1e1e1e",
+      "text": "1. Kullanici mesaj gonderir",
+      "fontSize": 16,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:27:10.154Z",
+      "updatedAt": "2026-03-05T10:27:10.154Z",
+      "version": 1
+    },
+    {
+      "id": "cur-step2",
+      "type": "text",
+      "x": 80,
+      "y": 370,
+      "strokeColor": "#e03131",
+      "text": "2. Mudur Arastirma Agent'a delege eder -> BLOKLANIR",
+      "fontSize": 16,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:27:10.154Z",
+      "updatedAt": "2026-03-05T10:27:10.154Z",
+      "version": 1
+    },
+    {
+      "id": "cur-step3",
+      "type": "text",
+      "x": 80,
+      "y": 400,
+      "strokeColor": "#e03131",
+      "text": "3. Arastirma bitene kadar Kod Agent BASLAYAMAZ",
+      "fontSize": 16,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:27:10.154Z",
+      "updatedAt": "2026-03-05T10:27:10.154Z",
+      "version": 1
+    },
+    {
+      "id": "cur-step4",
+      "type": "text",
+      "x": 80,
+      "y": 430,
+      "strokeColor": "#e03131",
+      "text": "4. Toplam sure = Agent1 + Agent2 + ... (sirali, yavas!)",
+      "fontSize": 16,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:27:10.154Z",
+      "updatedAt": "2026-03-05T10:27:10.154Z",
+      "version": 1
+    },
+    {
+      "id": "time-bar-cur-box",
+      "type": "rectangle",
+      "x": 40,
+      "y": 470,
+      "width": 500,
+      "height": 36,
+      "backgroundColor": "#ffc9c9",
+      "strokeColor": "#e03131",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 60,
+      "createdAt": "2026-03-05T10:27:10.154Z",
+      "updatedAt": "2026-03-05T10:27:10.154Z",
+      "version": 1
+    },
+    {
+      "id": "time-bar-cur-text",
+      "type": "text",
+      "x": 55,
+      "y": 477,
+      "strokeColor": "#e03131",
+      "text": "Sure: ||||||||||||||||||||||||||||| (A1 + A2 + A3 = uzun)",
+      "fontSize": 14,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:27:10.154Z",
+      "updatedAt": "2026-03-05T10:27:10.154Z",
+      "version": 1
+    },
+    {
+      "id": "new-user",
+      "type": "rectangle",
+      "x": 40,
+      "y": 740,
+      "width": 140,
+      "height": 80,
+      "backgroundColor": "#a5d8ff",
+      "strokeColor": "#1971c2",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "label": {
+        "text": "Kullanıcı"
+      },
+      "createdAt": "2026-03-05T10:27:28.739Z",
+      "updatedAt": "2026-03-05T10:27:28.739Z",
+      "version": 1
+    },
+    {
+      "id": "new-mudur",
+      "type": "rectangle",
+      "x": 300,
+      "y": 740,
+      "width": 200,
+      "height": 80,
+      "backgroundColor": "#b2f2bb",
+      "strokeColor": "#2f9e44",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "label": {
+        "text": "Müdür\n(Ana Cobrain)"
+      },
+      "createdAt": "2026-03-05T10:27:28.739Z",
+      "updatedAt": "2026-03-05T10:27:28.739Z",
+      "version": 1
+    },
+    {
+      "id": "new-free-label",
+      "type": "text",
+      "x": 310,
+      "y": 830,
+      "strokeColor": "#2f9e44",
+      "text": "SERBEST — Yanit verebilir!",
+      "fontSize": 18,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:27:28.739Z",
+      "updatedAt": "2026-03-05T10:27:28.739Z",
+      "version": 1
+    },
+    {
+      "id": "new-research",
+      "type": "rectangle",
+      "x": 620,
+      "y": 680,
+      "width": 180,
+      "height": 60,
+      "backgroundColor": "#b2f2bb",
+      "strokeColor": "#2f9e44",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "label": {
+        "text": "Arastirma Agent"
+      },
+      "createdAt": "2026-03-05T10:27:28.739Z",
+      "updatedAt": "2026-03-05T10:27:28.739Z",
+      "version": 1
+    },
+    {
+      "id": "new-code",
+      "type": "rectangle",
+      "x": 620,
+      "y": 760,
+      "width": 180,
+      "height": 60,
+      "backgroundColor": "#b2f2bb",
+      "strokeColor": "#2f9e44",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "label": {
+        "text": "Kod Agent"
+      },
+      "createdAt": "2026-03-05T10:27:28.739Z",
+      "updatedAt": "2026-03-05T10:27:28.739Z",
+      "version": 1
+    },
+    {
+      "id": "new-general",
+      "type": "rectangle",
+      "x": 620,
+      "y": 840,
+      "width": 180,
+      "height": 60,
+      "backgroundColor": "#b2f2bb",
+      "strokeColor": "#2f9e44",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "label": {
+        "text": "Genel Agent"
+      },
+      "createdAt": "2026-03-05T10:27:28.740Z",
+      "updatedAt": "2026-03-05T10:27:28.740Z",
+      "version": 1
+    },
+    {
+      "id": "new-wa",
+      "type": "rectangle",
+      "x": 620,
+      "y": 920,
+      "width": 180,
+      "height": 60,
+      "backgroundColor": "#b2f2bb",
+      "strokeColor": "#2f9e44",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "label": {
+        "text": "WA Agent"
+      },
+      "createdAt": "2026-03-05T10:27:28.740Z",
+      "updatedAt": "2026-03-05T10:27:28.740Z",
+      "version": 1
+    },
+    {
+      "id": "new-telegram",
+      "type": "rectangle",
+      "x": 920,
+      "y": 700,
+      "width": 220,
+      "height": 260,
+      "backgroundColor": "#a5d8ff",
+      "strokeColor": "#1971c2",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "label": {
+        "text": "Telegram Supergroup\n\nArastirma Topic\nKod Topic\nGenel Topic\nWA Topic\nHub Topic"
+      },
+      "createdAt": "2026-03-05T10:27:28.740Z",
+      "updatedAt": "2026-03-05T10:27:28.740Z",
+      "version": 1
+    },
+    {
+      "id": "new-parallel-label",
+      "type": "text",
+      "x": 625,
+      "y": 1000,
+      "strokeColor": "#2f9e44",
+      "text": "Hepsi PARALEL calisir!",
+      "fontSize": 18,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:27:28.740Z",
+      "updatedAt": "2026-03-05T10:27:28.740Z",
+      "version": 1
+    },
+    {
+      "id": "ws-box-label",
+      "type": "rectangle",
+      "x": 510,
+      "y": 660,
+      "width": 90,
+      "height": 30,
+      "backgroundColor": "#a5d8ff",
+      "strokeColor": "#1971c2",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "createdAt": "2026-03-05T10:27:28.740Z",
+      "updatedAt": "2026-03-05T10:27:28.740Z",
+      "version": 1
+    },
+    {
+      "id": "ws-box-text",
+      "type": "text",
+      "x": 517,
+      "y": 664,
+      "strokeColor": "#1971c2",
+      "text": "WebSocket",
+      "fontSize": 14,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:27:28.740Z",
+      "updatedAt": "2026-03-05T10:27:28.740Z",
+      "version": 1
+    },
+    {
+      "id": "new-arrow-user-mudur",
+      "type": "arrow",
+      "x": 188,
+      "y": 780,
+      "width": 120,
+      "height": 0,
+      "strokeColor": "#1971c2",
+      "strokeWidth": 2,
+      "label": {
+        "text": "mesaj"
+      },
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          104,
+          0
+        ]
+      ],
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:27:46.662Z",
+      "updatedAt": "2026-03-05T10:27:46.662Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "new-user",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "new-mudur",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "new-ws-mudur-research",
+      "type": "arrow",
+      "x": 507.80352801654163,
+      "y": 755.6572678672325,
+      "width": 120,
+      "height": 0,
+      "strokeColor": "#1971c2",
+      "strokeWidth": 2,
+      "label": {
+        "text": "WS"
+      },
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          104.39294396691668,
+          -23.57260025059395
+        ]
+      ],
+      "startArrowhead": "arrow",
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:27:46.662Z",
+      "updatedAt": "2026-03-05T10:27:46.662Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "new-mudur",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "new-research",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "new-ws-mudur-code",
+      "type": "arrow",
+      "x": 507.9958409147176,
+      "y": 783.4837368037006,
+      "width": 120,
+      "height": 0,
+      "strokeColor": "#1971c2",
+      "strokeWidth": 2,
+      "label": {
+        "text": "WS"
+      },
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          104.00831817056479,
+          3.355107037760149
+        ]
+      ],
+      "startArrowhead": "arrow",
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:27:46.662Z",
+      "updatedAt": "2026-03-05T10:27:46.662Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "new-mudur",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "new-code",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "new-ws-mudur-general",
+      "type": "arrow",
+      "x": 507.682769814029,
+      "y": 811.2627396234277,
+      "width": 120,
+      "height": 0,
+      "strokeColor": "#1971c2",
+      "strokeWidth": 2,
+      "label": {
+        "text": "WS"
+      },
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          104.634460371942,
+          30.377746559596176
+        ]
+      ],
+      "startArrowhead": "arrow",
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:27:46.662Z",
+      "updatedAt": "2026-03-05T10:27:46.662Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "new-mudur",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "new-general",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "new-ws-mudur-wa",
+      "type": "arrow",
+      "x": 479.9556757399588,
+      "y": 823.8466608896548,
+      "width": 120,
+      "height": 0,
+      "strokeColor": "#1971c2",
+      "strokeWidth": 2,
+      "label": {
+        "text": "WS"
+      },
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          168.3239426377295,
+          92.3066782206904
+        ]
+      ],
+      "startArrowhead": "arrow",
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:27:46.662Z",
+      "updatedAt": "2026-03-05T10:27:46.662Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "new-mudur",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "new-wa",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "new-arrow-research-tg",
+      "type": "arrow",
+      "x": 797.4906334205524,
+      "y": 742.8089875327071,
+      "width": 120,
+      "height": 0,
+      "strokeColor": "#1971c2",
+      "strokeWidth": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          115.0187331588952,
+          43.13202493458584
+        ]
+      ],
+      "startArrowhead": "arrow",
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:27:46.662Z",
+      "updatedAt": "2026-03-05T10:27:46.662Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "new-research",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "new-telegram",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "new-arrow-code-tg",
+      "type": "arrow",
+      "x": 807.9382230137094,
+      "y": 802.2422778767136,
+      "width": 120,
+      "height": 0,
+      "strokeColor": "#1971c2",
+      "strokeWidth": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          104.12355397258125,
+          13.01544424657277
+        ]
+      ],
+      "startArrowhead": "arrow",
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:27:46.662Z",
+      "updatedAt": "2026-03-05T10:27:46.662Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "new-code",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "new-telegram",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "new-arrow-general-tg",
+      "type": "arrow",
+      "x": 807.9382230137094,
+      "y": 857.7577221232864,
+      "width": 120,
+      "height": 0,
+      "strokeColor": "#1971c2",
+      "strokeWidth": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          104.12355397258125,
+          -13.01544424657277
+        ]
+      ],
+      "startArrowhead": "arrow",
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:27:46.662Z",
+      "updatedAt": "2026-03-05T10:27:46.662Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "new-general",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "new-telegram",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "new-arrow-wa-tg",
+      "type": "arrow",
+      "x": 797.4906334205524,
+      "y": 917.1910124672929,
+      "width": 120,
+      "height": 0,
+      "strokeColor": "#1971c2",
+      "strokeWidth": 1,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          115.0187331588952,
+          -43.13202493458584
+        ]
+      ],
+      "startArrowhead": "arrow",
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:27:46.662Z",
+      "updatedAt": "2026-03-05T10:27:46.662Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "new-wa",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "new-telegram",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "ws-mesh-research-code",
+      "type": "arrow",
+      "x": 710,
+      "y": 748,
+      "width": 0,
+      "height": 20,
+      "strokeColor": "#9c36b5",
+      "strokeWidth": 1,
+      "strokeStyle": "dashed",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "startArrowhead": "arrow",
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:28:06.538Z",
+      "updatedAt": "2026-03-05T10:28:06.538Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "new-research",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "new-code",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "ws-mesh-code-general",
+      "type": "arrow",
+      "x": 710,
+      "y": 828,
+      "width": 0,
+      "height": 20,
+      "strokeColor": "#9c36b5",
+      "strokeWidth": 1,
+      "strokeStyle": "dashed",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "startArrowhead": "arrow",
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:28:06.538Z",
+      "updatedAt": "2026-03-05T10:28:06.538Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "new-code",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "new-general",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "ws-mesh-general-wa",
+      "type": "arrow",
+      "x": 710,
+      "y": 908,
+      "width": 0,
+      "height": 20,
+      "strokeColor": "#9c36b5",
+      "strokeWidth": 1,
+      "strokeStyle": "dashed",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          4
+        ]
+      ],
+      "startArrowhead": "arrow",
+      "endArrowhead": "arrow",
+      "createdAt": "2026-03-05T10:28:06.538Z",
+      "updatedAt": "2026-03-05T10:28:06.538Z",
+      "version": 1,
+      "startBinding": {
+        "elementId": "new-general",
+        "focus": 0,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "new-wa",
+        "focus": 0,
+        "gap": 8
+      }
+    },
+    {
+      "id": "mesh-label",
+      "type": "text",
+      "x": 820,
+      "y": 815,
+      "strokeColor": "#9c36b5",
+      "text": "Agent-to-Agent\nWS Mesh",
+      "fontSize": 14,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:28:06.538Z",
+      "updatedAt": "2026-03-05T10:28:06.538Z",
+      "version": 1
+    },
+    {
+      "id": "new-step1",
+      "type": "text",
+      "x": 80,
+      "y": 1040,
+      "strokeColor": "#1e1e1e",
+      "text": "1. Kullanici mesaj gonderir",
+      "fontSize": 16,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:28:06.538Z",
+      "updatedAt": "2026-03-05T10:28:06.538Z",
+      "version": 1
+    },
+    {
+      "id": "new-step2",
+      "type": "text",
+      "x": 80,
+      "y": 1070,
+      "strokeColor": "#2f9e44",
+      "text": "2. Mudur gorevi WebSocket ile atar -> SERBEST KALIR",
+      "fontSize": 16,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:28:06.538Z",
+      "updatedAt": "2026-03-05T10:28:06.538Z",
+      "version": 1
+    },
+    {
+      "id": "new-step3",
+      "type": "text",
+      "x": 80,
+      "y": 1100,
+      "strokeColor": "#2f9e44",
+      "text": "3. Tum agentlar ES ZAMANLI calisir (paralel)",
+      "fontSize": 16,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:28:06.538Z",
+      "updatedAt": "2026-03-05T10:28:06.538Z",
+      "version": 1
+    },
+    {
+      "id": "new-step4",
+      "type": "text",
+      "x": 80,
+      "y": 1130,
+      "strokeColor": "#2f9e44",
+      "text": "4. Toplam sure = max(Agent1, Agent2, ...) -> COK DAHA HIZLI",
+      "fontSize": 16,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:28:06.538Z",
+      "updatedAt": "2026-03-05T10:28:06.538Z",
+      "version": 1
+    },
+    {
+      "id": "time-bar-new-box",
+      "type": "rectangle",
+      "x": 40,
+      "y": 1160,
+      "width": 500,
+      "height": 36,
+      "backgroundColor": "#b2f2bb",
+      "strokeColor": "#2f9e44",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 60,
+      "createdAt": "2026-03-05T10:28:06.538Z",
+      "updatedAt": "2026-03-05T10:28:06.538Z",
+      "version": 1
+    },
+    {
+      "id": "time-bar-new-text",
+      "type": "text",
+      "x": 55,
+      "y": 1167,
+      "strokeColor": "#2f9e44",
+      "text": "Sure: ||||||||||| (max(A1,A2,A3) = kisa!)",
+      "fontSize": 14,
+      "fontFamily": "1",
+      "createdAt": "2026-03-05T10:28:06.538Z",
+      "updatedAt": "2026-03-05T10:28:06.538Z",
+      "version": 1
+    }
+  ],
+  "appState": {
+    "viewBackgroundColor": "#ffffff",
+    "gridSize": null
+  }
+}

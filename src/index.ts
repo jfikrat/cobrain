@@ -22,32 +22,16 @@ import { loadConfigSafe } from "./config.ts";
 const configResult = loadConfigSafe();
 
 if (!configResult.success) {
-  // Setup mode - config is missing or invalid
-  console.log(`
-  ╔═══════════════════════════════════════════════════════════╗
-  ║                                                           ║
-  ║     ██████╗ ██████╗ ██████╗ ██████╗  █████╗ ██╗███╗   ██╗ ║
-  ║    ██╔════╝██╔═══██╗██╔══██╗██╔══██╗██╔══██╗██║████╗  ██║ ║
-  ║    ██║     ██║   ██║██████╔╝██████╔╝███████║██║██╔██╗ ██║ ║
-  ║    ██║     ██║   ██║██╔══██╗██╔══██╗██╔══██║██║██║╚██╗██║ ║
-  ║    ╚██████╗╚██████╔╝██████╔╝██║  ██║██║  ██║██║██║ ╚████║ ║
-  ║     ╚═════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ║
-  ║                                                           ║
-  ║                    SETUP MODE                           ║
-  ║                                                           ║
-  ╚═══════════════════════════════════════════════════════════╝
-
-  Configuration missing or invalid.
+  console.error(`
+  [FATAL] Configuration missing or invalid.
 
   Errors:
 ${configResult.errors.map((e) => `    • ${e}`).join("\n")}
 
-  Open the setup wizard:
-  → http://localhost:3000
+  Fix your .env file and restart.
+  Required: TELEGRAM_BOT_TOKEN, MY_TELEGRAM_ID
   `);
-
-  // Start setup server
-  import("./web/setup-server.ts").then((m) => m.startSetupServer());
+  process.exit(1);
 } else {
   // Normal mode - config is valid
   import("./startup.ts");
