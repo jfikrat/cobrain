@@ -9,6 +9,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "../config.ts";
 import { UserMemory } from "../memory/sqlite.ts";
+import { scaffoldMindFiles } from "../agent/prompts.ts";
 import type { User, UserSettings, UserStats } from "../types/user.ts";
 
 export class UserManager {
@@ -122,6 +123,9 @@ export class UserManager {
       // Update last_seen_at
       this.globalDb.run("UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?", [userId]);
 
+      // Idempotent: scaffold any missing mind files (e.g. after adding new defaults)
+      await scaffoldMindFiles(existing.folder_path);
+
       return {
         id: existing.id,
         createdAt: existing.created_at,
@@ -146,6 +150,9 @@ export class UserManager {
 
     // Initialize user database
     await this.initUserDb(userId, folderPath);
+
+    // Scaffold mind/ directory with default files
+    await scaffoldMindFiles(folderPath);
 
     console.log(`[UserManager] New user created: ${userId}`);
 

@@ -1,10 +1,14 @@
 /**
  * Cobrain System Prompts
  * Agent SDK system prompt management
- * v0.5 - Universal (language-agnostic)
+ * v0.6 - Fully md-based (zero hardcoded prompt content)
  */
 
 import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
+
+/** Directory containing default mind files shipped with the repo */
+const MIND_DEFAULTS_DIR = join(import.meta.dir, "..", "mind-defaults");
 
 /**
  * Dynamic context injected into system prompt per conversation
@@ -122,7 +126,38 @@ function escapeXml(str: string): string {
 
 // ========== MD-based System Prompt ==========
 
-const MIND_FILES = ["identity.md", "capabilities.md", "rules.md", "memory.md", "behaviors.md", "user.md", "contacts.md"];
+/** Ordered list of mind files to read. New files are also added to defaults. */
+const MIND_FILES = [
+  "identity.md",
+  "capabilities.md",
+  "rules.md",
+  "inbox.md",
+  "memory.md",
+  "behaviors.md",
+  "responses.md",
+  "user.md",
+  "contacts.md",
+];
+
+/**
+ * Scaffold mind/ directory for a user — copies missing default files.
+ * Safe to call multiple times (idempotent). Never overwrites existing files.
+ */
+export async function scaffoldMindFiles(userFolder: string): Promise<void> {
+  const mindDir = join(userFolder, "mind");
+  await mkdir(mindDir, { recursive: true });
+
+  for (const file of MIND_FILES) {
+    const target = join(mindDir, file);
+    const exists = await Bun.file(target).exists();
+    if (!exists) {
+      try {
+        const defaultContent = await Bun.file(join(MIND_DEFAULTS_DIR, file)).text();
+        await Bun.write(target, defaultContent);
+      } catch { /* default file doesn't exist — skip */ }
+    }
+  }
+}
 
 /**
  * Read mind/*.md files from the user's folder and concatenate them.
@@ -140,7 +175,7 @@ export async function readMindFiles(userFolder: string): Promise<string> {
   }
 
   if (sections.length === 0) {
-    return `# Cobrain\nYou are a personal AI assistant called Cobrain. Never introduce yourself as Claude.`;
+    return `# Assistant\nYou are a personal AI assistant.`;
   }
 
   return sections.join("\n\n---\n\n");
@@ -148,57 +183,9 @@ export async function readMindFiles(userFolder: string): Promise<string> {
 
 /**
  * Build system prompt from mind/*.md content + optional dynamic context.
+ * Zero hardcoded prompt content — everything comes from mind files.
  */
 export function buildMdSystemPrompt(mindContent: string, dynamicContext?: DynamicContext): string {
-  const preamble = `# IDENTITY NOTICE
-
-You are an AI assistant called "Cobrain". You are NOT "Claude Code" or "Claude".
-When asked who you are, introduce yourself ONLY as "Cobrain".
-
----
-
-# INBOX PROTOCOL
-
-Messages starting with \`[INBOX — STEM]\` or \`[INBOX — MNEME]\` come from
-the background system (Stem / BrainLoop), NOT from the user.
-The user is busy or offline — these messages are queued for you to process autonomously.
-
-**Behavior rules:**
-- Do NOT send "Message received" confirmations — the user won't see them.
-- Take **autonomous action** based on message content: reply on WhatsApp, save to memory, create expectations, etc.
-- Report results via **Telegram** — keep it short and concise (user will see it later).
-- For trivial single WA messages or minor events, process silently without sending a notification.
-- **EXCEPTIONS — always notify via Telegram:**
-  - "Night summary" or "Morning digest" messages — briefly summarize what happened, note any actions taken
-  - Summaries covering multiple topics — always report to user
-  - Important expectation timeouts (no reply received, missed appointment, etc.)
-
-**Example flows:**
-- Stem: "Ali sent a message, looks urgent" — Reply on WhatsApp + tell Telegram "Replied to Ali"
-- Stem: "Appointment tomorrow at 10" — Save to memory + Telegram notification if needed
-- Stem: "Night summary — 2 messages passed silently" — Telegram: "Burak sent [Image], Ahmet asked 'are you free tomorrow?'. Check in the morning."
-
----
-
-`;
   const dynamic = dynamicContext ? '\n\n' + buildDynamicContextXml(dynamicContext) : '';
-
-  const suggestionBlock = `
-
-## Suggestion Buttons
-
-You may optionally append 2-3 follow-up suggestions at the end of your responses:
-
-<suggestions>
-What's my schedule today?
-Check my latest emails
-</suggestions>
-
-Rules:
-- Each suggestion max 30 characters, short and clear
-- Not on every response, only at natural continuation points
-- Should be context-relevant, concrete questions or actions
-- Do not add when responding to Inbox messages`;
-
-  return `${preamble}${mindContent}${dynamic}${suggestionBlock}`;
+  return `${mindContent}${dynamic}`;
 }
