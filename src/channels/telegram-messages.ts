@@ -332,8 +332,17 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
       const { text: cleanContent, suggestions } = parseSuggestions(response.content);
       const replyMarkup = buildSuggestionKeyboard(suggestions);
 
+      // Build footer with model, mode, token stats
+      const settings = await userManager.getUserSettings(userId);
+      const mode = settings.permissionMode || config.PERMISSION_MODE;
+      const modelShort = config.AGENT_MODEL.replace("claude-", "").replace("-", " ");
+      const tokens = `${response.inputTokens}→${response.outputTokens}`;
+      const cost = `$${response.costUsd.toFixed(4)}`;
+      const footer = `\n\n_${modelShort} · ${mode} · ${tokens} · ${cost}_`;
+      const contentWithFooter = cleanContent + footer;
+
       try {
-        await c.reply(cleanContent, {
+        await c.reply(contentWithFooter, {
           parse_mode: "Markdown",
           ...(replyMarkup && { reply_markup: replyMarkup }),
         });

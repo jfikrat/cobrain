@@ -30,6 +30,25 @@ const DANGEROUS_BASH_PATTERNS = [
 const DANGEROUS_TOOLS = new Set(["Write", "Edit", "NotebookEdit"]);
 const SAFE_TOOLS = new Set(["Read", "Glob", "Grep", "WebSearch", "WebFetch", "Task"]);
 
+// MCP tools that are safe to auto-allow in smart mode (read-only / non-destructive)
+const SAFE_MCP_PATTERNS = [
+  "memory",     // memory read/write (core function)
+  "search",     // search operations
+  "list",       // listing operations
+  "read",       // read operations
+  "get",        // get/fetch operations
+  "status",     // status checks
+  "health",     // health checks
+  "tools",      // list available tools
+  "services",   // list services
+  "recall",     // memory recall
+];
+
+function isSafeMcpTool(toolName: string): boolean {
+  const lower = toolName.toLowerCase();
+  return SAFE_MCP_PATTERNS.some((p) => lower.includes(p));
+}
+
 interface PendingPermission {
   resolve: (allowed: boolean) => void;
   reject: (error: Error) => void;
@@ -65,7 +84,9 @@ export function needsPermission(mode: PermissionMode, toolName: string, input: u
   if (mode === "yolo") return false;
   if (toolName.startsWith("mcp__")) {
     if (mode === "strict") return !toolName.includes("memory");
-    return false;
+    // smart: safe MCP tools auto-allow, dangerous ones need permission
+    if (mode === "smart") return !isSafeMcpTool(toolName);
+    return false; // yolo
   }
   if (SAFE_TOOLS.has(toolName)) return false;
   if (mode === "strict") return true;
