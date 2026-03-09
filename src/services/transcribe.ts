@@ -3,6 +3,9 @@ import { join } from "node:path";
 import type { Api } from "grammy";
 import { config } from "../config.ts";
 
+/** Sentinel string returned when audio is empty or unintelligible */
+export const EMPTY_TRANSCRIPT_SENTINEL = "[voice recording is empty or unintelligible]";
+
 /**
  * Transcription system prompt adapted from stt-electron.
  * Focuses on hallucination prevention, pronunciation fixes, and code-switching.
@@ -63,7 +66,7 @@ TRANSCRIPTION RULES:
 9. Numbers: write small numbers as words in natural speech ("iki üç tane" → "iki üç tane"), but use digits for specific values ("port 3000", "version 2.5", "saat 14:00").
 10. Focus on the primary speaker (closest/loudest voice). Ignore background noise, TV, music, other people's conversations, and environmental sounds. Only transcribe the main speaker's words.
 11. If the primary speaker stops talking and only background audio remains (TV, music, other people), do NOT transcribe the remaining audio. Only output what the primary speaker said.
-12. If the audio is empty or contains no speech, output only: [ses kaydı boş veya anlaşılmıyor]`;
+12. If the audio is empty or contains no speech, output only: [voice recording is empty or unintelligible]`;
 
 const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({
@@ -198,7 +201,7 @@ function cleanTranscriptOutput(text: string): string {
 
   if (matchCount >= 2) {
     console.warn(`[Transcribe] Hallucination detected (${matchCount} markers matched), returning empty`);
-    return "[ses kaydı boş veya anlaşılmıyor]";
+    return EMPTY_TRANSCRIPT_SENTINEL;
   }
 
   // 2. Very long output detection for suspicious short-audio transcripts

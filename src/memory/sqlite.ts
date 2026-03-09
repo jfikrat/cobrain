@@ -156,19 +156,20 @@ export class UserMemory {
       .get();
 
     if (row) {
-      // Update last_used_at
-      this.db.run("UPDATE sessions SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?", [row.id]);
-
       return {
         id: row.id,
         status: row.status,
         messageCount: row.message_count,
         createdAt: row.created_at,
-        lastUsedAt: new Date().toISOString(),
+        lastUsedAt: row.last_used_at || row.created_at,
       };
     }
 
     return null;
+  }
+
+  touchSession(sessionId: string): void {
+    this.db.run("UPDATE sessions SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?", [sessionId]);
   }
 
   getSessionId(): string | null {
@@ -211,13 +212,12 @@ export class UserMemory {
       .get(key);
 
     if (row) {
-      this.db.run("UPDATE sessions SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?", [row.id]);
       return {
         id: row.id,
         status: row.status,
         messageCount: row.message_count,
         createdAt: row.created_at,
-        lastUsedAt: new Date().toISOString(),
+        lastUsedAt: row.last_used_at || row.created_at,
       };
     }
 

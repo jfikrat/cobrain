@@ -1,6 +1,6 @@
 /**
- * Interaction Tracker — barrel re-export for telegram.ts compatibility.
- * Consolidates user interaction tracking functions.
+ * Interaction Tracker
+ * Records user interaction timestamps for session state.
  */
 
 import { updateSessionState } from "./session-state.ts";
@@ -11,24 +11,4 @@ import { updateSessionState } from "./session-state.ts";
  */
 export function recordInteraction(userId: number): void {
   updateSessionState(userId, { lastInteractionTime: Date.now() });
-}
-
-/**
- * Record user activity for pattern learning.
- * No-op: activity-patterns service removed.
- */
-export async function recordUserActivity(_userId: number): Promise<void> {
-  // activity-patterns.ts removed
-}
-
-/**
- * Extract mood from message.
- * No-op: mood-extraction service removed.
- */
-export async function extractMoodFromMessage(
-  _userId: number,
-  _userMessage: string,
-  _aiResponse: string
-): Promise<void> {
-  // mood-extraction.ts removed
 }

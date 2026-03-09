@@ -17,7 +17,7 @@ import { getSessionState, updateSessionState, detectTopic, detectPhase } from ".
 import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
 import { join } from "node:path";
-import { DEFAULT_TIMEZONE, DEFAULT_LOCALE, NIGHT_HOUR_START, NIGHT_HOUR_END, MAX_WA_CONTEXT_ITEMS, WA_NOTIFICATION_TTL_MS } from "../constants.ts";
+import { DEFAULT_TIMEZONE, DEFAULT_LOCALE } from "../constants.ts";
 
 // Split modules
 import { getMemoryServer, getTelegramMcpServer, getAgentLoopServer } from "./mcp-servers.ts";
@@ -40,12 +40,12 @@ export interface ChatResponse {
   stopReason: string | null;
 }
 
-// Session ID cache per user
-const userSessions = new Map<number, string>();
+// Session cache per user — stores sessionId + last touch timestamp
+interface CachedSession { id: string; touchedAt: number; }
+const userSessions = new Map<number, CachedSession>();
 
-// Session ID cache for named cortex sessions (e.g. "wa_cortex")
-// Key: sessionKey string. Not persisted to DB — restarts fine.
-const cortexSessions = new Map<string, string>();
+// Session cache for named cortex sessions (e.g. "wa_cortex")
+const cortexSessions = new Map<string, CachedSession>();
 
 export interface ChatOptions {
   /** System prompt override for WA cortex or other sub-cortex agents */
@@ -67,84 +67,68 @@ export interface ChatOptions {
   agentName?: string;
 }
 
-// Concurrency guard: reflects whether _executeChat is actively running
-const activeThinking = new Set<number>();
+// Concurrency guard: ref-count of active _executeChat calls per user.
+// Multiple parallel sessions (hub agents) increment/decrement independently.
+const activeThinking = new Map<number, number>();
 
-// Per-user serialization queue: ensures chat() calls run one at a time per user
-const pendingChats = new Map<number, Promise<ChatResponse>>();
+// Per-session serialization queue: keyed sessions (hub agents) get independent lanes,
+// main user sessions serialize on "user:{userId}".
+const pendingChats = new Map<string, Promise<ChatResponse>>();
 
 export function isUserBusy(userId: number): boolean {
-  return activeThinking.has(userId);
+  return (activeThinking.get(userId) ?? 0) > 0;
 }
 
-// Session TTL: 2 hours - after this, start a fresh session
-const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
+// Idle threshold: if session has been idle longer than this,
+// prepend a time-gap note so the agent knows time has passed.
+const IDLE_BOUNDARY_MS = 2 * 60 * 60 * 1000; // 2 hours
 
-function isSessionExpired(lastUsedAt: string): boolean {
-  const age = Date.now() - new Date(lastUsedAt).getTime();
-  const hour = new Date().getHours();
-  const effectiveTTL = hour >= NIGHT_HOUR_START || hour < NIGHT_HOUR_END
-    ? SESSION_TTL_MS * 3
-    : SESSION_TTL_MS;
-  return age > effectiveTTL;
+interface SessionLookup {
+  sessionId: string;
+  idleMs: number;
 }
 
 async function getOrResumeCortexSession(
   userId: number,
   sessionKey: string,
-): Promise<string | undefined> {
+): Promise<SessionLookup | undefined> {
   // 1. In-memory cache
   const cached = cortexSessions.get(sessionKey);
-  if (cached) return cached;
+  if (cached) return { sessionId: cached.id, idleMs: Date.now() - cached.touchedAt };
 
-  // 2. DB lookup
+  // 2. DB lookup (no TTL — sessions are permanent until /clear)
   try {
     const userDb = await userManager.getUserDb(userId);
     const memory = new UserMemory(userDb);
     const session = memory.getSessionByKey(sessionKey);
     if (!session?.lastUsedAt) return undefined;
 
-    // 3. TTL check
-    if (isSessionExpired(session.lastUsedAt)) {
-      const age = Date.now() - new Date(session.lastUsedAt).getTime();
-      console.log(`[Cortex] Keyed session ${sessionKey} expired (${Math.round(age / 60000)}min), starting fresh`);
-      return undefined;
-    }
-
-    // 4. Populate cache
-    const age = Date.now() - new Date(session.lastUsedAt).getTime();
-    console.log(`[Cortex] Resuming keyed session ${sessionKey} from DB (${Math.round(age / 60000)}min old)`);
-    cortexSessions.set(sessionKey, session.id);
-    return session.id;
+    const idleMs = Date.now() - new Date(session.lastUsedAt).getTime();
+    console.log(`[Cortex] Resuming keyed session ${sessionKey} from DB (${Math.round(idleMs / 60000)}min idle)`);
+    cortexSessions.set(sessionKey, { id: session.id, touchedAt: Date.now() - idleMs });
+    return { sessionId: session.id, idleMs };
   } catch (e) {
     console.warn("[Cortex] Keyed session DB lookup failed:", e);
     return undefined;
   }
 }
 
-async function getOrResumeSession(userId: number): Promise<string | undefined> {
+async function getOrResumeSession(userId: number): Promise<SessionLookup | undefined> {
   // 1. In-memory cache (process lifetime)
   const cached = userSessions.get(userId);
-  if (cached) return cached;
+  if (cached) return { sessionId: cached.id, idleMs: Date.now() - cached.touchedAt };
 
-  // 2. Last active session from DB
+  // 2. Last active session from DB (no TTL — sessions are permanent until /clear)
   try {
     const userDb = await userManager.getUserDb(userId);
     const memory = new UserMemory(userDb);
     const session = memory.getSession();
     if (!session?.lastUsedAt) return undefined;
 
-    // 3. TTL check
-    if (isSessionExpired(session.lastUsedAt)) {
-      const age = Date.now() - new Date(session.lastUsedAt).getTime();
-      console.log(`[Cortex] Session expired (${Math.round(age / 60000)}min), starting fresh`);
-      return undefined;
-    }
-
-    const age = Date.now() - new Date(session.lastUsedAt).getTime();
-    console.log(`[Cortex] Resuming session from DB (${Math.round(age / 60000)}min old)`);
-    userSessions.set(userId, session.id);
-    return session.id;
+    const idleMs = Date.now() - new Date(session.lastUsedAt).getTime();
+    console.log(`[Cortex] Resuming session from DB (${Math.round(idleMs / 60000)}min idle)`);
+    userSessions.set(userId, { id: session.id, touchedAt: Date.now() - idleMs });
+    return { sessionId: session.id, idleMs };
   } catch (e) {
     console.warn("[Cortex] Session DB lookup failed:", e);
     return undefined;
@@ -162,14 +146,15 @@ export function chat(
   modelOverride?: string,
   options?: ChatOptions,
 ): Promise<ChatResponse> {
-  // Chain on the previous pending call so calls are strictly serialized per user
-  const prev = pendingChats.get(userId);
+  // Serialization key: keyed sessions (hub agents) get their own lane,
+  // so they don't block each other or the main Cobrain session.
+  const queueKey = options?.sessionKey ?? `user:${userId}`;
+  const prev = pendingChats.get(queueKey);
   const current: Promise<ChatResponse> = (prev?.catch(() => undefined) ?? Promise.resolve(undefined))
     .then(() => _executeChat(userId, message, traceId, modelOverride, 1, options));
-  pendingChats.set(userId, current);
-  // Clean up map entry once resolved (avoid memory leak for long-running processes)
+  pendingChats.set(queueKey, current);
   current.finally(() => {
-    if (pendingChats.get(userId) === current) pendingChats.delete(userId);
+    if (pendingChats.get(queueKey) === current) pendingChats.delete(queueKey);
   });
   return current;
 }
@@ -195,7 +180,7 @@ export async function _executeChat(
   attempt = 1,
   options?: ChatOptions,
 ): Promise<ChatResponse> {
-  activeThinking.add(userId);
+  activeThinking.set(userId, (activeThinking.get(userId) ?? 0) + 1);
   try {
   // Ensure user exists and get settings
   await userManager.ensureUser(userId);
@@ -250,7 +235,6 @@ export async function _executeChat(
 
   // Session state for continuity
   let sessionState: DynamicContext['sessionState'] = undefined;
-  let recentWhatsApp: DynamicContext['recentWhatsApp'] = undefined;
   if (config.FF_SESSION_STATE) {
     try {
       const state = getSessionState(userId);
@@ -262,22 +246,6 @@ export async function _executeChat(
           conversationPhase: state.conversationPhase,
           lastUserMessage: state.lastUserMessage,
         };
-      }
-      // WhatsApp context — token budget: max 5 notifications, preview truncated to 150 chars
-      if (state.recentWhatsApp.length > 0) {
-        const now = Date.now();
-        recentWhatsApp = state.recentWhatsApp
-          .filter(n => now - n.timestamp < WA_NOTIFICATION_TTL_MS)
-          .slice(-MAX_WA_CONTEXT_ITEMS) // keep only 5 most recent
-          .map(n => ({
-            senderName: n.senderName,
-            preview: truncate(n.preview, 150),
-            tier: n.tier,
-            autoReply: n.autoReply ? truncate(n.autoReply, 100) : undefined,
-            isGroup: n.isGroup,
-            minutesAgo: Math.round((now - n.timestamp) / 60000),
-          }));
-        if (recentWhatsApp.length === 0) recentWhatsApp = undefined;
       }
     } catch (e) {
       console.warn("[Cortex] Session state load failed:", e);
@@ -304,16 +272,31 @@ export async function _executeChat(
       mood: dynamicMood,
       recentMemories,
       sessionState,
-      recentWhatsApp,
       hubAgents,
       channel: options?.channel,
     });
   }
 
-  // Get or resume session (checks in-memory cache, then DB with TTL)
-  const existingSessionId = options?.sessionKey
+  // Preserve original message text before any mutation (for session state persistence)
+  const originalMessageText = typeof message === "string" ? message : message.text || "";
+
+  // Get or resume session (no TTL — sessions are permanent until /clear)
+  const sessionLookup = options?.sessionKey
     ? await getOrResumeCortexSession(userId, options.sessionKey)
     : await getOrResumeSession(userId);
+  const existingSessionId = sessionLookup?.sessionId;
+  const sessionIdleMs = sessionLookup?.idleMs ?? 0;
+
+  // Idle boundary: if session resumed after long idle, prepend time-gap note
+  if (existingSessionId && sessionIdleMs > IDLE_BOUNDARY_MS) {
+    const idleHours = Math.round(sessionIdleMs / (60 * 60 * 1000));
+    const idleNote = `[System note: ${idleHours}h have passed since last interaction. The user is returning after a break.]`;
+    if (typeof message === "string") {
+      message = `${idleNote}\n\n${message}`;
+    } else {
+      message = { ...message, text: `${idleNote}\n\n${message.text}` };
+    }
+  }
 
   // Track tools used + streaming notifier (silent mode = no Telegram notifications)
   const toolsUsed: string[] = [];
@@ -426,7 +409,7 @@ export async function _executeChat(
           if (msg.subtype === "init") {
             sessionId = msg.session_id;
             if (options?.sessionKey) {
-              cortexSessions.set(options.sessionKey, sessionId);
+              cortexSessions.set(options.sessionKey, { id: sessionId, touchedAt: Date.now() });
               // DB persist for cross-restart recovery
               try {
                 const userDb = await userManager.getUserDb(userId);
@@ -435,7 +418,7 @@ export async function _executeChat(
                 console.warn(`[Cortex] Keyed session persist failed:`, e);
               }
             } else {
-              userSessions.set(userId, sessionId);
+              userSessions.set(userId, { id: sessionId, touchedAt: Date.now() });
               // Persist to DB for cross-restart recovery
               try {
                 const userDb = await userManager.getUserDb(userId);
@@ -488,15 +471,28 @@ export async function _executeChat(
     // Heartbeat: agent completed successfully
     heartbeat("ai_agent", { event: "completed", turns: numTurns, tools: toolsUsed.length, cost: totalCost });
 
-    // Session state: write conversation context
+    // Touch session in DB after successful completion (update last_used_at)
+    try {
+      const userDb = await userManager.getUserDb(userId);
+      const mem = new UserMemory(userDb);
+      mem.touchSession(sessionId);
+    } catch {}
+
+    // Update in-memory cache touchedAt
+    if (options?.sessionKey) {
+      cortexSessions.set(options.sessionKey, { id: sessionId, touchedAt: Date.now() });
+    } else {
+      userSessions.set(userId, { id: sessionId, touchedAt: Date.now() });
+    }
+
+    // Session state: write conversation context (use original message, not idle-boundary-mutated one)
     if (config.FF_SESSION_STATE) {
       try {
-        const userMsg = typeof message === "string" ? message : message.text || "";
-        const detected = detectTopic(userMsg, lastAssistantContent);
+        const detected = detectTopic(originalMessageText, lastAssistantContent);
         const phaseDetected = detectPhase(lastAssistantContent);
 
         updateSessionState(userId, {
-          lastUserMessage: userMsg.slice(0, 500),
+          lastUserMessage: originalMessageText.slice(0, 500),
           lastInteractionTime: Date.now(),
           ...(detected && { lastTopic: detected }),
           ...(phaseDetected && phaseDetected.confidence > 0.7 && {
@@ -547,7 +543,9 @@ export async function _executeChat(
       const delay = RETRY_DELAYS_MS[attempt - 1] ?? 8000;
       console.warn(`[Cortex] API error (attempt ${attempt}/${MAX_RETRIES}), retrying in ${delay}ms: ${errorMessage.slice(0, 80)}`);
       await new Promise((r) => setTimeout(r, delay));
-      activeThinking.delete(userId);
+      const rc = (activeThinking.get(userId) ?? 1) - 1;
+      if (rc <= 0) activeThinking.delete(userId);
+      else activeThinking.set(userId, rc);
       return _executeChat(userId, message, traceId, modelOverride, attempt + 1, options);
     }
 
@@ -580,7 +578,9 @@ export async function _executeChat(
     };
   }
   } finally {
-    activeThinking.delete(userId);
+    const count = (activeThinking.get(userId) ?? 1) - 1;
+    if (count <= 0) activeThinking.delete(userId);
+    else activeThinking.set(userId, count);
   }
 }
 
@@ -597,17 +597,10 @@ export function clearSession(userId: number): void {
  */
 export function getSessionInfo(userId: number): { sessionId: string | null } {
   return {
-    sessionId: userSessions.get(userId) || null,
+    sessionId: userSessions.get(userId)?.id || null,
   };
 }
 
-// ========== Token Budget Helpers ==========
-
-/** Truncate string to maxLen, appending "..." if trimmed */
-function truncate(str: string, maxLen: number): string {
-  if (str.length <= maxLen) return str;
-  return str.slice(0, maxLen - 3) + "...";
-}
 
 /**
  * Deduplicate memories with similar content.

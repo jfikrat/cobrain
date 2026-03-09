@@ -21,14 +21,6 @@ export interface DynamicContext {
     trend: string;      // "improving" | "stable" | "declining"
   };
   recentMemories?: string[];  // Last 5 memory entries
-  recentWhatsApp?: Array<{
-    senderName: string;
-    preview: string;
-    tier: number;
-    autoReply?: string;
-    isGroup: boolean;
-    minutesAgo: number;
-  }>;
   hubAgents?: {
     agents: Array<{
       id: string;
@@ -57,9 +49,8 @@ export interface DynamicContext {
  *
  * Token budget targets (enforced in chat.ts before injection):
  * - recentMemories: max 5 entries, each <=200 chars, deduplicated
- * - recentWhatsApp: max 5 entries, preview <=150 chars, autoReply <=100 chars
  * - sessionState.lastUserMessage: <=500 chars (truncated in chat.ts)
- * Total dynamic context target: ~800-1200 tokens
+ * Total dynamic context target: ~600-1000 tokens
  */
 function buildDynamicContextXml(ctx: DynamicContext): string {
   let xml = `<dynamic-context>
@@ -96,23 +87,6 @@ function buildDynamicContextXml(ctx: DynamicContext): string {
       xml += `\n    </pending-actions>`;
     }
     xml += `\n  </session-continuity>`;
-  }
-
-  if (ctx.recentWhatsApp && ctx.recentWhatsApp.length > 0) {
-    xml += `\n  <recent-whatsapp>`;
-    for (const wa of ctx.recentWhatsApp) {
-      const attrs = [
-        `sender="${escapeXml(wa.senderName)}"`,
-        `group="${wa.isGroup}"`,
-        `tier="${wa.tier}"`,
-        `minutes-ago="${wa.minutesAgo}"`,
-      ];
-      if (wa.autoReply) {
-        attrs.push(`auto-reply="${escapeXml(wa.autoReply)}"`);
-      }
-      xml += `\n    <message ${attrs.join(' ')}>${escapeXml(wa.preview)}</message>`;
-    }
-    xml += `\n  </recent-whatsapp>`;
   }
 
   if (ctx.hubAgents && ctx.hubAgents.agents.length > 0) {

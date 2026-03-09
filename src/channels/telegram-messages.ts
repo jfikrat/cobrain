@@ -1,8 +1,8 @@
 import type { Bot } from "grammy";
 import { config } from "../config.ts";
 import { think, userManager, type MultimodalMessage } from "../brain/index.ts";
-import { recordInteraction, extractMoodFromMessage, recordUserActivity } from "../services/interaction-tracker.ts";
-import { transcribeAudio, downloadTelegramFileAsBuffer } from "../services/transcribe.ts";
+import { recordInteraction } from "../services/interaction-tracker.ts";
+import { transcribeAudio, downloadTelegramFileAsBuffer, EMPTY_TRANSCRIPT_SENTINEL } from "../services/transcribe.ts";
 import { isAuthorized, parseSuggestions, buildSuggestionKeyboard, withTypingIndicator, type TelegramContext } from "./telegram-helpers.ts";
 import { getTopicRoute, handleTopicMessage } from "./telegram-router.ts";
 
@@ -56,7 +56,7 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
       const audioBuffer = await downloadTelegramFileAsBuffer(file.file_path, config.TELEGRAM_BOT_TOKEN);
       const transcript = await transcribeAudio(audioBuffer, "audio/ogg");
 
-      if (!transcript.trim() || transcript.includes("[voice recording is empty or unintelligible]")) {
+      if (!transcript.trim() || transcript.includes(EMPTY_TRANSCRIPT_SENTINEL)) {
         await c.reply("I couldn't understand the voice message. Can you try again?");
         return;
       }
@@ -357,11 +357,6 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
         `[${userId}] ${text.slice(0, 30)}... -> ${response.inputTokens}/${response.outputTokens} tokens | $${response.costUsd.toFixed(4)}`
       );
 
-      recordUserActivity(userId);
-
-      extractMoodFromMessage(userId, text, response.content).catch((err) => {
-        console.warn("[Telegram] Mood extraction failed:", err);
-      });
     } catch (error) {
       console.error("Chat error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error";

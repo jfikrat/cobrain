@@ -153,20 +153,23 @@ class BrainLoop {
 
       for (const reminder of dueReminders) {
         try {
-          await inbox.push({
+          const pushed = await inbox.push({
             from: "brain-loop",
             subject: `[reminder] ${reminder.title}`,
             body: `[AUTONOMOUS EVENT — Reminder]\n${reminder.title}${reminder.message ? `\n${reminder.message}` : ""}`,
             priority: "urgent",
             ttlMs: REMINDER_INBOX_TTL_MS,
           });
-          console.log(`[BrainLoop] Reminder → Inbox: ${reminder.title}`);
+          if (pushed) {
+            remindersService.markReminderSent(reminder.id);
+            console.log(`[BrainLoop] Reminder → Inbox: ${reminder.title}`);
+          } else {
+            console.warn(`[BrainLoop] Reminder rejected (inbox full): ${reminder.title}`);
+          }
         } catch (err) {
-          console.error("[BrainLoop] reminder error:", err);
+          console.error("[BrainLoop] reminder push failed (will retry next tick):", err);
           if (this.bot) await sendRawLog(this.bot, `❌ <b>Reminder error</b> — ${escapeHtml(reminder.title)}\n<code>${String(err).slice(0, 200)}</code>`);
         }
-        // Mark as sent regardless of success/error (prevents infinite loop)
-        remindersService.markReminderSent(reminder.id);
       }
     } catch (err) {
       console.error("[BrainLoop] checkDueReminders error:", err);
@@ -347,21 +350,14 @@ class BrainLoop {
 
     console.log(`[BrainLoop] Processing inbox item: "${pendingItem.subject}"`);
 
-    // Show "typing" indicator — refresh every 4s
     const userId = config.MY_TELEGRAM_ID;
-    if (this.bot) this.bot.api.sendChatAction(userId, "typing").catch(() => {});
-    const typingInterval = this.bot
-      ? setInterval(() => this.bot!.api.sendChatAction(userId, "typing").catch(() => {}), 4000)
-      : null;
 
     chat(userId, prompt)
       .then(async response => {
-        if (typingInterval) clearInterval(typingInterval);
         await inbox.markProcessed(pendingItem.id);
         if (this.bot) sendLogToChannel(this.bot, `📬 Inbox [${pendingItem.from}] — ${pendingItem.subject.slice(0, 60)}`, response);
       })
       .catch(err => {
-        if (typingInterval) clearInterval(typingInterval);
         console.error("[BrainLoop] Inbox processing error:", err);
       });
   }

@@ -8,21 +8,10 @@ import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { rename } from "node:fs/promises";
 import { userManager } from "./user-manager.ts";
-import { WA_NOTIFICATION_TTL_MS, MAX_WA_NOTIFICATIONS } from "../constants.ts";
 
 // ============ TYPES ============
 
 export type ConversationPhase = "exploring" | "decided" | "implementing" | "deployed" | "archived";
-
-export interface WhatsAppNotification {
-  senderName: string;
-  chatJid: string;
-  preview: string;        // message preview (max 100 char)
-  tier: number;           // 1=auto-replied, 2=suggested, 3=notify-only
-  autoReply?: string;     // auto-reply sent if tier 1
-  isGroup: boolean;
-  timestamp: number;      // Date.now()
-}
 
 export interface SessionState {
   // Conversation continuity
@@ -33,16 +22,10 @@ export interface SessionState {
   lastUserMessage: string;
   confidence: number;
 
-  // Operational state (living-assistant volatile data)
+  // Operational state
   cooldowns: Record<string, { lastSent: number; type: string }>;
   lastInteractionTime: number;
   lastNotificationTime: number;
-  lastProactiveCheckHour: string | null;
-
-  // WhatsApp context
-  recentWhatsApp: WhatsAppNotification[];
-  // chatJid → unix timestamp (sec) of the last seen incoming message. Persisted to survive restarts.
-  lastSeenMsgTimestamps: Record<string, number>;
 
   // Meta
   updatedAt: string;
@@ -59,9 +42,6 @@ export const DEFAULT_SESSION_STATE: SessionState = {
   cooldowns: {},
   lastInteractionTime: 0,
   lastNotificationTime: 0,
-  lastProactiveCheckHour: null,
-  recentWhatsApp: [],
-  lastSeenMsgTimestamps: {},
   updatedAt: new Date().toISOString(),
   version: 1,
 };
@@ -188,17 +168,3 @@ export function detectTopic(userMsg: string, responseText: string): string | nul
   return null;
 }
 
-// ============ WHATSAPP CONTEXT ============
-
-/** Add the last WA message to session state (max 10, 24h TTL) */
-export async function addWhatsAppNotification(userId: number, notif: WhatsAppNotification): Promise<void> {
-  const state = getSessionState(userId);
-  const cutoff = Date.now() - WA_NOTIFICATION_TTL_MS;
-
-  const fresh = state.recentWhatsApp
-    .filter(n => n.timestamp > cutoff)
-    .concat(notif)
-    .slice(-MAX_WA_NOTIFICATIONS);
-
-  await updateSessionState(userId, { recentWhatsApp: fresh });
-}

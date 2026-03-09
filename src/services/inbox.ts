@@ -78,7 +78,7 @@ class InboxService {
     }
   }
 
-  async push(item: Omit<InboxItem, "id" | "createdAt">): Promise<void> {
+  async push(item: Omit<InboxItem, "id" | "createdAt">): Promise<boolean> {
     // Clean up expired TTL items
     this.cleanExpired();
 
@@ -96,7 +96,7 @@ class InboxService {
       } else {
         // All urgent — reject
         console.warn(`[Inbox] Full (${MAX_PENDING} urgent items). New item rejected: "${item.subject}"`);
-        return;
+        return false;
       }
     }
 
@@ -110,6 +110,7 @@ class InboxService {
     await this.save();
 
     console.log(`[Inbox] Item added from ${newItem.from} (${newItem.priority}): "${newItem.subject}"`);
+    return true;
   }
 
   /**
