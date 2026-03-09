@@ -45,6 +45,8 @@ export async function loadRegistry(userFolder: string): Promise<AgentRegistry> {
     const file = Bun.file(path);
     if (await file.exists()) {
       _registry = (await file.json()) as AgentRegistry;
+      // Repair missing mind files for active agents (non-blocking)
+      repairAgentMindFiles(userFolder, _registry.agents).catch(() => {});
       return _registry;
     }
   } catch (err) {
@@ -54,6 +56,16 @@ export async function loadRegistry(userFolder: string): Promise<AgentRegistry> {
   // Default empty registry
   _registry = { hubChatId: 0, agents: [] };
   return _registry;
+}
+
+/** Repair missing mind files for all active agents (idempotent) */
+async function repairAgentMindFiles(userFolder: string, agents: AgentEntry[]): Promise<void> {
+  try {
+    const { repairAllAgentMindFiles } = await import("./seed/index.ts");
+    await repairAllAgentMindFiles(userFolder, agents);
+  } catch (err) {
+    console.warn("[Registry] Agent mind file repair failed:", err);
+  }
 }
 
 export async function saveRegistry(userFolder: string, reg: AgentRegistry): Promise<void> {
