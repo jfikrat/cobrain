@@ -33,19 +33,38 @@ export function createMnemeTools(deps: {
   );
 
   const archiveEventsTool = tool(
-    "archive_old_events",
-    "Move events older than the given number of days into the archive/ folder.",
+    "archive_events",
+    "Archive specific date sections from events.md. Mneme decides WHICH dates to archive based on content evaluation. Archived events move to archive/YYYY-MM-events.md.",
     {
-      days_old: z.number().default(90).describe("Archive events older than how many days"),
+      dates: z.array(z.string()).describe("Date strings to archive (YYYY-MM-DD format)"),
+      reason: z.string().describe("Brief reason for archiving these dates"),
     },
-    async ({ days_old }) => {
+    async ({ dates, reason }) => {
       try {
-        const count = await memory.archiveOldEvents(days_old);
-        if (count === 0) return toolSuccess("No old events to archive.");
-        console.log(`[Mneme] Archived ${count} date sections (>${days_old} days old)`);
-        return toolSuccess(`${count} event sections archived.`);
+        const count = await memory.archiveByDates(dates);
+        if (count === 0) return toolSuccess("No matching date sections found.");
+        console.log(`[Mneme] Archived ${count} date sections: ${reason}`);
+        return toolSuccess(`${count} event sections archived. Reason: ${reason}`);
       } catch (error) {
         return toolError("Archive error", error);
+      }
+    }
+  );
+
+  const consolidateEventTool = tool(
+    "consolidate_event",
+    "Replace a verbose event section with a concise summary. Use this to compress long entries while preserving key information.",
+    {
+      date: z.string().describe("Date of the event section (YYYY-MM-DD)"),
+      summary: z.string().describe("Concise replacement summary (keep essential facts, dates, names)"),
+    },
+    async ({ date, summary }) => {
+      try {
+        await memory.consolidateEvent(date, summary);
+        console.log(`[Mneme] Consolidated event: ${date}`);
+        return toolSuccess(`Event ${date} consolidated.`);
+      } catch (error) {
+        return toolError("Consolidate error", error);
       }
     }
   );
@@ -106,6 +125,6 @@ export function createMnemeTools(deps: {
   return createSdkMcpServer({
     name: "cobrain-mneme",
     version: "1.0.0",
-    tools: [readMemoryTool, archiveEventsTool, updateFactsTool, logEventTool, sendReportTool],
+    tools: [readMemoryTool, archiveEventsTool, consolidateEventTool, updateFactsTool, logEventTool, sendReportTool],
   });
 }

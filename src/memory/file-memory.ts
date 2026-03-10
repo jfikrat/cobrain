@@ -3,7 +3,7 @@
  *
  * Two files:
  *   facts.md  — permanent facts/preferences (section-based, overwrite)
- *   events.md — dated event log (append, 90-day TTL)
+ *   events.md — dated event log (append, judgment-based archiving)
  *
  * No DB, no embeddings, no external deps. Cortex can read/edit directly.
  */
@@ -118,14 +118,15 @@ export class FileMemory {
   }
 
   /**
-   * Archive events older than daysOld (default 90).
+   * Archive specific date sections by date strings.
+   * Mneme decides which dates to archive — this just executes.
    * Returns number of archived date sections.
    */
-  async archiveOldEvents(daysOld = 90): Promise<number> {
+  async archiveByDates(dates: string[]): Promise<number> {
     const content = await this.readFile(this.eventsPath);
     if (!content) return 0;
 
-    const cutoff = daysAgo(daysOld);
+    const dateSet = new Set(dates);
     const sections = splitBySections(content);
 
     const keep: string[] = [];
@@ -133,7 +134,7 @@ export class FileMemory {
 
     for (const section of sections) {
       const match = section.match(/^## (\d{4}-\d{2}-\d{2})/);
-      if (match && match[1]! < cutoff) {
+      if (match && dateSet.has(match[1]!)) {
         archive.push(section);
       } else {
         keep.push(section);
@@ -145,13 +146,35 @@ export class FileMemory {
     // Write keep back
     await this.atomicWrite(this.eventsPath, keep.join("\n\n").trim() + "\n");
 
-    // Append to monthly archive file
-    const archiveMonth = archive[0]!.match(/^## (\d{4}-\d{2})/)?.[1] ?? today().slice(0, 7);
-    const archivePath = join(this.archiveDir, `${archiveMonth}-events.md`);
-    const existing = await this.readFile(archivePath);
-    await this.atomicWrite(archivePath, (existing ? existing + "\n\n" : "") + archive.join("\n\n").trim() + "\n");
+    // Append to monthly archive files
+    for (const section of archive) {
+      const month = section.match(/^## (\d{4}-\d{2})/)?.[1] ?? today().slice(0, 7);
+      const archivePath = join(this.archiveDir, `${month}-events.md`);
+      const existing = await this.readFile(archivePath);
+      await this.atomicWrite(archivePath, (existing ? existing + "\n\n" : "") + section.trim() + "\n");
+    }
 
     return archive.length;
+  }
+
+  /**
+   * Replace an event date section with a consolidated summary.
+   * Used by Mneme to merge verbose entries into concise ones.
+   */
+  async consolidateEvent(date: string, summary: string): Promise<void> {
+    const content = await this.readFile(this.eventsPath);
+    if (!content) return;
+
+    const sections = splitBySections(content);
+    const updated = sections.map(section => {
+      const match = section.match(/^## (\d{4}-\d{2}-\d{2})/);
+      if (match && match[1] === date) {
+        return `## ${date}\n${summary}`;
+      }
+      return section;
+    });
+
+    await this.atomicWrite(this.eventsPath, updated.join("\n\n").trim() + "\n");
   }
 
   // ── Combined read ────────────────────────────────────────────────────────
