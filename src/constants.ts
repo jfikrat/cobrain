@@ -15,7 +15,6 @@ export const ACTIVE_HOUR_END = 23;    // 23:00
 // ── TTLs (ms) ──
 export const DAY_MS = 24 * 60 * 60 * 1000;                       // 24 hours (general)
 export const REMINDER_INBOX_TTL_MS = 30 * 60 * 1000;             // 30 min
-export const EXPECTATION_INBOX_TTL_MS = 60 * 60 * 1000;          // 60 min
 export const PROACTIVE_INBOX_TTL_MS = 55 * 60 * 1000;            // 55 min
 
 // ── Telegram ──

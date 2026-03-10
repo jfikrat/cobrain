@@ -55,10 +55,6 @@ const envSchema = z.object({
   // v1.0: REST API
   COBRAIN_API_KEY: z.string().default(""),
 
-  // v1.1: Cortex tuning
-  CORTEX_EXPECTATION_TIMEOUT_MS: z.coerce.number().default(30 * 60 * 1000),
-  CORTEX_EXPECTATION_CLEANUP_INTERVAL_MS: z.coerce.number().default(60_000),
-
   // Log channel: autonomous event logs sent here
   LOG_CHANNEL_ID: z.coerce.number().optional(),
 

@@ -7,7 +7,6 @@ import { startBot, stopBot, bot } from "./channels/telegram.ts";
 import { closeAll } from "./brain/index.ts";
 import { config } from "./config.ts";
 import { brainLoop } from "./services/brain-loop.ts";
-import { expectations } from "./services/expectations.ts";
 import {
   heartbeat,
   registerHeartbeatComponent,
@@ -91,17 +90,9 @@ startApiServer();
 if (config.ENABLE_AUTONOMOUS) {
   // Wait a bit for bot to be ready
   setTimeout(async () => {
-    // Load expectations
-    await expectations.load();
-
     // Load inbox
     const userFolder = userManager.getUserFolder(config.MY_TELEGRAM_ID);
     await initInbox(userFolder);
-
-    // Start periodic expectation cleanup
-    setInterval(() => {
-      expectations.cleanExpired();
-    }, config.CORTEX_EXPECTATION_CLEANUP_INTERVAL_MS);
 
     // Start BrainLoop (events routed directly to Cortex)
     brainLoop.start(bot);

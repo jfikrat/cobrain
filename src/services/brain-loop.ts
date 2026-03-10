@@ -12,7 +12,6 @@ import { Bot } from "grammy";
 import { config } from "../config.ts";
 import { userManager } from "./user-manager.ts";
 import { getRemindersService } from "./reminders.ts";
-import { expectations } from "./expectations.ts";
 import { heartbeat } from "./heartbeat.ts";
 import { escapeHtml } from "../utils/escape-html.ts";
 import { chat, isUserBusy } from "../agent/chat.ts";
@@ -20,7 +19,7 @@ import { handleTopicMessage, getTopicRoute } from "../channels/telegram-router.t
 import { mneme } from "../mneme/mneme.ts";
 import { inbox } from "./inbox.ts";
 import { readLoopConfig, type LoopConfig } from "../agent/tools/agent-loop.ts";
-import { DAY_NAMES, ACTIVE_HOUR_START, ACTIVE_HOUR_END, REMINDER_INBOX_TTL_MS, EXPECTATION_INBOX_TTL_MS, PROACTIVE_INBOX_TTL_MS } from "../constants.ts";
+import { DAY_NAMES, ACTIVE_HOUR_START, ACTIVE_HOUR_END, REMINDER_INBOX_TTL_MS, PROACTIVE_INBOX_TTL_MS } from "../constants.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -128,12 +127,6 @@ class BrainLoop {
     }
 
     try {
-      await this.checkExpiredExpectations();
-    } catch (err) {
-      console.error("[BrainLoop] checkExpiredExpectations error:", err);
-    }
-
-    try {
       await this.checkProactiveBehaviors();
     } catch (err) {
       console.error("[BrainLoop] checkProactiveBehaviors error:", err);
@@ -173,24 +166,6 @@ class BrainLoop {
       }
     } catch (err) {
       console.error("[BrainLoop] checkDueReminders error:", err);
-    }
-  }
-
-  // ── Expired Expectations → Inbox ─────────────────────────────────────
-
-  private async checkExpiredExpectations(): Promise<void> {
-    const expired = expectations.cleanExpired();
-    if (expired.length === 0) return;
-
-    for (const exp of expired) {
-      await inbox.push({
-        from: "brain-loop",
-        subject: `[expectation_timeout] ${exp.type} — ${exp.target}`,
-        body: `Expectation timed out:\nType: ${exp.type}\nTarget: ${exp.target}\nContext: ${exp.context || "none"}\nOnResolved: ${exp.onResolved || "none"}`,
-        priority: "normal",
-        ttlMs: EXPECTATION_INBOX_TTL_MS,
-      });
-      console.log(`[BrainLoop] Expectation timeout → Inbox: [${exp.type}] ${exp.target}`);
     }
   }
 
