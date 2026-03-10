@@ -11,7 +11,6 @@ import {
 import { userManager } from "../services/user-manager.ts";
 import { heartbeat } from "../services/heartbeat.ts";
 import { readMindFiles, buildMdSystemPrompt, type DynamicContext } from "./prompts.ts";
-import { getMoodTrackingService } from "../services/mood-tracking.ts";
 import { FileMemory } from "../memory/file-memory.ts";
 import { getSessionState, updateSessionState, detectTopic, detectPhase } from "../services/session-state.ts";
 import { UserMemory } from "../memory/sqlite.ts";
@@ -187,22 +186,8 @@ export async function _executeChat(
   const settings = await userManager.getUserSettings(userId);
   const userFolder = userManager.getUserFolder(userId);
 
-  // Build dynamic context (time + mood + recent memories)
+  // Build dynamic context (time + recent memories)
   const dynamicTime = buildTimeContext();
-
-  let dynamicMood: DynamicContext['mood'] = undefined;
-  try {
-    const moodService = await getMoodTrackingService(userId);
-    const current = moodService.getCurrentMood();
-    const trend = moodService.getMoodTrend(7);
-    if (current) {
-      dynamicMood = {
-        current: current.mood,
-        energy: current.energy,
-        trend: trend.direction,
-      };
-    }
-  } catch {}
 
   // Load recent memories from file-based system
   let recentMemories: string[] = [];
@@ -269,7 +254,6 @@ export async function _executeChat(
     const mindContent = await readMindFiles(userFolder);
     systemPrompt = buildMdSystemPrompt(mindContent, {
       time: dynamicTime,
-      mood: dynamicMood,
       recentMemories,
       sessionState,
       hubAgents,

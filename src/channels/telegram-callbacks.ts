@@ -4,31 +4,6 @@ import { recordInteraction } from "../services/interaction-tracker.ts";
 import { isAuthorized, parseSuggestions, buildSuggestionKeyboard, type TelegramContext } from "./telegram-helpers.ts";
 
 export function registerCallbacks(bot: Bot, _ctx: TelegramContext) {
-  // ============ MOOD CALLBACK ============
-
-  bot.callbackQuery(/^mood_(great|neutral|low)$/, async (c) => {
-    const data = c.callbackQuery.data;
-    const moodMap: Record<string, string> = { mood_great: "great", mood_neutral: "neutral", mood_low: "low" };
-    const mood = moodMap[data];
-    if (!mood) return;
-
-    const userId = c.from?.id ?? 0;
-    try {
-      const { getMoodTrackingService } = await import("../services/mood-tracking.ts");
-      const moodService = await getMoodTrackingService(userId);
-      moodService.recordMood({
-        mood: mood as "great" | "neutral" | "low",
-        energy: mood === "great" ? 4 : mood === "neutral" ? 3 : 2,
-        source: "explicit",
-      });
-      await c.answerCallbackQuery({ text: "Saved!" });
-      await c.editMessageReplyMarkup({ reply_markup: undefined });
-    } catch (err) {
-      console.error("[MoodCallback] Failed:", err);
-      await c.answerCallbackQuery({ text: "Error occurred" });
-    }
-  });
-
   // ============ GENERIC ACK ============
 
   bot.callbackQuery(/^(restart_ack|ack)$/, async (c) => {

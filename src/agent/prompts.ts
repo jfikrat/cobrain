@@ -19,11 +19,6 @@ export interface DynamicContext {
     dayPart: string;    // "night" | "morning" | "afternoon" | "evening"
     isWeekend: boolean;
   };
-  mood?: {
-    current: string;    // "good", "low" etc.
-    energy: number;     // 1-5
-    trend: string;      // "improving" | "stable" | "declining"
-  };
   recentMemories?: string[];  // Last 5 memory entries
   hubAgents?: {
     agents: Array<{
@@ -49,7 +44,7 @@ export interface DynamicContext {
 }
 
 /**
- * Build dynamic context XML (time, mood, recent memories)
+ * Build dynamic context XML (time, recent memories, session state)
  *
  * Token budget targets (enforced in chat.ts before injection):
  * - recentMemories: max 5 entries, each <=200 chars, deduplicated
@@ -62,10 +57,6 @@ function buildDynamicContextXml(ctx: DynamicContext): string {
 
   if (ctx.channel) {
     xml += `\n  <channel>${escapeXml(ctx.channel)}</channel>`;
-  }
-
-  if (ctx.mood) {
-    xml += `\n  <mood current="${escapeXml(ctx.mood.current)}" energy="${ctx.mood.energy}" trend="${escapeXml(ctx.mood.trend)}"/>`;
   }
 
   if (ctx.recentMemories && ctx.recentMemories.length > 0) {
