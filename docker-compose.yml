@@ -1,0 +1,12 @@
+services:
+  cobrain:
+    build: .
+    env_file: .env
+    volumes:
+      - cobrain-data:/data
+    ports:
+      - "${API_PORT:-3000}:${API_PORT:-3000}"
+    restart: unless-stopped
+
+volumes:
+  cobrain-data:

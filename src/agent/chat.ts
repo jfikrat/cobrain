@@ -15,7 +15,6 @@ import { FileMemory } from "../memory/file-memory.ts";
 import { getSessionState, updateSessionState, detectTopic, detectPhase } from "../services/session-state.ts";
 import { UserMemory } from "../memory/sqlite.ts";
 import { config } from "../config.ts";
-import { join } from "node:path";
 import { DEFAULT_TIMEZONE, DEFAULT_LOCALE } from "../constants.ts";
 
 // Split modules
@@ -23,6 +22,7 @@ import { getMemoryServer, getTelegramMcpServer, getAgentLoopServer } from "./mcp
 import { createMemoryServerFromPath } from "./tools/memory.ts";
 import { extractTextContent, buildMessageContent, type MultimodalMessage } from "./message-builder.ts";
 import { createPreToolUseHooks, ToolStreamNotifier } from "./hooks.ts";
+import { loadUserMcpServers } from "./mcp-config.ts";
 
 // Re-export types from message-builder for backwards compatibility
 export type { MultimodalMessage, ImageContent, TextContent, MessageContent } from "./message-builder.ts";
@@ -334,6 +334,9 @@ export async function _executeChat(
 
     const subAgents = undefined;
 
+    // User-defined MCP servers from ~/.cobrain/mcp-servers.json
+    const userMcpServers = await loadUserMcpServers();
+
     const queryResult = query({
       prompt,
       options: {
@@ -361,17 +364,12 @@ export async function _executeChat(
         // SDK loads all MCP tools upfront into the context.
         disallowedTools: ["ToolSearch"],
 
-        // MCP Servers (createSdkMcpServer returns full config)
+        // MCP Servers: built-in + user-defined (from mcp-servers.json)
         mcpServers: {
           memory: options?.workDir ? createMemoryServerFromPath(options.workDir) : getMemoryServer(userId),
           telegram: getTelegramMcpServer(),
           agentLoop: getAgentLoopServer(),
-          // Gateway - all external services (whatsapp, calendar, gmail, helm, squad, etc.)
-          gateway: {
-            type: "stdio" as const,
-            command: "bun",
-            args: ["run", join(config.MCP_SERVERS_HOME, "gateway", "src", "index.ts")],
-          },
+          ...userMcpServers,
         },
 
         ...(subAgents ? { agents: subAgents } : {}),

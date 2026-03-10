@@ -1,10 +1,10 @@
 {
   "name": "cobrain",
-  "version": "0.2.0",
-  "description": "Personal AI Assistant",
+  "version": "1.0.0",
+  "description": "Self-hosted Telegram AI assistant with local memory and autonomous workflows",
   "module": "src/index.ts",
   "type": "module",
-  "private": true,
+  "private": false,
   "scripts": {
     "start": "bun run src/index.ts",
     "dev": "bun --hot src/index.ts",
@@ -25,8 +25,6 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@google/generative-ai": "^0.24.1",
     "@grammyjs/runner": "^2.0.3",
-    "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "grammy": "^1.39.3",
     "zod": "^4.3.6"
   }

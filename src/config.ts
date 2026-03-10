@@ -21,7 +21,7 @@ const envSchema = z.object({
   // strict = ask for everything, smart = ask for dangerous only, yolo = auto-approve all
   PERMISSION_MODE: z
     .enum(["strict", "smart", "yolo"])
-    .default("smart"),
+    .default("strict"),
 
   // API Server
   API_PORT: z.coerce.number().default(3000),
@@ -57,9 +57,6 @@ const envSchema = z.object({
 
   // Log channel: autonomous event logs sent here
   LOG_CHANNEL_ID: z.coerce.number().optional(),
-
-  // Folder layout: MCP servers root
-  MCP_SERVERS_HOME: z.string().default(join(homedir(), "mcp-servers")),
 
   // v1.5: Multi-Agent Hub (Telegram Forum Mode)
   COBRAIN_HUB_ID: z.coerce.number().optional(),

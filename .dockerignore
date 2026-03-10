@@ -1,0 +1,16 @@
+node_modules
+.env
+.env.*
+!.env.example
+.git
+.github
+.claude
+.firecrawl
+*.md
+!README.md
+coverage
+logs
+*.log
+data/
+.idea
+.DS_Store
