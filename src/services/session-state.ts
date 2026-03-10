@@ -52,7 +52,7 @@ const stateCache = new Map<number, SessionState>();
 
 // ============ WRITE SERIALIZATION ============
 // Promise chain per-user: writes are queued so they happen sequentially.
-// Same pattern as cortex/expectations.ts save().
+// Promise chain per-user ensures sequential writes.
 const savingChain = new Map<number, Promise<void>>();
 
 // ============ FILE PATH ============
