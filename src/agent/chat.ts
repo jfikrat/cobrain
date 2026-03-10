@@ -365,9 +365,8 @@ export async function _executeChat(
         // Resume previous session if exists
         resume: existingSessionId,
 
-        // Load project instructions (user-folder CLAUDE.md and its @refs)
-        // Firecrawl skill lives in userFolder/.claude/skills/firecrawl-cli/
-        // Custom skills: Cobrain writes to userFolder/.claude/skills/ — auto-discovered.
+        // Load .claude/skills/ from userFolder (firecrawl, etc.)
+        // No CLAUDE.md needed — all instructions come from mind/*.md via systemPrompt.
         settingSources: ["project"],
 
         // Allow Skill tool to run without permission prompts

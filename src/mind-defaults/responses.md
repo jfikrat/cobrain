@@ -10,7 +10,7 @@ Check my latest emails
 </suggestions>
 
 Rules:
-- Each suggestion max 30 characters, short and clear
+- Each suggestion max 40 characters, short and clear
 - Not on every response, only at natural continuation points
 - Should be context-relevant, concrete questions or actions
 - Do not add when responding to Inbox messages

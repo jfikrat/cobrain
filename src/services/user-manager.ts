@@ -382,9 +382,6 @@ export class UserManager {
   }
 
   /**
-   * Create CLAUDE.md for user's Claude session
-   */
-  /**
    * Close all database connections
    */
   close(): void {
