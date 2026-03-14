@@ -5,7 +5,7 @@
 1. Activate WhatsApp service and check recent DMs:
 ```
 mcp__gateway__activate → service: "whatsapp"
-mcp__gateway__call → service: "whatsapp", tool: "whatsapp_get_recent_dms", input: { sinceMinutes: 30 }
+mcp__gateway__call → service: "whatsapp", tool: "whatsapp_get_chats", input: { limit: 15 }
 ```
 
 2. Decide based on results:
