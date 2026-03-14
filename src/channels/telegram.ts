@@ -57,6 +57,7 @@ export async function startBot(): Promise<void> {
     { command: "clear", description: t("menu.clear") },
     { command: "restart", description: t("menu.restart") },
     { command: "mode", description: t("menu.mode") },
+    { command: "model", description: t("menu.model") },
     { command: "lang", description: t("menu.lang") },
   ]);
 
