@@ -4,6 +4,7 @@ import { clearSession, getStats, userManager } from "../brain/index.ts";
 import { isAuthorized, type TelegramContext } from "./telegram-helpers.ts";
 import { t } from "../i18n/index.ts";
 import { setLocale, getLocale, LOCALE_LABELS, type Locale } from "../i18n/index.ts";
+import { getAgentByTopicId, updateAgentModel } from "../agents/registry.ts";
 
 export function registerCommands(bot: Bot, _ctx: TelegramContext) {
   bot.command("start", async (c) => {
@@ -23,11 +24,14 @@ export function registerCommands(bot: Bot, _ctx: TelegramContext) {
     if (!isAuthorized(c.from?.id ?? 0)) return;
     const userId = c.from?.id ?? 0;
     const userStats = await getStats(userId);
+    const statusSettings = await userManager.getUserSettings(userId);
+    const activeModel = statusSettings.model || config.AGENT_MODEL;
+    const modelLabel = activeModel.includes("opus") ? "Opus" : activeModel.includes("sonnet") ? "Sonnet" : activeModel;
 
     await c.reply(
       `${t("cmd.status_title")}\n\n` +
       `<b>Bot:</b> ${t("cmd.active")}\n` +
-      `<b>AI:</b> Agent SDK (Claude)\n` +
+      `<b>AI:</b> Agent SDK (${modelLabel})\n` +
       `<b>Base:</b> <code>${config.COBRAIN_BASE_PATH}</code>\n\n` +
       `<b>${t("cmd.your_stats")}:</b>\n` +
       `• ${t("cmd.messages")}: ${userStats.messageCount}\n` +
@@ -98,6 +102,105 @@ export function registerCommands(bot: Bot, _ctx: TelegramContext) {
     }
   });
 
+  // ── /model command (context-aware: topic vs DM) ──
+  bot.command("model", async (c) => {
+    const userId = c.from?.id;
+    if (!userId || !isAuthorized(userId)) return;
+
+    try {
+      const threadId = c.message?.message_thread_id;
+      const isHub = c.chat.type === "supergroup" && config.COBRAIN_HUB_ID && c.chat.id === config.COBRAIN_HUB_ID && !!threadId;
+      const agent = isHub ? getAgentByTopicId(threadId!) : null;
+
+      if (agent) {
+        // Topic context — show/change agent model
+        const settings = await userManager.getUserSettings(userId);
+        const currentModel = agent.model || settings.model || config.AGENT_MODEL;
+        const isSonnet = currentModel.includes("sonnet");
+        const isOpus = currentModel.includes("opus");
+        const label = isSonnet ? "Sonnet" : isOpus ? "Opus" : currentModel;
+        const inherited = !agent.model;
+        const inheritNote = inherited ? ` (${t("model.inherited")})` : "";
+        await c.reply(
+          `🤖 *${agent.name} — Model*\n\n${t("model.current")}: *${label}*${inheritNote}\n\n${t("model.select")}`,
+          {
+            parse_mode: "Markdown",
+            message_thread_id: threadId,
+            reply_markup: {
+              inline_keyboard: [[
+                { text: isOpus ? "✓ Opus" : "Opus", callback_data: `amodel:${agent.id}:opus` },
+                { text: isSonnet ? "✓ Sonnet" : "Sonnet", callback_data: `amodel:${agent.id}:sonnet` },
+              ]],
+            },
+          }
+        );
+      } else {
+        // DM context — show/change global default model
+        const settings = await userManager.getUserSettings(userId);
+        const currentModel = settings.model || config.AGENT_MODEL;
+        const isSonnet = currentModel.includes("sonnet");
+        const isOpus = currentModel.includes("opus");
+        const label = isSonnet ? "Sonnet" : isOpus ? "Opus" : currentModel;
+        await c.reply(
+          `🤖 *Model*\n\n${t("model.current")}: *${label}*\n\n${t("model.select")}`,
+          {
+            parse_mode: "Markdown",
+            reply_markup: {
+              inline_keyboard: [[
+                { text: isOpus ? "✓ Opus" : "Opus", callback_data: "model:opus" },
+                { text: isSonnet ? "✓ Sonnet" : "Sonnet", callback_data: "model:sonnet" },
+              ]],
+            },
+          }
+        );
+      }
+    } catch (error) {
+      await c.reply(t("cmd.error", { message: error instanceof Error ? error.message : "Unknown" }));
+    }
+  });
+
+  // Handle global model change callbacks
+  bot.callbackQuery(/^model:(opus|sonnet)$/, async (c) => {
+    const userId = c.from?.id;
+    if (!userId || !isAuthorized(userId)) return;
+    const choice = c.match![1] as "opus" | "sonnet";
+    const modelId = choice === "opus" ? "claude-opus-4-6" : "claude-sonnet-4-6";
+    const label = choice === "opus" ? "Opus" : "Sonnet";
+    try {
+      await userManager.updateUserSettings(userId, { model: modelId });
+      await c.editMessageText(
+        `🤖 *Model*\n\n${t("model.changed", { model: label })}`,
+        { parse_mode: "Markdown" }
+      );
+      await c.answerCallbackQuery(t("model.updated"));
+    } catch {
+      await c.answerCallbackQuery(t("model.error"));
+    }
+  });
+
+  // Handle per-agent model change callbacks
+  bot.callbackQuery(/^amodel:([^:]+):(opus|sonnet)$/, async (c) => {
+    const userId = c.from?.id;
+    if (!userId || !isAuthorized(userId)) return;
+    const agentId = c.match![1] as string;
+    const choice = c.match![2] as "opus" | "sonnet";
+    const modelId = choice === "opus" ? "claude-opus-4-6" : "claude-sonnet-4-6";
+    const label = choice === "opus" ? "Opus" : "Sonnet";
+    try {
+      await updateAgentModel(agentId, modelId);
+      // Refresh topic routes so the change takes effect immediately
+      const { refreshTopicRoutes } = await import("./telegram-router.ts");
+      refreshTopicRoutes();
+      await c.editMessageText(
+        `🤖 *Agent Model*\n\n${t("model.changed", { model: label })}`,
+        { parse_mode: "Markdown" }
+      );
+      await c.answerCallbackQuery(t("model.updated"));
+    } catch {
+      await c.answerCallbackQuery(t("model.error"));
+    }
+  });
+
   // ── /lang command ──
   bot.command("lang", async (c) => {
     const userId = c.from?.id;
@@ -139,6 +242,7 @@ export function registerCommands(bot: Bot, _ctx: TelegramContext) {
       { command: "clear", description: t("menu.clear") },
       { command: "restart", description: t("menu.restart") },
       { command: "mode", description: t("menu.mode") },
+      { command: "model", description: t("menu.model") },
       { command: "lang", description: t("menu.lang") },
     ]).catch(() => {});
 

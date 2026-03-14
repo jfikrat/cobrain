@@ -32,6 +32,9 @@ export interface UserSettings {
   /** Max memory entries to keep */
   maxMemoryEntries?: number;
 
+  /** Preferred AI model (default: claude-opus-4-6) */
+  model?: string;
+
   /** Custom preferences (JSON) */
   custom?: Record<string, unknown>;
 

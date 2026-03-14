@@ -335,7 +335,8 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
       // Build footer with model, mode, token stats
       const settings = await userManager.getUserSettings(userId);
       const mode = settings.permissionMode || config.PERMISSION_MODE;
-      const modelShort = config.AGENT_MODEL.replace("claude-", "").replace("-", " ");
+      const userModel = settings.model || config.AGENT_MODEL;
+      const modelShort = userModel.replace("claude-", "").replace("-", " ");
       const tokens = `${response.inputTokens}→${response.outputTokens}`;
       const cost = `$${response.costUsd.toFixed(4)}`;
       const footer = `\n\n_${modelShort} · ${mode} · ${tokens} · ${cost}_`;

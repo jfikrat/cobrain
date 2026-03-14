@@ -31,7 +31,7 @@ const envSchema = z.object({
   TRANSCRIPTION_MODEL: z.string().default("gemini-3.1-flash-lite-preview"),
 
   // v0.6: Agent model
-  AGENT_MODEL: z.string().default("claude-sonnet-4-6"),
+  AGENT_MODEL: z.string().default("claude-opus-4-6"),
   MAX_AGENT_TURNS: z.coerce.number().default(20),
 
   // v0.9: Brain Events — Phase 1

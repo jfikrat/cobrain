@@ -61,7 +61,7 @@ export const tr: Record<string, string> = {
   // ── Bot commands ──
   "cmd.unauthorized": "Bu bot özel kullanım içindir.",
   "cmd.start": `🧠 <b>Cobrain</b> — Kişisel AI Asistan\n\n<b>Hızlı Kurulum:</b>\n1. /lang — Dilini seç\n2. Kendini tanıt (isim, meslek, ilgi alanları)\n3. Sohbete başla!\n\nTüm komutlar için /help yaz.`,
-  "cmd.help": `🧠 <b>Cobrain Yardım</b>\n\n<b>AI Sohbet:</b>\nDirekt mesaj yaz. Cobrain'in hafızası var, web'de gezinebilir, dosya yönetebilir ve araçları otonom kullanabilir.\n\n<b>Agent'lar:</b>\nCobrain özelleşmiş agent'lar çalıştırır (kod, araştırma, WhatsApp...). Her agent Hub grubunda kendi topic'inde çalışır.\n\n<b>Komutlar:</b>\n/status — Bot istatistikleri\n/clear — Oturumu sıfırla\n/mode — İzin modu (strict/smart/yolo)\n/lang — Dil değiştir\n/restart — Botu yeniden başlat\n\n<b>İpuçları:</b>\n• "Bunu hatırla: ..." — hafızaya kaydeder\n• "15:00'te hatırlat: ..." — hatırlatıcı kurar\n• Sesli/görsel/dosya gönder — Cobrain işler`,
+  "cmd.help": `🧠 <b>Cobrain Yardım</b>\n\n<b>AI Sohbet:</b>\nDirekt mesaj yaz. Cobrain'in hafızası var, web'de gezinebilir, dosya yönetebilir ve araçları otonom kullanabilir.\n\n<b>Agent'lar:</b>\nCobrain özelleşmiş agent'lar çalıştırır (kod, araştırma, WhatsApp...). Her agent Hub grubunda kendi topic'inde çalışır.\n\n<b>Komutlar:</b>\n/status — Bot istatistikleri\n/clear — Oturumu sıfırla\n/mode — İzin modu (strict/smart/yolo)\n/model — AI modeli (Opus/Sonnet)\n/lang — Dil değiştir\n/restart — Botu yeniden başlat\n\n<b>İpuçları:</b>\n• "Bunu hatırla: ..." — hafızaya kaydeder\n• "15:00'te hatırlat: ..." — hatırlatıcı kurar\n• Sesli/görsel/dosya gönder — Cobrain işler`,
   "cmd.status_title": "🧠 <b>Cobrain Durum</b>",
   "cmd.active": "Aktif ✅",
   "cmd.your_stats": "Senin İstatistiklerin",
@@ -82,6 +82,14 @@ export const tr: Record<string, string> = {
   "mode.updated": "Mod güncellendi!",
   "mode.error": "Hata oluştu!",
 
+  // ── Model ──
+  "model.current": "Mevcut",
+  "model.select": "Model seç:",
+  "model.changed": "✅ Model değiştirildi: *{{model}}*",
+  "model.updated": "Model güncellendi!",
+  "model.inherited": "global default",
+  "model.error": "Hata oluştu!",
+
   // ── Language ──
   "lang.current": "🌐 Mevcut dil: *{{lang}}*",
   "lang.select": "Dil seç:",
@@ -95,6 +103,7 @@ export const tr: Record<string, string> = {
   "menu.clear": "Konuşma geçmişini temizle",
   "menu.restart": "Botu yeniden başlat",
   "menu.mode": "Permission modunu değiştir",
+  "menu.model": "AI modelini değiştir",
   "menu.lang": "Dil değiştir",
 
   // ── Daily summary ──

@@ -61,7 +61,7 @@ export const en: Record<string, string> = {
   // ── Bot commands ──
   "cmd.unauthorized": "This bot is for private use.",
   "cmd.start": `🧠 <b>Cobrain</b> — Personal AI Assistant\n\n<b>Quick Setup:</b>\n1. /lang — Set your language\n2. Tell me about yourself (name, role, interests)\n3. Start chatting!\n\nType /help for all commands.`,
-  "cmd.help": `🧠 <b>Cobrain Help</b>\n\n<b>AI Chat:</b>\nJust send a message. Cobrain has memory, can browse the web, manage files, and use tools autonomously.\n\n<b>Agents:</b>\nCobrain runs specialized agents (code, research, WhatsApp...). Each agent has its own topic in the Hub group.\n\n<b>Commands:</b>\n/status — Bot stats\n/clear — Reset session\n/mode — Permission mode (strict/smart/yolo)\n/lang — Change language\n/restart — Restart bot\n\n<b>Tips:</b>\n• "Remember this: ..." — saves to memory\n• "Remind me at 15:00: ..." — sets a reminder\n• Send voice/image/file — Cobrain processes them`,
+  "cmd.help": `🧠 <b>Cobrain Help</b>\n\n<b>AI Chat:</b>\nJust send a message. Cobrain has memory, can browse the web, manage files, and use tools autonomously.\n\n<b>Agents:</b>\nCobrain runs specialized agents (code, research, WhatsApp...). Each agent has its own topic in the Hub group.\n\n<b>Commands:</b>\n/status — Bot stats\n/clear — Reset session\n/mode — Permission mode (strict/smart/yolo)\n/model — AI model (Opus/Sonnet)\n/lang — Change language\n/restart — Restart bot\n\n<b>Tips:</b>\n• "Remember this: ..." — saves to memory\n• "Remind me at 15:00: ..." — sets a reminder\n• Send voice/image/file — Cobrain processes them`,
   "cmd.status_title": "🧠 <b>Cobrain Status</b>",
   "cmd.active": "Active ✅",
   "cmd.your_stats": "Your Stats",
@@ -82,6 +82,14 @@ export const en: Record<string, string> = {
   "mode.updated": "Mode updated!",
   "mode.error": "Error occurred!",
 
+  // ── Model ──
+  "model.current": "Current",
+  "model.select": "Select model:",
+  "model.changed": "✅ Model changed: *{{model}}*",
+  "model.updated": "Model updated!",
+  "model.inherited": "global default",
+  "model.error": "Error occurred!",
+
   // ── Language ──
   "lang.current": "🌐 Current language: *{{lang}}*",
   "lang.select": "Select language:",
@@ -95,6 +103,7 @@ export const en: Record<string, string> = {
   "menu.clear": "Clear chat history",
   "menu.restart": "Restart the bot",
   "menu.mode": "Change permission mode",
+  "menu.model": "Change AI model",
   "menu.lang": "Change language",
 
   // ── Daily summary ──

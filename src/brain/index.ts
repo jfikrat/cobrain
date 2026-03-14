@@ -62,8 +62,10 @@ export async function think(userId: number, message: string | MultimodalMessage,
     });
   }
 
-  // Always use primary model
-  const route = { model: config.AGENT_MODEL, level: "deep" as const, reason: "primary" };
+  // Resolve model: user preference > env default
+  const settings = await userManager.getUserSettings(userId);
+  const activeModel = settings.model || config.AGENT_MODEL;
+  const route = { model: activeModel, level: "deep" as const, reason: "primary" };
 
   if (eventStore) {
     eventStore.append({
@@ -133,7 +135,9 @@ async function thinkWithAgentSDK(
   const textMessage = typeof message === "string" ? message : message.text;
   console.log(`[Brain] Using Agent SDK for user ${userId}${hasImages ? " (with images)" : ""}`);
 
-  const response = await agentChat(userId, message, traceId, undefined, channel ? { channel } : undefined);
+  const userSettings = await userManager.getUserSettings(userId);
+  const modelOverride = userSettings.model;
+  const response = await agentChat(userId, message, traceId, modelOverride, channel ? { channel } : undefined);
 
   // Save messages to database (like CLI mode does)
   try {

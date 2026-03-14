@@ -13,6 +13,7 @@ export interface TopicRoute {
   sharedMindFiles: string[];
   sessionKeyPrefix: string;
   workDir?: string;
+  model?: string;
 }
 
 const TOPIC_ROUTES = new Map<number, TopicRoute>();
@@ -45,6 +46,7 @@ function agentToTopicRoute(agent: AgentEntry): TopicRoute {
     sharedMindFiles: agent.sharedMindFiles,
     sessionKeyPrefix: agent.sessionKeyPrefix,
     workDir: agent.workDir,
+    model: agent.model,
   };
 }
 
@@ -113,8 +115,10 @@ export async function handleTopicMessage(
   const userFolder = userManager.getUserFolder(userId);
   const systemPrompt = await buildRouteSystemPrompt(route, userFolder);
   const sessionKey = `${route.sessionKeyPrefix}_${chatId}_${messageThreadId}`;
+  const settings = await userManager.getUserSettings(userId);
+  const agentModel = route.model || settings.model;
 
-  const response = await chat(userId, text, undefined, undefined, {
+  const response = await chat(userId, text, undefined, agentModel, {
     systemPromptOverride: systemPrompt,
     sessionKey,
     channel: `telegram:hub:${route.agentId}`,

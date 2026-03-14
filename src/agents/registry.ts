@@ -22,6 +22,7 @@ export interface AgentEntry {
   lastActiveAt?: string;
   description?: string;
   workDir?: string;
+  model?: string;
 }
 
 export interface AgentRegistry {
@@ -155,6 +156,15 @@ export function updateAgentActivity(id: string): void {
   }
   // Invalidate hub context cache so next chat turn sees fresh data
   invalidateHubContextCache();
+}
+
+export async function updateAgentModel(id: string, model: string): Promise<void> {
+  const reg = getRegistry();
+  const folder = getUserFolder();
+  const agent = reg.agents.find(a => a.id === id);
+  if (!agent) throw new Error(`Agent "${id}" not found`);
+  agent.model = model;
+  await saveRegistry(folder, reg);
 }
 
 export function listActiveAgents(): AgentEntry[] {
