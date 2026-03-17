@@ -39,6 +39,9 @@ data/*.db-*
 data/*.backup*
 data/whatsapp-auth/
 
+# Excalidraw diagrams
+*.excalidraw
+
 # Claude Code
 .claude/
 .firecrawl/

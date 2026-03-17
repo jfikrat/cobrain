@@ -25,7 +25,7 @@ Self-hosted Telegram AI assistant with local memory, autonomous workflows, and m
 ### Option A: Docker (recommended)
 
 ```bash
-git clone https://github.com/anthropics/cobrain.git
+git clone https://github.com/jfikrat/cobrain.git
 cd cobrain
 cp .env.example .env
 # Edit .env with your credentials (see Configuration below)
@@ -37,7 +37,7 @@ docker compose up -d
 Requires [Bun](https://bun.sh) v1.3+
 
 ```bash
-git clone https://github.com/anthropics/cobrain.git
+git clone https://github.com/jfikrat/cobrain.git
 cd cobrain
 bun install
 cp .env.example .env
@@ -124,6 +124,7 @@ src/
 | `/status` | Bot status and stats |
 | `/clear` | Reset conversation |
 | `/mode` | Change tool permission mode |
+| `/model` | Switch AI model (Opus/Sonnet) |
 | `/lang` | Switch language (en/tr) |
 | `/restart` | Restart the bot |
 
