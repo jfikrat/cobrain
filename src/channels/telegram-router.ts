@@ -1,5 +1,6 @@
 import { userManager } from "../services/user-manager.ts";
 import { chat } from "../agent/chat.ts";
+import type { MultimodalMessage } from "../agent/message-builder.ts";
 import { config } from "../config.ts";
 import { listActiveAgents, updateAgentActivity, type AgentEntry } from "../agents/registry.ts";
 import { logAgentInteraction } from "../agents/interaction-log.ts";
@@ -110,7 +111,7 @@ export async function handleTopicMessage(
   chatId: number,
   messageThreadId: number,
   route: TopicRoute,
-  text: string,
+  message: string | MultimodalMessage,
 ): Promise<string> {
   const userFolder = userManager.getUserFolder(userId);
   const systemPrompt = await buildRouteSystemPrompt(route, userFolder);
@@ -118,7 +119,7 @@ export async function handleTopicMessage(
   const settings = await userManager.getUserSettings(userId);
   const agentModel = route.model || settings.model;
 
-  const response = await chat(userId, text, undefined, agentModel, {
+  const response = await chat(userId, message, undefined, agentModel, {
     systemPromptOverride: systemPrompt,
     sessionKey,
     channel: `telegram:hub:${route.agentId}`,
@@ -131,10 +132,11 @@ export async function handleTopicMessage(
   updateAgentActivity(route.agentId);
 
   // Log interaction for cross-agent visibility
+  const logText = typeof message === "string" ? message : message.text;
   logAgentInteraction(userFolder, {
     timestamp: new Date().toISOString(),
     agentId: route.agentId,
-    userMessage: text,
+    userMessage: logText,
     agentResponse: response.content,
     channel: `telegram:hub:${route.agentId}`,
     toolsUsed: response.toolsUsed,

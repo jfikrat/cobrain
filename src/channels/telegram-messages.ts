@@ -168,7 +168,7 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
         ],
       };
 
-      // Hub topic routing for photos — route to topic agent as text prompt
+      // Hub topic routing for photos — forward image as multimodal message
       const photoThreadId = c.message.message_thread_id;
       if (
         c.chat.type === "supergroup" &&
@@ -179,12 +179,20 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
         const topicRoute = getTopicRoute(photoThreadId);
         if (topicRoute) {
           try { await bot.api.deleteMessage(c.chat.id, processingMsg.message_id); } catch {}
-          const photoPrompt = caption
-            ? `[The user sent an image: "${caption}"] You cannot see the image, but help using the description.`
-            : "[The user sent an image] You cannot see the image; say that clearly.";
-          const topicPhotoResponse = await handleTopicMessage(userId, c.chat.id, photoThreadId, topicRoute, photoPrompt);
-          await c.reply(topicPhotoResponse, { message_thread_id: photoThreadId })
-            .catch(() => c.reply(topicPhotoResponse, { message_thread_id: photoThreadId }));
+          const topicPhotoResponse = await withTypingIndicator(c, () =>
+            handleTopicMessage(userId, c.chat.id, photoThreadId, topicRoute, multimodalMessage));
+          const { text: cleanTopicPhoto, suggestions: topicPhotoSuggestions } = parseSuggestions(topicPhotoResponse);
+          const topicPhotoKeyboard = buildSuggestionKeyboard(topicPhotoSuggestions);
+          await c.reply(cleanTopicPhoto, {
+            parse_mode: "Markdown",
+            message_thread_id: photoThreadId,
+            ...(topicPhotoKeyboard && { reply_markup: topicPhotoKeyboard }),
+          }).catch(() =>
+            c.reply(cleanTopicPhoto, {
+              message_thread_id: photoThreadId,
+              ...(topicPhotoKeyboard && { reply_markup: topicPhotoKeyboard }),
+            })
+          );
           return;
         }
       }
