@@ -15,7 +15,7 @@ This guide covers deploying the Telegram bot and minimal HTTP API in production.
 
 ```bash
 curl -fsSL https://bun.sh/install | bash
-git clone https://github.com/yourusername/cobrain.git
+git clone https://github.com/jfikrat/cobrain.git
 cd cobrain
 bun install
 ```

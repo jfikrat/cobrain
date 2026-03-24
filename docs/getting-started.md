@@ -14,7 +14,7 @@ This guide gets Cobrain running locally with Telegram and the optional minimal H
 ### 1. Clone The Repository
 
 ```bash
-git clone https://github.com/yourusername/cobrain.git
+git clone https://github.com/jfikrat/cobrain.git
 cd cobrain
 ```
 

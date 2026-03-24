@@ -121,6 +121,7 @@ src/
 | Command | Description |
 |---------|-------------|
 | `/start` | Welcome message |
+| `/help` | Show available commands |
 | `/status` | Bot status and stats |
 | `/clear` | Reset conversation |
 | `/mode` | Change tool permission mode |

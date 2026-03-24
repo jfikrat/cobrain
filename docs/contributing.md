@@ -16,7 +16,7 @@ Thank you for your interest in contributing to Cobrain! This guide will help you
 1. **Fork and clone the repository**
 
    ```bash
-   git clone https://github.com/yourusername/cobrain.git
+   git clone https://github.com/jfikrat/cobrain.git
    cd cobrain
    ```
 
@@ -36,10 +36,6 @@ Thank you for your interest in contributing to Cobrain! This guide will help you
 4. **Start development server**
 
    ```bash
-   # Terminal 1: CSS watch
-   bun run dev:css
-
-   # Terminal 2: Server with HMR
    bun run dev
    ```
 
@@ -89,13 +85,9 @@ src/
 ├── channels/          # Communication (Telegram, etc.)
 ├── agent/             # AI/Agent SDK code
 ├── memory/            # Memory subsystem
-├── utils/             # Helpers
-└── web/               # Web UI
-    ├── server.ts
-    ├── public/
-    │   ├── components/
-    │   ├── hooks/
-    │   └── utils/
+├── mneme/             # Night memory consolidation
+├── i18n/              # Localization (en, tr)
+└── utils/             # Helpers
 ```
 
 ### Naming Conventions
@@ -137,9 +129,6 @@ bun test
 
 # Type check
 bun run typecheck
-
-# Build CSS (if changed)
-bun run build:css
 ```
 
 ### 4. Submit PR

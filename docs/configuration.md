@@ -15,7 +15,7 @@ Cobrain reads configuration from environment variables. Validation happens at st
 |----------|------|---------|-------------|
 | `COBRAIN_BASE_PATH` | string | `~/.cobrain` | Base directory for Cobrain data |
 | `MAX_HISTORY` | number | `10` | Message history kept in active chat context |
-| `PERMISSION_MODE` | `strict \| smart \| yolo` | `smart` | Tool approval behavior |
+| `PERMISSION_MODE` | `strict \| smart \| yolo` | `strict` | Tool approval behavior |
 | `ENABLE_AUTONOMOUS` | boolean | `true` | Enables background autonomy features |
 
 ## Models
@@ -23,7 +23,7 @@ Cobrain reads configuration from environment variables. Validation happens at st
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `ANTHROPIC_API_KEY` | string | - | Claude API key |
-| `AGENT_MODEL` | string | `claude-sonnet-4-6` | Primary chat model |
+| `AGENT_MODEL` | string | `claude-opus-4-6` | Primary chat model |
 | `MAX_AGENT_TURNS` | number | `20` | Max turns for a single agent run |
 | `GEMINI_API_KEY` | string | `""` | Optional Gemini key for transcription |
 | `TRANSCRIPTION_MODEL` | string | `gemini-3.1-flash-lite-preview` | Speech-to-text model |
@@ -99,7 +99,7 @@ COBRAIN_BASE_PATH=/home/user/.cobrain
 API_PORT=3000
 COBRAIN_API_KEY=replace-me
 
-AGENT_MODEL=claude-sonnet-4-6
+AGENT_MODEL=claude-opus-4-6
 GEMINI_API_KEY=
 TRANSCRIPTION_MODEL=gemini-3.1-flash-lite-preview
 
