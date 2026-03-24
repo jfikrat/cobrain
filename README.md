@@ -159,7 +159,40 @@ Any stdio-compatible MCP server works. Cobrain loads them automatically on start
 
 ## Optional: Multi-Agent Hub
 
-Create a Telegram forum group, set `COBRAIN_HUB_ID` to the group ID, and Cobrain will route topic messages to specialized agents. Each agent gets its own mind files and session.
+Run specialized agents in Telegram forum topics — each with its own personality, tools, and memory.
+
+### Setup
+
+1. **Create a supergroup** in Telegram and enable **Topics** (Group Settings → Topics)
+2. **Add your bot** to the group and make it **admin** (with "Manage Topics" permission)
+3. **Get the group ID** — send a message in the group, then check `https://api.telegram.org/bot<TOKEN>/getUpdates` and look for `chat.id` (it will be a negative number)
+4. **Set the env var** in `.env`:
+   ```
+   COBRAIN_HUB_ID=-100xxxxxxxxxx
+   ```
+5. **Restart Cobrain** and send a message in the bot's DM:
+   > "Create a code agent called Kod"
+
+   Cobrain will automatically:
+   - Create a forum topic in the group
+   - Scaffold mind files (`identity.md`, `rules.md`, `capabilities.md`, `behaviors.md`)
+   - Register the agent with its own session
+
+### Available agent types
+
+| Type | Seed template | Best for |
+|------|--------------|----------|
+| `code` | Coding tools, Bash, file ops | Development, debugging |
+| `research` | Web search, firecrawl | Research, analysis |
+| `whatsapp` | WhatsApp gateway | Monitoring and replying to DMs |
+| `general` | Basic tools | Everything else |
+| `custom` | General (customized after creation) | Domain-specific agents (health, crypto, etc.) |
+
+After creating a `custom` agent, Cobrain will edit its mind files to match the agent's purpose. You can also edit them manually at `~/.cobrain/users/<id>/agents/<name>/mind/`.
+
+### Per-agent model
+
+Each agent can use a different AI model. Send `/model` inside a topic to switch that agent between Opus and Sonnet.
 
 ## Tech Stack
 
