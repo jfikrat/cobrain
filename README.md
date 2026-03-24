@@ -47,13 +47,21 @@ bun run start
 
 ## Configuration
 
-Three values are required in your `.env` file:
+Two values are always required:
 
 | Variable | How to get it |
 |----------|--------------|
 | `TELEGRAM_BOT_TOKEN` | Message [@BotFather](https://t.me/BotFather) on Telegram, create a new bot |
 | `MY_TELEGRAM_ID` | Message [@userinfobot](https://t.me/userinfobot) on Telegram, it replies with your ID |
-| `ANTHROPIC_API_KEY` | Sign up at [console.anthropic.com](https://console.anthropic.com) |
+
+### Authentication
+
+Cobrain is built on the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk) and supports two authentication methods:
+
+| Method | Setup |
+|--------|-------|
+| **Claude Code OAuth** (recommended) | Run `claude login` on your server — the Agent SDK picks up the token automatically |
+| **API Key** | Set `ANTHROPIC_API_KEY` in `.env` — get one at [console.anthropic.com](https://console.anthropic.com) |
 
 See [.env.example](.env.example) for all available options.
 
