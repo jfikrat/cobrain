@@ -31,21 +31,34 @@ Self-hosted Telegram AI assistant with local memory, autonomous workflows, and m
 
 ## Quick Start
 
-### 1. Get your Telegram credentials
+### One-command setup with Claude Code
+
+If you have [Claude Code](https://claude.com/claude-code) installed, paste this prompt:
+
+> Clone https://github.com/jfikrat/cobrain.git and set it up. Install Bun if needed, run bun install, create .env from .env.example, then ask me for my Telegram bot token and user ID. You're already authenticated — the Agent SDK will use your OAuth token. Once .env is ready, start it with bun run start.
+
+Claude Code will handle the rest — clone, install, configure, and start.
+
+### Manual setup
+
+<details>
+<summary>Step-by-step instructions</summary>
+
+#### 1. Get your Telegram credentials
 
 1. Message [@BotFather](https://t.me/BotFather) on Telegram → `/newbot` → save the **bot token**
 2. Message [@userinfobot](https://t.me/userinfobot) on Telegram → it replies with your **user ID**
 
-### 2. Set up authentication (pick one)
+#### 2. Set up authentication (pick one)
 
 Cobrain is built on the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk) and supports two auth methods:
 
 | Method | Setup |
 |--------|-------|
-| **Claude Code OAuth** (recommended) | Install [Claude Code](https://claude.com/claude-code), run `claude login` on your server |
-| **API Key** | Get a key at [console.anthropic.com](https://console.anthropic.com) |
+| **Claude Code OAuth** (recommended) | Run `claude login` on your server — the Agent SDK picks up the token automatically |
+| **API Key** | Set `ANTHROPIC_API_KEY` in `.env` — get a key at [console.anthropic.com](https://console.anthropic.com) |
 
-### 3. Install and run
+#### 3. Install and run
 
 **Option A: Docker**
 
@@ -53,7 +66,7 @@ Cobrain is built on the [Claude Agent SDK](https://github.com/anthropics/claude-
 git clone https://github.com/jfikrat/cobrain.git
 cd cobrain
 cp .env.example .env
-# Edit .env — set TELEGRAM_BOT_TOKEN, MY_TELEGRAM_ID, and optionally ANTHROPIC_API_KEY
+# Edit .env — set TELEGRAM_BOT_TOKEN and MY_TELEGRAM_ID
 docker compose up -d
 ```
 
@@ -65,13 +78,15 @@ git clone https://github.com/jfikrat/cobrain.git
 cd cobrain
 bun install
 cp .env.example .env
-# Edit .env — set TELEGRAM_BOT_TOKEN, MY_TELEGRAM_ID, and optionally ANTHROPIC_API_KEY
+# Edit .env — set TELEGRAM_BOT_TOKEN and MY_TELEGRAM_ID
 bun run start
 ```
 
-### 4. Start chatting
+#### 4. Start chatting
 
 Open Telegram, find your bot, and send a message. That's it — Cobrain will respond with memory, tools, and autonomous behaviors ready to go.
+
+</details>
 
 ## Configuration
 
