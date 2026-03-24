@@ -1,4 +1,6 @@
 import type { Bot } from "grammy";
+import { join } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
 import { config } from "../config.ts";
 import { think, userManager, type MultimodalMessage } from "../brain/index.ts";
 import { recordInteraction } from "../services/interaction-tracker.ts";
@@ -109,6 +111,121 @@ export function registerMessageHandlers(bot: Bot, ctx: TelegramContext) {
     } catch (error) {
       console.error("Voice processing error:", error);
       await c.reply(`❌ Voice could not be processed: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  });
+
+  // ============ DOCUMENT / FILE MESSAGE ============
+
+  bot.on("message:document", async (c) => {
+    const userId = c.from?.id ?? 0;
+
+    if (!isAuthorized(userId)) {
+      console.log(`Unauthorized document: ${userId}`);
+      return;
+    }
+
+    recordInteraction(userId);
+
+    const doc = c.message.document;
+    if (!doc?.file_id) {
+      await c.reply("❌ Could not get document info");
+      return;
+    }
+
+    const fileName = doc.file_name || `file_${Date.now()}`;
+    const fileSize = doc.file_size || 0;
+    const mimeType = doc.mime_type || "application/octet-stream";
+
+    // Telegram Bot API limit: 20MB for file downloads
+    if (fileSize > 20 * 1024 * 1024) {
+      await c.reply(`❌ Dosya çok büyük (${(fileSize / 1024 / 1024).toFixed(1)}MB). Telegram bot limiti 20MB. Google Drive üzerinden gönderebilirsin.`);
+      return;
+    }
+
+    await c.replyWithChatAction("typing");
+
+    try {
+      // Create uploads dir: ~/.cobrain/users/{userId}/uploads/
+      const uploadsDir = join(config.COBRAIN_BASE_PATH, "users", String(userId), "uploads");
+      await mkdir(uploadsDir, { recursive: true });
+
+      // Download file from Telegram
+      const file = await c.getFile();
+      if (!file.file_path) {
+        await c.reply("❌ Could not download file");
+        return;
+      }
+
+      const fileBuffer = await downloadTelegramFileAsBuffer(file.file_path, config.TELEGRAM_BOT_TOKEN);
+
+      // Save with timestamp prefix to avoid collisions
+      const safeName = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const savedPath = join(uploadsDir, safeName);
+      await writeFile(savedPath, fileBuffer);
+
+      const caption = c.message.caption || "";
+      const sizeStr = fileSize > 1024 * 1024
+        ? `${(fileSize / 1024 / 1024).toFixed(1)}MB`
+        : `${(fileSize / 1024).toFixed(0)}KB`;
+
+      const prompt = caption
+        ? `The user sent a file via Telegram and said: "${caption}"\n\nFile details:\n- Name: ${fileName}\n- Size: ${sizeStr}\n- Type: ${mimeType}\n- Saved to: ${savedPath}\n\nAcknowledge the file and process accordingly.`
+        : `The user sent a file via Telegram.\n\nFile details:\n- Name: ${fileName}\n- Size: ${sizeStr}\n- Type: ${mimeType}\n- Saved to: ${savedPath}\n\nAcknowledge the file. If it's a readable format (text, code, PDF, etc.), you can read it with the Read tool.`;
+
+      console.log(`[Document] ${userId}: ${fileName} (${sizeStr}, ${mimeType}) -> ${savedPath}`);
+
+      // Hub topic routing for documents
+      const docThreadId = c.message.message_thread_id;
+      if (
+        c.chat.type === "supergroup" &&
+        config.COBRAIN_HUB_ID &&
+        c.chat.id === config.COBRAIN_HUB_ID &&
+        docThreadId
+      ) {
+        const topicRoute = getTopicRoute(docThreadId);
+        if (topicRoute) {
+          try {
+            const topicResponse = await withTypingIndicator(c, () =>
+              handleTopicMessage(userId, c.chat.id, docThreadId, topicRoute, prompt));
+            const { text: cleanTopicDoc, suggestions: topicDocSuggestions } = parseSuggestions(topicResponse);
+            const topicDocKeyboard = buildSuggestionKeyboard(topicDocSuggestions);
+            await c.reply(cleanTopicDoc, {
+              parse_mode: "Markdown",
+              message_thread_id: docThreadId,
+              ...(topicDocKeyboard && { reply_markup: topicDocKeyboard }),
+            }).catch(() =>
+              c.reply(cleanTopicDoc, {
+                message_thread_id: docThreadId,
+                ...(topicDocKeyboard && { reply_markup: topicDocKeyboard }),
+              })
+            );
+          } catch (err) {
+            console.error(`[TG Hub] Document topic error (${topicRoute.name}):`, err);
+          }
+          return;
+        }
+      }
+
+      // Normal chat
+      await userManager.ensureUser(userId);
+      const response = await withTypingIndicator(c, () => think(userId, prompt));
+
+      const { text: cleanDoc, suggestions: docSuggestions } = parseSuggestions(response.content);
+      const docKeyboard = buildSuggestionKeyboard(docSuggestions);
+
+      try {
+        await c.reply(cleanDoc, {
+          parse_mode: "HTML",
+          ...(docKeyboard && { reply_markup: docKeyboard }),
+        });
+      } catch {
+        await c.reply(cleanDoc, {
+          ...(docKeyboard && { reply_markup: docKeyboard }),
+        });
+      }
+    } catch (error) {
+      console.error("Document handler error:", error);
+      await c.reply(`❌ Dosya işlenirken hata: ${error instanceof Error ? error.message : "Bilinmeyen hata"}`);
     }
   });
 
