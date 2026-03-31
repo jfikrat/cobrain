@@ -48,19 +48,6 @@ export async function startBot(): Promise<void> {
   initPermissions(bot);
   console.log(`[Bot] Permission mode: ${config.PERMISSION_MODE}`);
 
-  // Register slash command menu (localized)
-  const { t } = await import("../i18n/index.ts");
-  await bot.api.setMyCommands([
-    { command: "start", description: t("menu.start") },
-    { command: "help", description: t("menu.help") },
-    { command: "status", description: t("menu.status") },
-    { command: "clear", description: t("menu.clear") },
-    { command: "restart", description: t("menu.restart") },
-    { command: "mode", description: t("menu.mode") },
-    { command: "model", description: t("menu.model") },
-    { command: "lang", description: t("menu.lang") },
-  ]);
-
   // Heartbeat: bot started
   heartbeat("telegram_bot", { event: "started" });
 
@@ -69,7 +56,7 @@ export async function startBot(): Promise<void> {
     heartbeat("telegram_bot", { event: "tick" });
   }, 10_000);
 
-  // Use Grammy Runner for concurrent processing
+  // Use Grammy Runner for concurrent processing (start BEFORE non-critical API calls)
   const runner = run(bot, {
     runner: {
       fetch: {
@@ -78,9 +65,30 @@ export async function startBot(): Promise<void> {
     },
   });
 
-  // Get and log bot info
-  const botInfo = await bot.api.getMe();
-  console.log(`Bot started: @${botInfo.username}`);
+  // Non-critical: register slash command menu (don't block bot startup)
+  try {
+    const { t } = await import("../i18n/index.ts");
+    await bot.api.setMyCommands([
+      { command: "start", description: t("menu.start") },
+      { command: "help", description: t("menu.help") },
+      { command: "status", description: t("menu.status") },
+      { command: "clear", description: t("menu.clear") },
+      { command: "restart", description: t("menu.restart") },
+      { command: "mode", description: t("menu.mode") },
+      { command: "model", description: t("menu.model") },
+      { command: "lang", description: t("menu.lang") },
+    ]);
+  } catch (err) {
+    console.warn("[Bot] Failed to register commands (non-critical):", err);
+  }
+
+  // Non-critical: get and log bot info
+  try {
+    const botInfo = await bot.api.getMe();
+    console.log(`Bot started: @${botInfo.username}`);
+  } catch (err) {
+    console.warn("[Bot] Failed to get bot info (non-critical):", err);
+  }
 
   // Startup notification
   const userId = config.MY_TELEGRAM_ID;
